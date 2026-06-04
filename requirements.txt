@@ -1,0 +1,69 @@
+# Web framework
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.12
+
+# Config
+pydantic-settings==2.6.1
+pydantic[email]==2.10.3
+
+# Supabase
+supabase>=2.30.0
+
+# Vector DB
+qdrant-client==1.12.1
+
+# Redis
+redis==5.2.1
+
+# LLM — Anthropic / Claude
+anthropic==0.40.0
+
+# Embeddings (OpenAI-compatible)
+openai==1.57.4
+
+# STT — Deepgram
+deepgram-sdk==3.7.7
+
+# TTS — ElevenLabs
+elevenlabs==1.9.0
+
+# Telephony — Twilio
+twilio==9.3.7
+
+# Document extraction
+pdfplumber==0.11.4
+pdf2image==1.17.0
+pytesseract==0.3.13
+python-docx==1.1.2
+openpyxl==3.1.5
+pandas==2.2.3
+beautifulsoup4==4.12.3
+unstructured[pdf,docx,xlsx,image]==0.16.10
+Pillow==11.0.0
+
+# File type detection
+python-magic==0.4.27
+
+# Language detection + translation
+langdetect==1.0.9
+deep-translator==1.11.4
+
+# Text processing
+tiktoken==0.8.0
+
+# HTTP client
+httpx>=0.26,<0.29
+
+# Google Calendar
+google-auth==2.37.0
+google-auth-oauthlib==1.2.1
+google-api-python-client==2.154.0
+
+# Celery (async ingestion jobs)
+celery[redis]==5.4.0
+
+# Utilities
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+aiofiles==24.1.0

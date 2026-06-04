@@ -1,0 +1,66 @@
+version: "3.9"
+
+services:
+  app:
+    build: .
+    ports:
+      - "8100:8000"
+    env_file: .env
+    volumes:
+      - .:/app
+      - upload_data:/app/uploads
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6433:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6479:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Quick tunnel — no account needed. Public URL printed to container logs on startup.
+  # Run: docker compose logs -f cloudflare-api   to get the https://*.trycloudflare.com URL.
+  cloudflare-api:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://host.docker.internal:8100
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # Quick tunnel for the Vite dev server (npm run dev on port 3000).
+  # Run: docker compose logs -f cloudflare-dashboard   to get its public URL.
+  cloudflare-dashboard:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://host.docker.internal:3000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  qdrant_data:
+  redis_data:
+  upload_data:

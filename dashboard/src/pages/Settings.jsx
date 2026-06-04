@@ -1,0 +1,123 @@
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase'
+import { Save, Link as LinkIcon, Copy, Check } from 'lucide-react'
+
+export default function Settings() {
+  const [company, setCompany] = useState(null)
+  const [form, setForm] = useState({})
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    loadCompany()
+  }, [])
+
+  async function loadCompany() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data: userData } = await supabase.from('users').select('company_id').eq('id', user.id).single()
+    if (!userData?.company_id) return
+    const { data } = await supabase.from('companies').select('*').eq('id', userData.company_id).single()
+    setCompany(data)
+    setForm({
+      name: data?.name || '',
+      phone: data?.phone || '',
+      email: data?.email || '',
+      address: data?.address || '',
+      ai_persona: data?.ai_persona || 'a friendly and professional real estate receptionist',
+    })
+  }
+
+  async function handleSave(e) {
+    e.preventDefault()
+    setSaving(true)
+    await supabase.from('companies').update(form).eq('id', company.id)
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  const widgetCode = company ? `<script>
+  window.NexaDeskConfig = {
+    companyId: "${company.id}",
+    apiBase: "https://your-nexadesk-url.com",
+  };
+</script>
+<script src="https://your-nexadesk-url.com/widget.js" defer></script>` : ''
+
+  function copyWidget() {
+    navigator.clipboard.writeText(widgetCode)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="p-8 max-w-2xl">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-gray-900">Settings</h1>
+        <p className="text-gray-500 text-sm mt-1">Configure your AI receptionist</p>
+      </div>
+
+      {/* Company info */}
+      <form onSubmit={handleSave} className="card mb-6 space-y-4">
+        <h2 className="text-sm font-semibold text-gray-700">Company Information</h2>
+        {[
+          { label: 'Company Name', key: 'name' },
+          { label: 'Phone Number', key: 'phone', placeholder: '+1 (555) 000-0000' },
+          { label: 'Email', key: 'email', placeholder: 'hello@yourcompany.com' },
+          { label: 'Address', key: 'address' },
+        ].map(({ label, key, placeholder }) => (
+          <div key={key}>
+            <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+            <input
+              value={form[key] || ''}
+              onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+              placeholder={placeholder}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+          </div>
+        ))}
+
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">AI Persona</label>
+          <p className="text-xs text-gray-400 mb-2">Describe how you want the AI to sound and behave</p>
+          <textarea
+            value={form.ai_persona || ''}
+            onChange={(e) => setForm({ ...form, ai_persona: e.target.value })}
+            rows={3}
+            placeholder="e.g. a warm and knowledgeable luxury real estate specialist who makes clients feel valued"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-none"
+          />
+        </div>
+
+        <div className="flex justify-end">
+          <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2">
+            {saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+            {saved ? 'Saved!' : saving ? 'Saving…' : 'Save Changes'}
+          </button>
+        </div>
+      </form>
+
+      {/* Chat widget embed code */}
+      <div className="card">
+        <div className="flex items-center gap-2 mb-3">
+          <LinkIcon className="w-4 h-4 text-gray-400" />
+          <h2 className="text-sm font-semibold text-gray-700">Embed Chat Widget</h2>
+        </div>
+        <p className="text-xs text-gray-400 mb-3">
+          Copy this snippet and paste it before the closing &lt;/body&gt; tag on your website.
+        </p>
+        <div className="bg-gray-900 rounded-lg p-4 relative">
+          <pre className="text-xs text-green-400 overflow-x-auto whitespace-pre-wrap">{widgetCode}</pre>
+          <button
+            onClick={copyWidget}
+            className="absolute top-3 right-3 text-gray-500 hover:text-white transition-colors"
+          >
+            {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
