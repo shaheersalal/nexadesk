@@ -13,6 +13,48 @@
 
 ## Architecture
 
+```mermaid
+flowchart TD
+    A([📞 Inbound Call / 💬 Web Chat]) --> B[Nginx\nReverse Proxy + TLS]
+    B --> C[FastAPI Backend]
+
+    C --> D{Request Type}
+
+    D -->|Voice call| E[Twilio Webhook]
+    E --> F[Deepgram STT\nSpeech → Text]
+    F --> G[RAG Engine]
+    G --> H[Qdrant\nVector Search]
+    H --> I[Claude LLM\nAnswer Generation]
+    I --> J[ElevenLabs TTS\nText → Speech]
+    J --> E
+
+    D -->|Chat message| G
+
+    D -->|Lead captured| K[PostgreSQL\nSupabase]
+    D -->|Viewing request| L[Google Calendar API]
+
+    subgraph Data Layer
+        H
+        K
+        M[Redis Cache]
+        N[MinIO\nDocument Storage]
+    end
+
+    subgraph AI Layer
+        F
+        G
+        I
+        O[OpenAI Embeddings]
+    end
+
+    G --> O
+    O --> H
+    C --> M
+```
+
+<details>
+<summary>Text diagram</summary>
+
 ```
 Browser / Phone Call
         ↓
@@ -39,6 +81,8 @@ Browser / Phone Call
    │  Redis (cache)   │
    └──────────────────┘
 ```
+
+</details>
 
 ## Tech Stack
 
