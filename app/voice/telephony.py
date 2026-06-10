@@ -1,19 +1,13 @@
 """
 Twilio helpers: TwiML generation and webhook signature validation.
 """
-from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
-from twilio.request_validator import RequestValidator
-
 from app.config import get_settings
 
 settings = get_settings()
 
 
 def build_stream_twiml(call_sid: str) -> str:
-    """
-    TwiML that connects the call to our WebSocket media stream.
-    Twilio sends audio to /voice/stream and receives TTS audio back.
-    """
+    from twilio.twiml.voice_response import VoiceResponse, Connect, Stream
     response = VoiceResponse()
     connect = Connect()
     stream = Stream(
@@ -26,14 +20,14 @@ def build_stream_twiml(call_sid: str) -> str:
 
 
 def build_fallback_twiml(message: str) -> str:
-    """Simple <Say> response for error cases."""
+    from twilio.twiml.voice_response import VoiceResponse
     response = VoiceResponse()
     response.say(message, voice="alice")
     return str(response)
 
 
 def validate_twilio_signature(url: str, params: dict, signature: str) -> bool:
-    """Verify the request came from Twilio."""
+    from twilio.request_validator import RequestValidator
     validator = RequestValidator(settings.TELEPHONY_AUTH_TOKEN)
     return validator.validate(url, params, signature)
 

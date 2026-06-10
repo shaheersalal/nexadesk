@@ -6,10 +6,6 @@ import json
 from typing import Optional
 from datetime import datetime, timedelta
 
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import Flow
-from googleapiclient.discovery import build
-
 from app.config import get_settings
 from app.dependencies import get_supabase_admin
 
@@ -18,7 +14,8 @@ settings = get_settings()
 SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 
 
-def get_oauth_flow() -> Flow:
+def get_oauth_flow():
+    from google_auth_oauthlib.flow import Flow
     return Flow.from_client_config(
         {
             "web": {
@@ -62,6 +59,8 @@ async def exchange_code(code: str, company_id: str) -> bool:
 
 
 def _get_service(tokens_json: str):
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
     tokens = json.loads(tokens_json)
     creds = Credentials(
         token=tokens["token"],
