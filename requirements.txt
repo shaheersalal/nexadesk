@@ -16,34 +16,17 @@ qdrant-client==1.12.1
 # Redis
 redis==5.2.1
 
-# LLM — Anthropic / Claude
-anthropic==0.40.0
-
-# Embeddings (OpenAI-compatible)
+# LLM + Embeddings
 openai==1.57.4
 
-# STT — Deepgram
-deepgram-sdk==3.7.7
-
-# TTS — ElevenLabs
-elevenlabs==1.9.0
-
-# Telephony — Twilio
+# Telephony — Twilio (module-level import in telephony.py)
 twilio==9.3.7
 
-# Document extraction
+# Document extraction (all lazy imports — safe if native deps missing)
 pdfplumber==0.11.4
-pdf2image==1.17.0
-pytesseract==0.3.13
 python-docx==1.1.2
 openpyxl==3.1.5
-pandas==2.2.3
 beautifulsoup4==4.12.3
-unstructured[pdf,docx,xlsx,image]==0.16.10
-Pillow==11.0.0
-
-# File type detection
-python-magic==0.4.27
 
 # Language detection + translation
 langdetect==1.0.9
@@ -59,9 +42,6 @@ httpx>=0.26,<0.29
 google-auth==2.37.0
 google-auth-oauthlib==1.2.1
 google-api-python-client==2.154.0
-
-# Celery (async ingestion jobs)
-celery[redis]==5.4.0
 
 # Utilities
 python-jose[cryptography]==3.3.0

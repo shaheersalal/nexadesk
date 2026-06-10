@@ -41,9 +41,11 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str = ""
     SUPABASE_SERVICE_KEY: str = ""
 
-    # Qdrant
-    QDRANT_HOST: str = "qdrant"
+    # Qdrant (local: set HOST+PORT; cloud: set QDRANT_URL+QDRANT_API_KEY)
+    QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
+    QDRANT_URL: str = ""
+    QDRANT_API_KEY: str = ""
     QDRANT_COLLECTION: str = "nexadesk_kb"
 
     # Redis
