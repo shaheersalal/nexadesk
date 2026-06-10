@@ -97,14 +97,14 @@ export default function Dashboard() {
         <div className="card mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-gray-700">Recent AI-Handled Requests</h2>
-            <Link to="/leads" className="text-xs text-accent hover:underline">View all leads</Link>
+            <Link to="/dashboard/leads" className="text-xs text-accent hover:underline">View all leads</Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {recentLeads.map(lead => {
               const { icon: Icon, color, label } = reqIcon(lead.notes)
               const conv = lead.conversations?.[0]
               return (
-                <Link key={lead.id} to={`/leads/${lead.id}`}
+                <Link key={lead.id} to={`/dashboard/leads/${lead.id}`}
                   className="flex items-start gap-3 p-3 rounded-lg border border-gray-100 hover:border-accent/40 hover:bg-gray-50 transition-colors group">
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}>
                     <Icon className="w-4 h-4" />
@@ -129,7 +129,7 @@ export default function Dashboard() {
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-gray-700">Upcoming Appointments</h2>
-          <Link to="/appointments" className="text-xs text-accent hover:underline">View all</Link>
+          <Link to="/dashboard/appointments" className="text-xs text-accent hover:underline">View all</Link>
         </div>
         {appointments.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-8">No upcoming appointments</p>

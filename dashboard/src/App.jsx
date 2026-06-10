@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
 
 import Layout from './components/Layout'
+import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Leads from './pages/Leads'
@@ -38,8 +39,12 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={session ? <Navigate to="/" replace /> : <Login />} />
-        <Route path="/" element={
+        {/* Public routes */}
+        <Route path="/" element={session ? <Navigate to="/dashboard" replace /> : <Landing />} />
+        <Route path="/login" element={session ? <Navigate to="/dashboard" replace /> : <Login />} />
+
+        {/* Protected app — all under /dashboard */}
+        <Route path="/dashboard" element={
           <ProtectedRoute session={session}>
             <Layout session={session} />
           </ProtectedRoute>
@@ -53,6 +58,9 @@ export default function App() {
           <Route path="ai-agent" element={<AIAgent />} />
           <Route path="settings" element={<Settings />} />
         </Route>
+
+        {/* Catch-all */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   )

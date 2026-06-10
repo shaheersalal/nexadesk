@@ -6,13 +6,13 @@ import {
 } from 'lucide-react'
 
 const nav = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
-  { to: '/leads', label: 'Leads', icon: Users },
-  { to: '/properties', label: 'Properties', icon: Building2 },
-  { to: '/ai-agent', label: 'AI Agent', icon: Bot },
-  { to: '/knowledge', label: 'Knowledge', icon: BookOpen },
-  { to: '/appointments', label: 'Appointments', icon: CalendarDays },
-  { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, exact: true },
+  { to: '/dashboard/leads', label: 'Leads', icon: Users },
+  { to: '/dashboard/properties', label: 'Properties', icon: Building2 },
+  { to: '/dashboard/ai-agent', label: 'AI Agent', icon: Bot },
+  { to: '/dashboard/knowledge', label: 'Knowledge', icon: BookOpen },
+  { to: '/dashboard/appointments', label: 'Appointments', icon: CalendarDays },
+  { to: '/dashboard/settings', label: 'Settings', icon: Settings },
 ]
 
 export default function Layout({ session }) {

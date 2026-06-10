@@ -20,7 +20,7 @@ function LeadCard({ lead, onStatusChange }) {
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between mb-2">
-        <Link to={`/leads/${lead.id}`} className="font-medium text-gray-900 text-sm hover:text-accent">
+        <Link to={`/dashboard/leads/${lead.id}`} className="font-medium text-gray-900 text-sm hover:text-accent">
           {lead.name || 'Unknown'}
         </Link>
         <span className="flex items-center gap-1 text-xs text-gray-400">{sourceIcon}{lead.source}</span>
