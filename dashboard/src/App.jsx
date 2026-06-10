@@ -13,6 +13,7 @@ import Knowledge from './pages/Knowledge'
 import Appointments from './pages/Appointments'
 import Settings from './pages/Settings'
 import AIAgent from './pages/AIAgent'
+import SupportInbox from './pages/SupportInbox'
 
 function ProtectedRoute({ children, session }) {
   if (!session) return <Navigate to="/login" replace />
@@ -57,6 +58,7 @@ export default function App() {
           <Route path="appointments" element={<Appointments />} />
           <Route path="ai-agent" element={<AIAgent />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="support" element={<SupportInbox />} />
         </Route>
 
         {/* Catch-all */}
