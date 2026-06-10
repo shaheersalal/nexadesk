@@ -74,7 +74,7 @@ export default function Landing() {
               className="inline-flex items-center justify-center gap-2 bg-accent text-white font-semibold px-8 py-3.5 rounded-xl hover:bg-accent-dark transition-colors text-sm">
               Start Free Trial <ArrowRight className="w-4 h-4" />
             </Link>
-            <a href="https://wa.me/923001234567"
+            <a href="https://wa.me/923312228870"
               className="inline-flex items-center justify-center gap-2 bg-white/10 text-white font-medium px-8 py-3.5 rounded-xl hover:bg-white/20 transition-colors text-sm border border-white/20">
               <MessageSquare className="w-4 h-4" /> Chat on WhatsApp
             </a>

@@ -99,6 +99,40 @@ async function sbDocuments() {
   return data
 }
 
+async function sbAnalytics() {
+  const cid = await getCompanyId()
+  const todayIso = new Date(new Date().setHours(0, 0, 0, 0)).toISOString()
+
+  const [leadsRes, todayRes, apptRes, convRes] = await Promise.all([
+    supabase.from('leads').select('source, status, score').eq('company_id', cid),
+    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('company_id', cid).gte('created_at', todayIso),
+    supabase.from('appointments').select('id', { count: 'exact', head: true }).eq('company_id', cid).gte('datetime', new Date().toISOString()).eq('status', 'scheduled'),
+    supabase.from('conversations').select('id', { count: 'exact', head: true }).eq('company_id', cid),
+  ])
+
+  if (leadsRes.error) throw new Error(leadsRes.error.message)
+
+  const leads = leadsRes.data || []
+  const by_status = {}
+  const by_source = {}
+  let totalScore = 0
+  for (const l of leads) {
+    by_status[l.status] = (by_status[l.status] || 0) + 1
+    by_source[l.source] = (by_source[l.source] || 0) + 1
+    totalScore += (l.score || 0)
+  }
+
+  return {
+    total_leads: leads.length,
+    avg_score: leads.length ? Math.round(totalScore / leads.length) : 0,
+    leads_today: todayRes.count || 0,
+    appointments_upcoming: apptRes.count || 0,
+    total_conversations: convRes.count || 0,
+    leads_by_status: by_status,
+    leads_by_source: by_source,
+  }
+}
+
 // ── Exported API ──────────────────────────────────────────────────────────────
 
 export const api = {
@@ -116,8 +150,8 @@ export const api = {
   updateAppointment:  (id, data) => request('PATCH', `/leads/appointments/${id}`, data),
   deleteAppointment:  (id)       => request('DELETE', `/leads/appointments/${id}`),
 
-  // Analytics — computed aggregates, must go through HF
-  getAnalytics: () => request('GET', '/leads/analytics/summary'),
+  // Analytics — computed client-side from Supabase (fast, no HF roundtrip)
+  getAnalytics: () => sbAnalytics(),
 
   // Properties — reads: Supabase direct, writes: HF API (triggers RAG ingest)
   getProperties:   ()         => sbProperties(),
