@@ -56,12 +56,12 @@ export default function AIAgent() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="px-8 py-6 border-b border-gray-200 bg-white">
+      <div className="px-4 md:px-8 py-5 md:py-6 border-b border-gray-200 bg-white">
         <h1 className="text-2xl font-semibold text-gray-900">AI Agent</h1>
         <p className="text-sm text-gray-500 mt-1">Live chat demo · Voice agent setup</p>
       </div>
 
-      <div className="flex-1 flex gap-6 p-8 min-h-0">
+      <div className="flex-1 flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-8 min-h-0 overflow-y-auto md:overflow-hidden">
 
         {/* ── Chat Widget ─────────────────────────────── */}
         <div className="flex-1 flex flex-col bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -125,7 +125,7 @@ export default function AIAgent() {
         </div>
 
         {/* ── Voice Agent Panel ────────────────────────── */}
-        <div className="w-80 flex flex-col gap-4">
+        <div className="w-full md:w-80 flex flex-col gap-4 flex-shrink-0">
 
           {/* Status card */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">

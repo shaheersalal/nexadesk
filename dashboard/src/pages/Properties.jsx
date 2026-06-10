@@ -104,13 +104,13 @@ function PropertyModal({ property, onClose, onSave }) {
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {field('Property Title *', 'title')}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {field('Address', 'address')}
             {field('City', 'city')}
             {field('State', 'state')}
             {field('ZIP', 'zip')}
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {field('Type', 'property_type', 'text', { select: true, options: [
               { value: 'house', label: 'House' }, { value: 'condo', label: 'Condo' },
               { value: 'apartment', label: 'Apartment' }, { value: 'townhouse', label: 'Townhouse' },
@@ -122,7 +122,7 @@ function PropertyModal({ property, onClose, onSave }) {
             ]})}
             {field('MLS #', 'mls_number')}
           </div>
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {field('Bedrooms', 'bedrooms', 'number')}
             {field('Bathrooms', 'bathrooms', 'number')}
             {field('Sqft', 'sqft', 'number')}
@@ -284,8 +284,8 @@ export default function Properties() {
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 md:p-8">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Properties</h1>
           <p className="text-gray-500 text-sm mt-1">
@@ -298,7 +298,7 @@ export default function Properties() {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
+      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit overflow-x-auto max-w-full">
         {['all', 'active', 'pending', 'sold'].map(f => (
           <button
             key={f}

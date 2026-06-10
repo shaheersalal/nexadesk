@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { Send, MessageSquare, Building2 } from 'lucide-react'
+import { Send, MessageSquare, Building2, ArrowLeft } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
 export default function SupportInbox() {
@@ -9,6 +9,7 @@ export default function SupportInbox() {
   const [messages, setMessages] = useState([])
   const [reply, setReply] = useState('')
   const [loading, setLoading] = useState(false)
+  const [mobileView, setMobileView] = useState('list') // 'list' | 'thread'
   const bottomRef = useRef(null)
   const selectedRef = useRef(null)
 
@@ -41,7 +42,6 @@ export default function SupportInbox() {
       .select('*').eq('company_id', cid).order('created_at', { ascending: true })
     setMessages(data || [])
     setTimeout(() => bottomRef.current?.scrollIntoView(), 50)
-    // mark user messages as read
     await supabase.from('support_messages')
       .update({ read_by_admin: true })
       .eq('company_id', cid).eq('sender_role', 'user').eq('read_by_admin', false)
@@ -59,7 +59,6 @@ export default function SupportInbox() {
               prev.find(m => m.id === payload.new.id) ? prev : [...prev, payload.new]
             )
             bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-            // auto-mark as read if we're viewing this thread
             supabase.from('support_messages')
               .update({ read_by_admin: true }).eq('id', payload.new.id)
           }
@@ -73,7 +72,14 @@ export default function SupportInbox() {
     setSelected(cid)
     selectedRef.current = cid
     setMessages([])
+    setMobileView('thread')
     await loadMessages(cid)
+  }
+
+  function handleBack() {
+    setMobileView('list')
+    setSelected(null)
+    selectedRef.current = null
   }
 
   async function sendReply(e) {
@@ -97,8 +103,11 @@ export default function SupportInbox() {
   return (
     <div className="h-full flex overflow-hidden">
 
-      {/* Thread list */}
-      <div className="w-72 border-r border-gray-200 flex flex-col bg-white flex-shrink-0">
+      {/* Thread list — hidden on mobile when viewing a thread */}
+      <div className={`
+        w-full md:w-72 border-r border-gray-200 flex flex-col bg-white flex-shrink-0
+        ${mobileView === 'thread' ? 'hidden md:flex' : 'flex'}
+      `}>
         <div className="px-5 py-5 border-b border-gray-100">
           <h1 className="text-sm font-semibold text-gray-900">Support Inbox</h1>
           <p className="text-xs text-gray-400 mt-0.5">
@@ -137,22 +146,28 @@ export default function SupportInbox() {
         </div>
       </div>
 
-      {/* Conversation */}
+      {/* Conversation — hidden on mobile when viewing list */}
       {selected ? (
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="px-6 py-4 border-b border-gray-200 bg-white flex items-center gap-3 flex-shrink-0">
+        <div className={`
+          flex-1 flex flex-col min-h-0
+          ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}
+        `}>
+          <div className="px-4 md:px-6 py-4 border-b border-gray-200 bg-white flex items-center gap-3 flex-shrink-0">
+            <button onClick={handleBack} className="md:hidden text-gray-400 hover:text-gray-600 mr-1">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
             <Building2 className="w-4 h-4 text-gray-400" />
             <span className="text-sm font-semibold text-gray-900">{selectedThread?.company_name}</span>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-3 bg-gray-50">
+          <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5 space-y-3 bg-gray-50">
             {messages.map(msg => (
               <div key={msg.id} className={`flex ${msg.sender_role === 'admin' ? 'justify-end' : 'justify-start'}`}>
                 <div>
                   {msg.sender_role === 'user' && (
                     <p className="text-xs text-gray-400 mb-1 ml-1">{selectedThread?.company_name}</p>
                   )}
-                  <div className={`max-w-sm px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                  <div className={`max-w-xs md:max-w-sm px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
                     msg.sender_role === 'admin'
                       ? 'bg-accent text-white rounded-br-sm'
                       : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'
@@ -168,7 +183,7 @@ export default function SupportInbox() {
             <div ref={bottomRef} />
           </div>
 
-          <form onSubmit={sendReply} className="px-6 py-4 bg-white border-t border-gray-200 flex gap-3 flex-shrink-0">
+          <form onSubmit={sendReply} className="px-4 md:px-6 py-4 bg-white border-t border-gray-200 flex gap-3 flex-shrink-0">
             <input
               value={reply}
               onChange={e => setReply(e.target.value)}
@@ -186,7 +201,7 @@ export default function SupportInbox() {
           </form>
         </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center bg-gray-50">
+        <div className="hidden md:flex flex-1 items-center justify-center bg-gray-50">
           <div className="text-center">
             <MessageSquare className="w-10 h-10 text-gray-200 mx-auto mb-3" />
             <p className="text-sm text-gray-400">Select a conversation</p>

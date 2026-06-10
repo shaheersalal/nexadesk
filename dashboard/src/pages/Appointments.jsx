@@ -53,8 +53,8 @@ export default function Appointments() {
   }
 
   return (
-    <div className="p-8 max-w-3xl">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 md:p-8 max-w-3xl">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Appointments</h1>
           <p className="text-gray-500 text-sm mt-1">{appointments.length} upcoming</p>
@@ -156,7 +156,7 @@ export default function Appointments() {
       ) : (
         <div className="space-y-3">
           {appointments.map((appt) => (
-            <div key={appt.id} className="card flex items-start gap-4">
+            <div key={appt.id} className="card flex flex-wrap items-start gap-4">
               <div className="text-center flex-shrink-0 w-16">
                 <p className="text-xs font-semibold text-accent">{dateLabel(appt.datetime)}</p>
                 <p className="text-lg font-bold text-gray-900">
