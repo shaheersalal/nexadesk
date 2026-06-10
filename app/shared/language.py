@@ -1,36 +1,38 @@
-from langdetect import detect, LangDetectException
-from deep_translator import GoogleTranslator
-
 from app.config import get_settings
+
+try:
+    from langdetect import detect, LangDetectException
+    _HAS_LANGDETECT = True
+except ImportError:
+    _HAS_LANGDETECT = False
 
 settings = get_settings()
 
 
 def detect_language(text: str) -> str:
-    """Detect language code from text. Falls back to 'en'."""
+    if not _HAS_LANGDETECT or len(text.strip()) < 10:
+        return "en"
     try:
-        if len(text.strip()) < 10:
-            return "en"
         return detect(text)
-    except LangDetectException:
+    except Exception:
         return "en"
 
 
 def translate_to_english(text: str, source_lang: str) -> str:
-    """Translate text to English. Returns original if already English."""
     if source_lang == "en":
         return text
     try:
+        from deep_translator import GoogleTranslator
         return GoogleTranslator(source=source_lang, target="en").translate(text)
     except Exception:
         return text
 
 
 def translate_from_english(text: str, target_lang: str) -> str:
-    """Translate response from English to target language."""
     if target_lang == "en":
         return text
     try:
+        from deep_translator import GoogleTranslator
         return GoogleTranslator(source="en", target=target_lang).translate(text)
     except Exception:
         return text
