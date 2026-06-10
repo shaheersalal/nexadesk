@@ -1,3 +1,13 @@
+---
+title: NexaDesk
+emoji: 🏠
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # NexaDesk — AI Receptionist for Real Estate
 
 > 24/7 AI receptionist that handles inbound property enquiries via voice and chat. Qualifies leads, answers FAQs, and books viewings — without a human.
