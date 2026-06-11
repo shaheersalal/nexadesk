@@ -198,10 +198,7 @@ export default function Landing() {
                 </li>
               ))}
             </ul>
-            <div className="flex gap-2.5 p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 leading-relaxed text-left mb-5">
-              <Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-              <span>Voice calls and live chat require your own API keys (Twilio + OpenAI). The platform subscription is 499 AED/mo — API usage costs are billed directly by those providers. We guide you through setup.</span>
-            </div>
+
             <Link to="/login?mode=signup"
               className="block w-full text-center bg-navy-600 text-white font-semibold py-3 rounded-xl hover:bg-navy-700 transition-colors">
               Get Started Free
