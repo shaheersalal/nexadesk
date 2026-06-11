@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Phone, MessageSquare, TrendingUp, Building2, CheckCircle, ArrowRight, Star, Clock, Globe } from 'lucide-react'
+import { Phone, MessageSquare, TrendingUp, Building2, CheckCircle, ArrowRight, Clock, Globe, Linkedin, Info } from 'lucide-react'
 
 const FEATURES = [
   {
@@ -47,7 +47,7 @@ export default function Landing() {
             <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900 font-medium px-4 py-2">
               Log in
             </Link>
-            <Link to="/login" className="text-sm bg-navy-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-navy-700 transition-colors">
+            <Link to="/login?mode=signup" className="text-sm bg-navy-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-navy-700 transition-colors">
               Get Started Free
             </Link>
           </div>
@@ -58,8 +58,8 @@ export default function Landing() {
       <section className="pt-32 pb-20 px-6 bg-gradient-to-b from-navy-600 to-navy-700">
         <div className="max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 bg-white/10 text-accent text-xs font-medium px-3 py-1.5 rounded-full mb-6">
-            <Star className="w-3 h-3" />
-            Built for Gulf & US Real Estate Agencies
+            <Clock className="w-3 h-3" />
+            Your AI answers. You close deals.
           </div>
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
             Never Miss a Lead.<br />
@@ -70,14 +70,14 @@ export default function Landing() {
             NexaDesk answers every call and chat, qualifies buyers and tenants, and logs everything to your dashboard — so you close more deals without hiring more staff.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link to="/login"
+            <Link to="/login?mode=signup"
               className="inline-flex items-center justify-center gap-2 bg-accent text-white font-semibold px-8 py-3.5 rounded-xl hover:bg-accent-dark transition-colors text-sm">
               Start Free Trial <ArrowRight className="w-4 h-4" />
             </Link>
-            <a href="https://wa.me/923312228870"
+            <Link to="/login"
               className="inline-flex items-center justify-center gap-2 bg-white/10 text-white font-medium px-8 py-3.5 rounded-xl hover:bg-white/20 transition-colors text-sm border border-white/20">
-              <MessageSquare className="w-4 h-4" /> Chat on WhatsApp
-            </a>
+              Sign in
+            </Link>
           </div>
         </div>
 
@@ -198,7 +198,11 @@ export default function Landing() {
                 </li>
               ))}
             </ul>
-            <Link to="/login"
+            <div className="flex gap-2.5 p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 leading-relaxed text-left mb-5">
+              <Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              <span>Voice calls and live chat require your own API keys (Twilio + OpenAI). The platform subscription is 499 AED/mo — API usage costs are billed directly by those providers. We guide you through setup.</span>
+            </div>
+            <Link to="/login?mode=signup"
               className="block w-full text-center bg-navy-600 text-white font-semibold py-3 rounded-xl hover:bg-navy-700 transition-colors">
               Get Started Free
             </Link>
@@ -211,7 +215,7 @@ export default function Landing() {
         <div className="max-w-2xl mx-auto text-center">
           <h2 className="text-3xl font-bold text-white mb-4">Ready to stop missing leads?</h2>
           <p className="text-white/60 mb-8">Set up in under 10 minutes. Your AI receptionist starts taking calls today.</p>
-          <Link to="/login"
+          <Link to="/login?mode=signup"
             className="inline-flex items-center gap-2 bg-accent text-white font-semibold px-10 py-4 rounded-xl hover:bg-accent-dark transition-colors">
             Start Free Trial <ArrowRight className="w-4 h-4" />
           </Link>
@@ -219,16 +223,31 @@ export default function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className="bg-navy-900 py-8 px-6">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-white/30 text-xs">
-          <div className="flex items-center gap-2">
+      <footer className="bg-navy-900 py-10 px-6">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-2 text-xs text-white/30">
             <Phone className="w-3.5 h-3.5 text-accent" />
             <span className="text-white/50 font-medium">NexaDesk</span>
             <span>— AI Receptionist for Real Estate</span>
           </div>
-          <div className="flex gap-6">
+
+          {/* LinkedIn founder link */}
+          <a
+            href="https://www.linkedin.com/in/shaheer-salal/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2.5 px-4 py-2 rounded-lg border border-white/10 text-white/50 hover:text-white hover:border-white/30 transition-colors group"
+          >
+            <Linkedin className="w-4 h-4 text-[#0A66C2] group-hover:scale-110 transition-transform" />
+            <div className="text-left">
+              <p className="text-xs font-medium leading-tight">Built by Shaheer Salal</p>
+              <p className="text-[10px] text-white/30 leading-tight">Questions? Let's connect</p>
+            </div>
+          </a>
+
+          <div className="flex gap-6 text-xs text-white/30">
             <Link to="/login" className="hover:text-white/60 transition-colors">Log in</Link>
-            <a href="mailto:shaheersalal@gmail.com" className="hover:text-white/60 transition-colors">Contact</a>
+            <Link to="/login?mode=signup" className="hover:text-white/60 transition-colors">Sign up</Link>
           </div>
         </div>
       </footer>

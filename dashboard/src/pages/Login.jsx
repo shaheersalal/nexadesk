@@ -1,13 +1,15 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { Phone } from 'lucide-react'
+import { Phone, Info } from 'lucide-react'
 
 export default function Login() {
+  const [searchParams] = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [mode, setMode] = useState('login') // login | signup
+  const [mode, setMode] = useState(searchParams.get('mode') === 'signup' ? 'signup' : 'login')
 
   const appName = import.meta.env.VITE_APP_NAME || 'NexaDesk'
 
@@ -35,11 +37,20 @@ export default function Login() {
 
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <h1 className="text-xl font-semibold text-gray-900 mb-1">
-            {mode === 'login' ? 'Welcome back' : 'Create account'}
+            {mode === 'login' ? 'Welcome back' : 'Create your account'}
           </h1>
           <p className="text-gray-500 text-sm mb-6">
-            {mode === 'login' ? 'Sign in to your dashboard' : 'Start your free demo'}
+            {mode === 'login' ? 'Sign in to your dashboard' : 'Get full dashboard access instantly'}
           </p>
+
+          {mode === 'signup' && (
+            <div className="mb-5 flex gap-3 p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 leading-relaxed">
+              <Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              <span>
+                <strong>Before you sign up:</strong> activating voice calls and live chat requires your own API accounts (Twilio + OpenAI). The dashboard is free to explore — API costs are yours to manage. We guide you through the 15-minute setup.
+              </span>
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
