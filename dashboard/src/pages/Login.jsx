@@ -47,7 +47,7 @@ export default function Login() {
             <div className="mb-5 flex gap-3 p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 leading-relaxed">
               <Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
               <span>
-                <strong>Before you sign up:</strong> activating voice calls and live chat requires your own API accounts (Twilio + OpenAI). The dashboard is free to explore — API costs are yours to manage. We guide you through the 15-minute setup.
+                <strong>Quick heads-up:</strong> to activate the AI phone receptionist and live chat, you'll need to set up an AI phone number and a few supporting services. The dashboard is free to explore right now — costs only apply when you go live. We walk you through every step.
               </span>
             </div>
           )}

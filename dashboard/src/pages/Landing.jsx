@@ -5,17 +5,17 @@ const FEATURES = [
   {
     icon: Phone,
     title: 'AI Voice Receptionist',
-    desc: 'Answers every inbound call 24/7. Qualifies the lead, captures contact details, and understands property interest — all without a human.',
+    desc: 'Answers every inbound call 24/7. Qualifies the client, captures contact details, and understands property interest — all without a human.',
   },
   {
     icon: MessageSquare,
     title: 'Instant Chat Widget',
-    desc: 'Embed on your website or WhatsApp. The AI answers property FAQs, qualifies buyers, and hands off hot leads to you immediately.',
+    desc: 'Embed on your website or WhatsApp. The AI answers property FAQs, qualifies buyers, and hands off hot clients to you immediately.',
   },
   {
     icon: TrendingUp,
-    title: 'Smart Lead Scoring',
-    desc: 'Every lead gets a score based on budget, timeline, and intent. Your hottest prospects surface to the top automatically.',
+    title: 'Smart Client Scoring',
+    desc: 'Every client gets a score based on budget, timeline, and intent. Your hottest prospects surface to the top automatically.',
   },
   {
     icon: Building2,
@@ -25,9 +25,9 @@ const FEATURES = [
 ]
 
 const STEPS = [
-  { n: '01', title: 'A lead calls or messages', desc: 'Your Twilio number or chat widget receives the inquiry at any hour.' },
+  { n: '01', title: 'A client calls or messages', desc: 'Your AI phone number or chat widget receives the inquiry at any hour.' },
   { n: '02', title: 'AI handles the conversation', desc: 'Greets professionally, asks qualifying questions, answers property FAQs from your knowledge base.' },
-  { n: '03', title: 'Lead appears in your dashboard', desc: 'Full transcript, score, contact details, and AI summary — ready for you to follow up.' },
+  { n: '03', title: 'Client appears in your dashboard', desc: 'Full transcript, score, contact details, and AI summary — ready for you to follow up.' },
 ]
 
 export default function Landing() {
@@ -62,7 +62,7 @@ export default function Landing() {
             Your AI answers. You close deals.
           </div>
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
-            Never Miss a Lead.<br />
+            Never Miss a Client.<br />
             <span className="text-accent">Your AI Receptionist</span><br />
             Works 24/7.
           </h1>
@@ -92,7 +92,7 @@ export default function Landing() {
             <span className="text-white/30 text-xs ml-2">nexadesk.vercel.app — Dashboard</span>
           </div>
           <div className="bg-navy-900 p-6 grid grid-cols-4 gap-4">
-            {[['24', 'Total Leads'], ['78', 'Avg Score'], ['5', 'Upcoming'], ['12', 'Conversations']].map(([v, l]) => (
+            {[['24', 'Total Clients'], ['78', 'Avg Score'], ['5', 'Upcoming'], ['12', 'Conversations']].map(([v, l]) => (
               <div key={l} className="bg-white/5 rounded-xl p-4 border border-white/10">
                 <p className="text-2xl font-bold text-white">{v}</p>
                 <p className="text-xs text-white/40 mt-1">{l}</p>
@@ -138,7 +138,7 @@ export default function Landing() {
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-14">
             <h2 className="text-3xl font-bold text-gray-900">How it works</h2>
-            <p className="text-gray-500 mt-3">From first ring to qualified lead — fully automated.</p>
+            <p className="text-gray-500 mt-3">From first ring to qualified client — fully automated.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {STEPS.map(s => (
@@ -187,7 +187,7 @@ export default function Landing() {
               {[
                 'Dedicated AI phone number',
                 'Unlimited chat conversations',
-                'Lead scoring & CRM dashboard',
+                'Client scoring & CRM dashboard',
                 'Property knowledge base',
                 'Full call transcripts',
                 'WhatsApp & website widget',
@@ -213,7 +213,7 @@ export default function Landing() {
       {/* CTA */}
       <section className="py-20 px-6 bg-navy-600">
         <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-3xl font-bold text-white mb-4">Ready to stop missing leads?</h2>
+          <h2 className="text-3xl font-bold text-white mb-4">Ready to stop missing clients?</h2>
           <p className="text-white/60 mb-8">Set up in under 10 minutes. Your AI receptionist starts taking calls today.</p>
           <Link to="/login?mode=signup"
             className="inline-flex items-center gap-2 bg-accent text-white font-semibold px-10 py-4 rounded-xl hover:bg-accent-dark transition-colors">
