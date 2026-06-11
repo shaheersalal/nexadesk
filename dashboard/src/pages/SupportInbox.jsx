@@ -16,35 +16,37 @@ export default function SupportInbox() {
   async function loadThreads() {
     const { data } = await supabase
       .from('support_messages')
-      .select('company_id, sender_role, content, created_at, read_by_admin, companies(name)')
+      .select('user_id, user_email, sender_role, content, created_at, read_by_admin, company_id, companies(name)')
       .order('created_at', { ascending: false })
     if (!data) return
     const map = {}
     for (const msg of data) {
-      if (!map[msg.company_id]) {
-        map[msg.company_id] = {
-          company_id: msg.company_id,
-          company_name: msg.companies?.name || 'Unknown Company',
+      const key = msg.user_id
+      if (!key) continue
+      if (!map[key]) {
+        map[key] = {
+          user_id: key,
+          display_name: msg.companies?.name || msg.user_email || 'Unknown',
           last_message: msg.content,
           last_at: msg.created_at,
           unread: 0,
         }
       }
       if (!msg.read_by_admin && msg.sender_role === 'user') {
-        map[msg.company_id].unread++
+        map[key].unread++
       }
     }
     setThreads(Object.values(map))
   }
 
-  async function loadMessages(cid) {
+  async function loadMessages(uid) {
     const { data } = await supabase.from('support_messages')
-      .select('*').eq('company_id', cid).order('created_at', { ascending: true })
+      .select('*').eq('user_id', uid).order('created_at', { ascending: true })
     setMessages(data || [])
     setTimeout(() => bottomRef.current?.scrollIntoView(), 50)
     await supabase.from('support_messages')
       .update({ read_by_admin: true })
-      .eq('company_id', cid).eq('sender_role', 'user').eq('read_by_admin', false)
+      .eq('user_id', uid).eq('sender_role', 'user').eq('read_by_admin', false)
     loadThreads()
   }
 
@@ -53,8 +55,8 @@ export default function SupportInbox() {
     const channel = supabase.channel('support_inbox_admin')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages' },
         payload => {
-          const cid = payload.new.company_id
-          if (selectedRef.current === cid) {
+          const uid = payload.new.user_id
+          if (selectedRef.current === uid) {
             setMessages(prev =>
               prev.find(m => m.id === payload.new.id) ? prev : [...prev, payload.new]
             )
@@ -68,12 +70,12 @@ export default function SupportInbox() {
     return () => supabase.removeChannel(channel)
   }, [])
 
-  async function handleSelect(cid) {
-    setSelected(cid)
-    selectedRef.current = cid
+  async function handleSelect(uid) {
+    setSelected(uid)
+    selectedRef.current = uid
     setMessages([])
     setMobileView('thread')
-    await loadMessages(cid)
+    await loadMessages(uid)
   }
 
   function handleBack() {
@@ -89,7 +91,7 @@ export default function SupportInbox() {
     const content = reply.trim()
     setReply('')
     const { data } = await supabase.from('support_messages')
-      .insert({ company_id: selected, sender_role: 'admin', content })
+      .insert({ user_id: selected, sender_role: 'admin', content })
       .select().single()
     if (data) {
       setMessages(prev => prev.find(m => m.id === data.id) ? prev : [...prev, data])
@@ -98,7 +100,7 @@ export default function SupportInbox() {
     setLoading(false)
   }
 
-  const selectedThread = threads.find(t => t.company_id === selected)
+  const selectedThread = threads.find(t => t.user_id === selected)
 
   return (
     <div className="h-full flex overflow-hidden">
@@ -123,14 +125,14 @@ export default function SupportInbox() {
           )}
           {threads.map(t => (
             <button
-              key={t.company_id}
-              onClick={() => handleSelect(t.company_id)}
+              key={t.user_id}
+              onClick={() => handleSelect(t.user_id)}
               className={`w-full text-left px-5 py-4 hover:bg-gray-50 transition-colors ${
-                selected === t.company_id ? 'bg-accent/5 border-l-2 border-l-accent' : ''
+                selected === t.user_id ? 'bg-accent/5 border-l-2 border-l-accent' : ''
               }`}
             >
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-medium text-gray-900 truncate pr-2">{t.company_name}</span>
+                <span className="text-sm font-medium text-gray-900 truncate pr-2">{t.display_name}</span>
                 {t.unread > 0 && (
                   <span className="min-w-[20px] h-5 bg-accent text-white text-[10px] rounded-full flex items-center justify-center flex-shrink-0 px-1 font-semibold">
                     {t.unread}
@@ -157,7 +159,7 @@ export default function SupportInbox() {
               <ArrowLeft className="w-5 h-5" />
             </button>
             <Building2 className="w-4 h-4 text-gray-400" />
-            <span className="text-sm font-semibold text-gray-900">{selectedThread?.company_name}</span>
+            <span className="text-sm font-semibold text-gray-900">{selectedThread?.display_name}</span>
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5 space-y-3 bg-gray-50">
@@ -165,7 +167,7 @@ export default function SupportInbox() {
               <div key={msg.id} className={`flex ${msg.sender_role === 'admin' ? 'justify-end' : 'justify-start'}`}>
                 <div>
                   {msg.sender_role === 'user' && (
-                    <p className="text-xs text-gray-400 mb-1 ml-1">{selectedThread?.company_name}</p>
+                    <p className="text-xs text-gray-400 mb-1 ml-1">{selectedThread?.display_name}</p>
                   )}
                   <div className={`max-w-xs md:max-w-sm px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
                     msg.sender_role === 'admin'
@@ -187,7 +189,7 @@ export default function SupportInbox() {
             <input
               value={reply}
               onChange={e => setReply(e.target.value)}
-              placeholder={`Reply to ${selectedThread?.company_name}…`}
+              placeholder={`Reply to ${selectedThread?.display_name}…`}
               className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-full outline-none focus:border-accent transition-colors"
               disabled={loading}
             />

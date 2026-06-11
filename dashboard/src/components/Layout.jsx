@@ -40,13 +40,10 @@ export default function Layout({ session }) {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data: ud } = await supabase.from('users').select('company_id').eq('id', user.id).single()
-      const cid = ud?.company_id
-      if (!cid) return
-      setCompanyId(cid)
+      setCompanyId(user.id) // use user.id as the realtime filter key
       const { count } = await supabase.from('support_messages')
         .select('id', { count: 'exact', head: true })
-        .eq('company_id', cid).eq('sender_role', 'admin').eq('read_by_user', false)
+        .eq('user_id', user.id).eq('sender_role', 'admin').eq('read_by_user', false)
       setUnread(count || 0)
     }
     init()
@@ -57,7 +54,7 @@ export default function Layout({ session }) {
     const channel = supabase.channel(`layout_unread_${companyId}`)
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'support_messages',
-        filter: `company_id=eq.${companyId}`,
+        filter: `user_id=eq.${companyId}`,
       }, payload => {
         if (payload.new.sender_role === 'admin') setUnread(prev => prev + 1)
       })
