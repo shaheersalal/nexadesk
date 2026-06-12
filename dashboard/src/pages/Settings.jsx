@@ -41,10 +41,10 @@ export default function Settings() {
   const widgetCode = company ? `<script>
   window.NexaDeskConfig = {
     companyId: "${company.id}",
-    apiBase: "https://your-nexadesk-url.com",
+    apiBase: "https://shaheersalal-nexadesk.hf.space",
   };
 </script>
-<script src="https://your-nexadesk-url.com/widget.js" defer></script>` : ''
+<script src="https://shaheersalal-nexadesk.hf.space/widget.js" defer></script>` : ''
 
   function copyWidget() {
     navigator.clipboard.writeText(widgetCode)
