@@ -29,6 +29,10 @@ function respond(input) {
     return "Abu Dhabi is a great market. Saadiyat Island from AED 2M, Al Reem Island from AED 900K, Yas Island from AED 1.1M. Should I have an Abu Dhabi specialist reach out?"
   if (/sharjah/.test(s))
     return "Sharjah offers excellent value — 2BR apartments from AED 400K, villas from AED 1.5M. It's popular for families. Would you like more details?"
+  if (/london|uk|united kingdom|england|manchester|birmingham/.test(s))
+    return "In London, prime areas like Kensington and Chelsea average £1.5M–£5M+ for apartments. Outer London zones 3–4 offer 2BR flats from £400K–£700K, with rentals at £1,800–£3,500/month. Are you looking to buy or rent in the UK?"
+  if (/new york|nyc|manhattan|brooklyn|los angeles|miami|houston|chicago|us|usa|united states/.test(s))
+    return "In the US, Manhattan averages $1,200–$3,500/sqft for sales and $4,000–$12,000/month for rentals. Miami condos start from $500K, Houston homes from $350K. Which US city are you interested in?"
   return "Understood. Let me connect you with the right agent. Can I take your name and contact number so we can follow up promptly?"
 }
 
@@ -38,7 +42,7 @@ export default function LandingDemo() {
   const [input, setInput] = useState('')
   const [typing, setTyping] = useState(false)
   const [initialized, setInitialized] = useState(false)
-  const bottomRef = useRef(null)
+  const messagesRef = useRef(null)
   const inputRef = useRef(null)
 
   function now() {
@@ -69,7 +73,9 @@ export default function LandingDemo() {
   }
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (messagesRef.current) {
+      messagesRef.current.scrollTop = messagesRef.current.scrollHeight
+    }
   }, [messages, typing])
 
   if (!open) {
@@ -108,7 +114,7 @@ export default function LandingDemo() {
         </div>
 
         {/* Messages */}
-        <div className="p-4 h-52 overflow-y-auto flex flex-col gap-3 bg-gray-50">
+        <div ref={messagesRef} className="p-4 h-52 overflow-y-auto flex flex-col gap-3 bg-gray-50">
           {messages.map((m, i) => (
             <div key={i} className={`flex flex-col gap-0.5 max-w-[85%] ${m.role === 'user' ? 'self-end' : 'self-start'}`}>
               <div className={`px-3 py-2 text-sm leading-relaxed ${
@@ -132,7 +138,6 @@ export default function LandingDemo() {
               ))}
             </div>
           )}
-          <div ref={bottomRef} />
         </div>
 
         {/* Input */}

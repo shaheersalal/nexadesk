@@ -193,8 +193,8 @@ export default function Landing() {
           <h2 className="text-3xl font-bold text-gray-900 mb-3">Simple pricing</h2>
           <p className="text-gray-500 mb-10">One plan. Everything included. Cancel anytime.</p>
           <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">
-            <p className="text-4xl font-black text-gray-900">499 <span className="text-lg font-normal text-gray-400">AED/mo</span></p>
-            <p className="text-gray-400 text-sm mt-1 mb-6">~$136 USD · includes 300 minutes</p>
+            <p className="text-4xl font-black text-gray-900">$136 <span className="text-lg font-normal text-gray-400">/mo</span></p>
+            <p className="text-gray-400 text-sm mt-1 mb-6">(AED 499) · includes 300 minutes</p>
             <ul className="space-y-3 text-sm text-gray-600 text-left mb-8">
               {[
                 'Dedicated AI phone number',
