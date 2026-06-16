@@ -15,6 +15,13 @@ export default function BookDemoModal({ open, onClose }) {
     return (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
   }
 
+  function handleClose() {
+    setForm({ name: '', email: '', agency: '', phone: '' })
+    setDone(false)
+    setError('')
+    onClose()
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     if (!form.name || !form.email || !form.agency || !form.phone) return
@@ -35,22 +42,21 @@ export default function BookDemoModal({ open, onClose }) {
     }
   }
 
-  function handleClose() {
-    setForm({ name: '', email: '', agency: '', phone: '' })
-    setDone(false)
-    setError('')
-    onClose()
-  }
-
   return (
+    /* Backdrop — clicking it closes the modal */
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
-      onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}
+      className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/50 px-4 py-16"
+      onClick={handleClose}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 relative">
+      {/* Card — stop propagation so clicks inside don't bubble to backdrop */}
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 relative"
+        onClick={(e) => e.stopPropagation()}
+      >
         <button
           onClick={handleClose}
-          className="absolute top-4 right-4 text-gray-300 hover:text-gray-500 transition-colors"
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition-colors"
+          aria-label="Close"
         >
           <X className="w-5 h-5" />
         </button>
@@ -82,7 +88,7 @@ export default function BookDemoModal({ open, onClose }) {
                   required
                   value={form.name}
                   onChange={set('name')}
-                  placeholder="Ahmed Al-Rashid"
+                  placeholder="Sarah Mitchell"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
                 />
               </div>
@@ -93,7 +99,7 @@ export default function BookDemoModal({ open, onClose }) {
                   type="email"
                   value={form.email}
                   onChange={set('email')}
-                  placeholder="ahmed@eliteproperties.ae"
+                  placeholder="sarah@premierrealty.com"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
                 />
               </div>
@@ -103,7 +109,7 @@ export default function BookDemoModal({ open, onClose }) {
                   required
                   value={form.agency}
                   onChange={set('agency')}
-                  placeholder="Elite Properties Dubai"
+                  placeholder="Premier Realty Group"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
                 />
               </div>
@@ -113,7 +119,7 @@ export default function BookDemoModal({ open, onClose }) {
                   required
                   value={form.phone}
                   onChange={set('phone')}
-                  placeholder="+971 50 123 4567"
+                  placeholder="+1 212 555 0147"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
                 />
               </div>
