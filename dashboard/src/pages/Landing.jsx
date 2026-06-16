@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Phone, MessageSquare, TrendingUp, Building2, CheckCircle, ArrowRight, Clock, Globe, Linkedin, Info } from 'lucide-react'
+import LandingDemo from '../components/LandingDemo'
 
 const FEATURES = [
   {
@@ -172,6 +173,17 @@ export default function Landing() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Demo */}
+      <section className="py-20 px-6 bg-gray-50">
+        <div className="max-w-2xl mx-auto">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl font-bold text-gray-900">See it in action</h2>
+            <p className="text-gray-500 mt-3">This is exactly what your clients experience when they contact your agency.</p>
+          </div>
+          <LandingDemo />
         </div>
       </section>
 
