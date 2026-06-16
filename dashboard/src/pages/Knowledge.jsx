@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
-import { Upload, FileText, Trash2, CheckCircle, AlertCircle, Loader, X } from 'lucide-react'
+import { Upload, FileText, Trash2, CheckCircle, AlertCircle, Loader, CheckCheck } from 'lucide-react'
 
 const CATEGORIES = ['faq', 'listing', 'policy', 'brochure', 'notes', 'other']
 const ACCEPT = '.pdf,.docx,.doc,.txt,.csv,.xlsx,.png,.jpg,.jpeg,.html'
@@ -17,54 +17,64 @@ function StatusIcon({ status }) {
   return <Loader className="w-4 h-4 text-gray-400 animate-spin" />
 }
 
+function Toast({ message, onDone }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 4000)
+    return () => clearTimeout(t)
+  }, [onDone])
+  return (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-gray-900 text-white text-sm px-5 py-3 rounded-xl shadow-lg">
+      <CheckCheck className="w-4 h-4 text-green-400 flex-shrink-0" />
+      {message}
+    </div>
+  )
+}
+
 export default function Knowledge() {
   const [documents, setDocuments] = useState([])
   const [dragging, setDragging] = useState(false)
-  const [jobs, setJobs] = useState([]) // {jobId, filename, status}
+  const [processingCount, setProcessingCount] = useState(0)
   const [textInput, setTextInput] = useState('')
   const [textTitle, setTextTitle] = useState('')
   const [textCategory, setTextCategory] = useState('notes')
   const [uploadCategory, setUploadCategory] = useState('other')
-  const [submitting, setSubmitting] = useState(false)
+  const [toast, setToast] = useState(null)
   const fileRef = useRef()
+
+  function showToast(msg) {
+    setToast(msg)
+  }
 
   useEffect(() => {
     api.getDocuments().then(setDocuments).catch(console.error)
   }, [])
 
-  // Poll pending jobs
+  // Poll Supabase documents until processing ones complete
   useEffect(() => {
-    const pending = jobs.filter((j) => j.status === 'processing')
-    if (!pending.length) return
-    const interval = setInterval(async () => {
-      const updated = await Promise.all(
-        pending.map((j) => api.getJobStatus(j.jobId).catch(() => j))
-      )
-      setJobs((prev) =>
-        prev.map((j) => {
-          const u = updated.find((x) => x.job_id === j.jobId)
-          if (u && u.status !== 'processing') {
-            if (u.status === 'completed') {
-              api.getDocuments().then(setDocuments).catch(console.error)
-            }
-            return { ...j, status: u.status, error: u.error }
-          }
-          return j
-        })
-      )
-    }, 2000)
+    if (processingCount === 0) return
+    const interval = setInterval(() => {
+      api.getDocuments().then((docs) => {
+        setDocuments(docs)
+        const stillPending = docs.filter((d) => d.status === 'processing').length
+        setProcessingCount(stillPending)
+      }).catch(console.error)
+    }, 3000)
     return () => clearInterval(interval)
-  }, [jobs])
+  }, [processingCount])
 
   async function handleFiles(files) {
+    let queued = 0
     for (const file of files) {
       const fd = new FormData()
       fd.append('file', file)
       fd.append('category', uploadCategory)
-      const res = await api.ingestFile(fd).catch((e) => ({ error: e.message }))
-      if (res.job_id) {
-        setJobs((prev) => [...prev, { jobId: res.job_id, filename: file.name, status: 'processing' }])
-      }
+      const res = await api.ingestFile(fd).catch(() => null)
+      if (res?.job_id) queued++
+    }
+    if (queued > 0) {
+      setProcessingCount((n) => n + queued)
+      showToast(`${queued === 1 ? 'File' : `${queued} files`} uploaded — indexing in background`)
+      api.getDocuments().then(setDocuments).catch(console.error)
     }
   }
 
@@ -76,12 +86,17 @@ export default function Knowledge() {
 
   async function handleTextSubmit() {
     if (!textInput.trim()) return
-    setSubmitting(true)
-    await api.ingestText({ text: textInput, category: textCategory, title: textTitle || 'Pasted text' })
+    const title = textTitle || 'Pasted text'
+    const text = textInput
+    const category = textCategory
     setTextInput('')
     setTextTitle('')
-    api.getDocuments().then(setDocuments).catch(console.error)
-    setSubmitting(false)
+    const res = await api.ingestText({ text, category, title }).catch(() => null)
+    if (res?.job_id) {
+      setProcessingCount((n) => n + 1)
+      showToast('Text added — indexing in background')
+      api.getDocuments().then(setDocuments).catch(console.error)
+    }
   }
 
   async function handleDelete(id) {
@@ -90,8 +105,12 @@ export default function Knowledge() {
     setDocuments((prev) => prev.filter((d) => d.id !== id))
   }
 
+  const pendingDocs = documents.filter((d) => d.status === 'processing')
+
   return (
     <div className="p-4 md:p-8 max-w-4xl">
+      {toast && <Toast message={toast} onDone={() => setToast(null)} />}
+
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">Knowledge Base</h1>
         <p className="text-gray-500 text-sm mt-1">
@@ -126,20 +145,6 @@ export default function Knowledge() {
           <p className="text-xs text-gray-400 mt-1">PDF, DOCX, XLSX, TXT, CSV, PNG, JPG — messy docs welcome</p>
           <input ref={fileRef} type="file" accept={ACCEPT} multiple className="hidden" onChange={(e) => handleFiles([...e.target.files])} />
         </div>
-
-        {/* Active jobs */}
-        {jobs.length > 0 && (
-          <div className="mt-4 space-y-2">
-            {jobs.map((job, i) => (
-              <div key={i} className="flex items-center gap-3 text-sm">
-                <StatusIcon status={job.status} />
-                <span className="text-gray-600 flex-1 truncate">{job.filename}</span>
-                <span className="text-xs text-gray-400 capitalize">{job.status}</span>
-                {job.error && <span className="text-xs text-red-400">{job.error}</span>}
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Text paste */}
@@ -176,17 +181,25 @@ export default function Knowledge() {
         <div className="flex justify-end mt-3">
           <button
             onClick={handleTextSubmit}
-            disabled={submitting || !textInput.trim()}
+            disabled={!textInput.trim()}
             className="btn-primary"
           >
-            {submitting ? 'Processing…' : 'Ingest Text'}
+            Ingest Text
           </button>
         </div>
       </div>
 
       {/* Document list */}
       <div className="card">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Indexed Documents ({documents.length})</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-gray-700">Indexed Documents ({documents.length})</h2>
+          {pendingDocs.length > 0 && (
+            <span className="flex items-center gap-1.5 text-xs text-gray-400">
+              <Loader className="w-3.5 h-3.5 animate-spin" />
+              {pendingDocs.length} indexing…
+            </span>
+          )}
+        </div>
         {documents.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-8">No documents indexed yet</p>
         ) : (
@@ -198,8 +211,12 @@ export default function Knowledge() {
                   <p className="text-sm text-gray-700 font-medium truncate">{doc.filename}</p>
                   <div className="flex items-center gap-3 mt-0.5">
                     <span className="text-xs text-gray-400 capitalize">{doc.category}</span>
-                    <span className="text-xs text-gray-300">·</span>
-                    <span className="text-xs text-gray-400">{doc.chunk_count} chunks</span>
+                    {doc.chunk_count > 0 && (
+                      <>
+                        <span className="text-xs text-gray-300">·</span>
+                        <span className="text-xs text-gray-400">{doc.chunk_count} chunks</span>
+                      </>
+                    )}
                     {doc.quality_score != null && (
                       <>
                         <span className="text-xs text-gray-300">·</span>

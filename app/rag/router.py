@@ -71,6 +71,7 @@ class TextIngestRequest(BaseModel):
 
 @router.post("/ingest/text")
 async def ingest_text_endpoint(
+    background_tasks: BackgroundTasks,
     body: TextIngestRequest,
     current_user: CurrentUser,
     company_id: CompanyId,
@@ -78,17 +79,34 @@ async def ingest_text_endpoint(
     if not body.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
 
-    result = await ingest_text(
-        text=body.text,
-        company_id=company_id,
-        metadata={
-            "source_type": "text_paste",
-            "property_id": body.property_id or "",
-            "doc_category": body.category,
-            "filename": body.title or "pasted_text",
-        },
+    job_id = str(uuid4())
+    filename = body.title or "pasted_text"
+    _job_status[job_id] = {"status": "processing", "filename": filename}
+
+    background_tasks.add_task(
+        _run_ingest_text,
+        job_id, body.text, company_id, body.title, body.category, body.property_id,
     )
-    return result
+
+    return {"job_id": job_id, "filename": filename, "status": "processing"}
+
+
+async def _run_ingest_text(job_id, text, company_id, title, category, property_id):
+    filename = title or "pasted_text"
+    try:
+        result = await ingest_text(
+            text=text,
+            company_id=company_id,
+            metadata={
+                "source_type": "text_paste",
+                "property_id": property_id or "",
+                "doc_category": category,
+                "filename": filename,
+            },
+        )
+        _job_status[job_id] = {"status": "completed", "filename": filename, **result}
+    except Exception as e:
+        _job_status[job_id] = {"status": "failed", "filename": filename, "error": str(e)}
 
 
 # ── Job status ────────────────────────────────────────────────────────────────
