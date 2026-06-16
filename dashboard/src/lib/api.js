@@ -165,4 +165,8 @@ export const api = {
   deleteDocument:(id)        => request('DELETE', `/rag/documents/${id}`),
   getJobStatus:  (jobId)     => request('GET', `/rag/status/${jobId}`),
   ingestFile:    (formData)  => request('POST', '/rag/ingest', formData, true),
+
+  // Assistant
+  assistantChat:   (data) => request('POST', '/assistant/chat', data),
+  assistantNotify: (data) => request('POST', '/assistant/notify', data),
 }

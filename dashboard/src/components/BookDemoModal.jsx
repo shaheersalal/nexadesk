@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, CheckCircle } from 'lucide-react'
 
 const API = 'https://shaheersalal-nexadesk.hf.space'
@@ -8,6 +8,13 @@ export default function BookDemoModal({ open, onClose }) {
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!open) return
+    function onKey(e) { if (e.key === 'Escape') handleClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
 
   if (!open) return null
 

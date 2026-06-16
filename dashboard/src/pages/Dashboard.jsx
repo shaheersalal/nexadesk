@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import { Users, Phone, CalendarDays, TrendingUp, MessageSquare, Wrench, RefreshCw, ShoppingBag } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -97,7 +96,6 @@ export default function Dashboard() {
         <div className="card mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-gray-700">Recent AI-Handled Requests</h2>
-            <Link to="/dashboard/leads" className="text-xs text-accent hover:underline">View all leads</Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {recentLeads.map(lead => {
@@ -129,7 +127,6 @@ export default function Dashboard() {
       <div className="card">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-gray-700">Upcoming Appointments</h2>
-          <Link to="/dashboard/appointments" className="text-xs text-accent hover:underline">View all</Link>
         </div>
         {appointments.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-8">No upcoming appointments</p>

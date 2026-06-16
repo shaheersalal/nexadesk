@@ -15,6 +15,7 @@ from app.rag.router import router as rag_router
 from app.leads.router import router as leads_router
 from app.properties.router import router as properties_router
 from app.public.router import router as public_router
+from app.assistant.router import router as assistant_router
 
 settings = get_settings()
 
@@ -49,6 +50,7 @@ app.add_middleware(
 
 # ── API routers ───────────────────────────────────────────────────────────────
 app.include_router(public_router, tags=["public"])
+app.include_router(assistant_router, prefix="/assistant", tags=["assistant"])
 app.include_router(voice_router, prefix="/voice", tags=["voice"])
 app.include_router(chat_router, prefix="/chat", tags=["chat"])
 app.include_router(rag_router, prefix="/rag", tags=["rag"])
