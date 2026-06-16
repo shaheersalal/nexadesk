@@ -60,6 +60,8 @@ def detect_file_type(file_bytes: bytes, filename: str) -> InputMeta:
             "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "csv": "text/csv",
             "txt": "text/plain",
+            "md": "text/plain",
+            "markdown": "text/plain",
             "html": "text/html",
             "htm": "text/html",
             "jpg": "image/jpeg",

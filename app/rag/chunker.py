@@ -60,6 +60,8 @@ _HEADING_RE = re.compile(
     re.MULTILINE,
 )
 
+_MD_HEADING_RE = re.compile(r"^#{1,4}\s+.+", re.MULTILINE)
+
 
 def _has_headings(text: str) -> bool:
     return bool(_HEADING_RE.search(text))
@@ -72,17 +74,35 @@ def _has_paragraphs(text: str) -> bool:
 # ── Section-based chunking ────────────────────────────────────────────────────
 
 def _chunk_by_sections(text: str) -> list[Chunk]:
-    parts = _HEADING_RE.split(text)
-    headings = _HEADING_RE.findall(text)
+    """
+    Split on headings, keeping the heading line INSIDE the chunk so the
+    heading text is included in the vector embedding.
+    """
+    lines = text.splitlines(keepends=True)
+    sections: list[tuple[str, list[str]]] = []
+    current_heading = ""
+    current_lines: list[str] = []
+
+    for line in lines:
+        stripped = line.rstrip()
+        if _HEADING_RE.match(stripped):
+            if current_lines:
+                content = "".join(current_lines).strip()
+                if content:
+                    sections.append((current_heading, content))
+            current_heading = stripped.lstrip("#").strip()
+            current_lines = [line]
+        else:
+            current_lines.append(line)
+
+    if current_lines:
+        content = "".join(current_lines).strip()
+        if content:
+            sections.append((current_heading, content))
 
     chunks = []
-    current_title = ""
-    for i, part in enumerate(parts):
-        if i < len(headings):
-            current_title = headings[i].strip()
-        if not part.strip():
-            continue
-        for sub in _sub_chunk(part.strip(), current_title, "section"):
+    for heading, content in sections:
+        for sub in _sub_chunk(content, heading, "section"):
             chunks.append(sub)
     return chunks
 
