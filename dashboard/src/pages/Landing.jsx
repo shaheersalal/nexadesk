@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Phone, MessageSquare, TrendingUp, Building2, CheckCircle, ArrowRight, Clock, Globe, Linkedin, Info } from 'lucide-react'
+import { Phone, MessageSquare, TrendingUp, Building2, CheckCircle, ArrowRight, Clock, Globe, Linkedin } from 'lucide-react'
 import LandingDemo from '../components/LandingDemo'
+import BookDemoModal from '../components/BookDemoModal'
 
 const FEATURES = [
   {
@@ -26,14 +28,17 @@ const FEATURES = [
 ]
 
 const STEPS = [
-  { n: '01', title: 'A client calls or messages', desc: 'Your AI phone number or chat widget receives the inquiry at any hour.' },
-  { n: '02', title: 'AI handles the conversation', desc: 'Greets professionally, asks qualifying questions, answers property FAQs from your knowledge base.' },
-  { n: '03', title: 'Client appears in your dashboard', desc: 'Full transcript, score, contact details, and AI summary — ready for you to follow up.' },
+  { n: '01', title: 'Book a demo call', desc: 'We schedule a 30-minute call to understand your agency, your properties, and how you currently handle inquiries.' },
+  { n: '02', title: 'We set everything up', desc: 'We configure your AI phone number, upload your knowledge base, and connect the chat widget to your website — fully handled.' },
+  { n: '03', title: 'You start closing deals', desc: 'Every call and chat is handled, qualified, and logged. You open your dashboard and follow up on the hottest leads.' },
 ]
 
 export default function Landing() {
+  const [demoOpen, setDemoOpen] = useState(false)
+
   return (
     <div className="min-h-screen bg-white font-sans">
+      <BookDemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
 
       {/* Nav */}
       <nav className="fixed top-0 inset-x-0 z-50 bg-white/90 backdrop-blur border-b border-gray-100">
@@ -48,9 +53,12 @@ export default function Landing() {
             <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900 font-medium px-4 py-2">
               Log in
             </Link>
-            <Link to="/login?mode=signup" className="text-sm bg-navy-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-navy-700 transition-colors">
-              Get Started Free
-            </Link>
+            <button
+              onClick={() => setDemoOpen(true)}
+              className="text-sm bg-navy-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-navy-700 transition-colors"
+            >
+              Book a Demo
+            </button>
           </div>
         </div>
       </nav>
@@ -71,10 +79,12 @@ export default function Landing() {
             NexaDesk answers every call and chat, qualifies buyers and tenants, and logs everything to your dashboard — so you close more deals without hiring more staff.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link to="/login?mode=signup"
-              className="inline-flex items-center justify-center gap-2 bg-accent text-white font-semibold px-8 py-3.5 rounded-xl hover:bg-accent-dark transition-colors text-sm">
-              Start Free Trial <ArrowRight className="w-4 h-4" />
-            </Link>
+            <button
+              onClick={() => setDemoOpen(true)}
+              className="inline-flex items-center justify-center gap-2 bg-accent text-white font-semibold px-8 py-3.5 rounded-xl hover:bg-accent-dark transition-colors text-sm"
+            >
+              Book a Demo <ArrowRight className="w-4 h-4" />
+            </button>
             <Link to="/login"
               className="inline-flex items-center justify-center gap-2 bg-white/10 text-white font-medium px-8 py-3.5 rounded-xl hover:bg-white/20 transition-colors text-sm border border-white/20">
               Sign in
@@ -90,7 +100,7 @@ export default function Landing() {
               <span className="w-3 h-3 rounded-full bg-yellow-400/60" />
               <span className="w-3 h-3 rounded-full bg-green-400/60" />
             </div>
-            <span className="text-white/30 text-xs ml-2">nexadesk.vercel.app — Dashboard</span>
+            <span className="text-white/30 text-xs ml-2">nexadesk.site — Dashboard</span>
           </div>
           <div className="bg-navy-900 p-6 grid grid-cols-4 gap-4">
             {[['24', 'Total Clients'], ['78', 'Avg Score'], ['5', 'Upcoming'], ['12', 'Conversations']].map(([v, l]) => (
@@ -125,7 +135,7 @@ export default function Landing() {
           {[
             [Clock, '24/7 AI Coverage'],
             [Globe, '10+ Languages Supported'],
-            [CheckCircle, 'No Technical Setup Needed'],
+            [CheckCircle, 'Full Setup Included'],
           ].map(([Icon, label]) => (
             <div key={label} className="flex items-center gap-2">
               <Icon className="w-4 h-4" /> {label}
@@ -139,7 +149,7 @@ export default function Landing() {
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-14">
             <h2 className="text-3xl font-bold text-gray-900">How it works</h2>
-            <p className="text-gray-500 mt-3">From first ring to qualified client — fully automated.</p>
+            <p className="text-gray-500 mt-3">From first call to qualified client — we set it all up for you.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {STEPS.map(s => (
@@ -191,10 +201,10 @@ export default function Landing() {
       <section className="py-20 px-6 bg-gray-50">
         <div className="max-w-md mx-auto text-center">
           <h2 className="text-3xl font-bold text-gray-900 mb-3">Simple pricing</h2>
-          <p className="text-gray-500 mb-10">One plan. Everything included. Cancel anytime.</p>
+          <p className="text-gray-500 mb-10">One plan. Everything included. We set it all up for you.</p>
           <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">
             <p className="text-4xl font-black text-gray-900">$136 <span className="text-lg font-normal text-gray-400">/mo</span></p>
-            <p className="text-gray-400 text-sm mt-1 mb-6">(AED 499) · includes 300 minutes</p>
+            <p className="text-gray-400 text-sm mt-1 mb-6">(AED 499) · includes 300 AI minutes</p>
             <ul className="space-y-3 text-sm text-gray-600 text-left mb-8">
               {[
                 'Dedicated AI phone number',
@@ -203,6 +213,7 @@ export default function Landing() {
                 'Property knowledge base',
                 'Full call transcripts',
                 'WhatsApp & website widget',
+                'Personal setup & onboarding call',
               ].map(item => (
                 <li key={item} className="flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
@@ -211,10 +222,13 @@ export default function Landing() {
               ))}
             </ul>
 
-            <Link to="/login?mode=signup"
-              className="block w-full text-center bg-navy-600 text-white font-semibold py-3 rounded-xl hover:bg-navy-700 transition-colors">
-              Get Started Free
-            </Link>
+            <button
+              onClick={() => setDemoOpen(true)}
+              className="block w-full text-center bg-navy-600 text-white font-semibold py-3 rounded-xl hover:bg-navy-700 transition-colors"
+            >
+              Book a Demo
+            </button>
+            <p className="text-xs text-gray-400 mt-3">No contracts · Cancel anytime</p>
           </div>
         </div>
       </section>
@@ -223,11 +237,13 @@ export default function Landing() {
       <section className="py-20 px-6 bg-navy-600">
         <div className="max-w-2xl mx-auto text-center">
           <h2 className="text-3xl font-bold text-white mb-4">Ready to stop missing clients?</h2>
-          <p className="text-white/60 mb-8">Set up in under 10 minutes. Your AI receptionist starts taking calls today.</p>
-          <Link to="/login?mode=signup"
-            className="inline-flex items-center gap-2 bg-accent text-white font-semibold px-10 py-4 rounded-xl hover:bg-accent-dark transition-colors">
-            Start Free Trial <ArrowRight className="w-4 h-4" />
-          </Link>
+          <p className="text-white/60 mb-8">Book a demo and we'll have your AI receptionist live within 48 hours.</p>
+          <button
+            onClick={() => setDemoOpen(true)}
+            className="inline-flex items-center gap-2 bg-accent text-white font-semibold px-10 py-4 rounded-xl hover:bg-accent-dark transition-colors"
+          >
+            Book a Demo <ArrowRight className="w-4 h-4" />
+          </button>
         </div>
       </section>
 
@@ -240,7 +256,6 @@ export default function Landing() {
             <span>— AI Receptionist for Real Estate</span>
           </div>
 
-          {/* LinkedIn founder link */}
           <a
             href="https://www.linkedin.com/in/shaheer-salal/"
             target="_blank"
@@ -256,7 +271,6 @@ export default function Landing() {
 
           <div className="flex gap-6 text-xs text-white/30">
             <Link to="/login" className="hover:text-white/60 transition-colors">Log in</Link>
-            <Link to="/login?mode=signup" className="hover:text-white/60 transition-colors">Sign up</Link>
           </div>
         </div>
       </footer>

@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     GOOGLE_CALENDAR_CLIENT_SECRET: str = ""
     GOOGLE_CALENDAR_REDIRECT_URI: str = "http://localhost:8000/leads/calendar/callback"
 
+    # Email (Resend)
+    RESEND_API_KEY: str = ""
+
     # Upload
     MAX_UPLOAD_SIZE_MB: int = 50
 
