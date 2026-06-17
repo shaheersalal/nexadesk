@@ -3,6 +3,10 @@ import { Send } from 'lucide-react'
 
 const OPENING_MSG = "Good day! I'm the AI receptionist for Palm Elite Properties. Are you looking to buy, rent, or would you like to schedule a viewing today?"
 
+function now() {
+  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
 function respond(input) {
   const s = input.toLowerCase()
   if (/buy|purchase|invest/.test(s))
@@ -33,32 +37,20 @@ function respond(input) {
     return "In London, prime areas like Kensington and Chelsea average £1.5M–£5M+ for apartments. Outer London zones 3–4 offer 2BR flats from £400K–£700K, with rentals at £1,800–£3,500/month. Are you looking to buy or rent in the UK?"
   if (/new york|nyc|manhattan|brooklyn|los angeles|miami|houston|chicago|us|usa|united states/.test(s))
     return "In the US, Manhattan averages $1,200–$3,500/sqft for sales and $4,000–$12,000/month for rentals. Miami condos start from $500K, Houston homes from $350K. Which US city are you interested in?"
-  return "Understood. Let me connect you with the right agent. Can I take your name and contact number so we can follow up promptly?"
+  return "Understood. Let me connect you with the right agent. Can I take your name and a contact number so we can follow up promptly?"
 }
 
 export default function LandingDemo() {
-  const [open, setOpen] = useState(false)
-  const [messages, setMessages] = useState([])
+  const [messages, setMessages] = useState([{ role: 'bot', text: OPENING_MSG, time: now() }])
   const [input, setInput] = useState('')
   const [typing, setTyping] = useState(false)
-  const [initialized, setInitialized] = useState(false)
   const messagesRef = useRef(null)
-  const inputRef = useRef(null)
 
-  function now() {
-    return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  }
-
-  function handleOpen() {
-    setOpen(true)
-    if (!initialized) {
-      setInitialized(true)
-      setTimeout(() => {
-        setMessages([{ role: 'bot', text: OPENING_MSG, time: now() }])
-      }, 300)
+  useEffect(() => {
+    if (messagesRef.current) {
+      messagesRef.current.scrollTop = messagesRef.current.scrollHeight
     }
-    setTimeout(() => inputRef.current?.focus(), 350)
-  }
+  }, [messages, typing])
 
   function handleSend() {
     const text = input.trim()
@@ -70,26 +62,6 @@ export default function LandingDemo() {
       setTyping(false)
       setMessages(prev => [...prev, { role: 'bot', text: respond(text), time: now() }])
     }, 800)
-  }
-
-  useEffect(() => {
-    if (messagesRef.current) {
-      messagesRef.current.scrollTop = messagesRef.current.scrollHeight
-    }
-  }, [messages, typing])
-
-  if (!open) {
-    return (
-      <div className="text-center">
-        <button
-          onClick={handleOpen}
-          className="inline-flex items-center gap-2 text-sm text-accent border border-accent/40 px-6 py-3 rounded-xl hover:bg-accent/5 transition-colors font-medium"
-        >
-          Try a simulated conversation →
-        </button>
-        <p className="text-xs text-gray-400 mt-2">No signup needed — see exactly what your clients experience</p>
-      </div>
-    )
   }
 
   return (
@@ -105,12 +77,6 @@ export default function LandingDemo() {
               online
             </span>
           </div>
-          <button
-            onClick={() => setOpen(false)}
-            className="text-white/40 hover:text-white text-xs transition-colors"
-          >
-            Close ↑
-          </button>
         </div>
 
         {/* Messages */}
@@ -140,10 +106,9 @@ export default function LandingDemo() {
           )}
         </div>
 
-        {/* Input */}
+        {/* Input — no autoFocus, user taps deliberately on mobile */}
         <div className="flex gap-2 px-3 py-3 bg-white border-t border-gray-100">
           <input
-            ref={inputRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSend() } }}
