@@ -204,7 +204,8 @@ export default function Landing() {
           <p className="text-gray-500 mb-10">One plan. Everything included. We set it all up for you.</p>
           <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">
             <p className="text-4xl font-black text-gray-900">$136 <span className="text-lg font-normal text-gray-400">/mo</span></p>
-            <p className="text-gray-400 text-sm mt-1 mb-6">(AED 499) · includes 300 AI minutes</p>
+            <p className="text-gray-400 text-sm mt-1">(AED 499)</p>
+            <p className="text-gray-500 text-xs mt-1 mb-6">300 minutes included · $0.18/min thereafter — no surprises</p>
             <ul className="space-y-3 text-sm text-gray-600 text-left mb-8">
               {[
                 'Dedicated AI phone number',
@@ -273,6 +274,9 @@ export default function Landing() {
             <Link to="/login" className="hover:text-white/60 transition-colors">Log in</Link>
           </div>
         </div>
+        <p className="text-center text-[11px] text-white/20 mt-6 max-w-xl mx-auto">
+          All call transcripts and client data stored securely on encrypted servers. Never sold or shared.
+        </p>
       </footer>
     </div>
   )
