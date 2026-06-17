@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import {
   LayoutDashboard, Building2, BookOpen,
@@ -33,10 +33,10 @@ export default function Layout({ session }) {
 
       {/* Mobile top bar */}
       <div className="fixed top-0 left-0 right-0 h-14 bg-navy-600 flex items-center justify-between px-4 z-30 md:hidden">
-        <div className="flex items-center gap-2">
+        <Link to="/dashboard" className="flex items-center gap-2">
           <Phone className="w-4 h-4 text-accent" />
           <span className="text-white font-semibold text-base">{appName}</span>
-        </div>
+        </Link>
         <button onClick={() => setSidebarOpen(true)} className="text-gray-400 hover:text-white p-1">
           <Menu className="w-6 h-6" />
         </button>
@@ -55,10 +55,10 @@ export default function Layout({ session }) {
       `}>
         {/* Logo */}
         <div className="h-16 flex items-center justify-between px-6 border-b border-navy-700">
-          <div className="flex items-center gap-2">
+          <Link to="/dashboard" className="flex items-center gap-2">
             <Phone className="w-5 h-5 text-accent" />
             <span className="text-white font-semibold text-lg">{appName}</span>
-          </div>
+          </Link>
           <button onClick={closeSidebar} className="text-gray-400 hover:text-white md:hidden">
             <X className="w-5 h-5" />
           </button>

@@ -43,12 +43,12 @@ export default function Landing() {
       {/* Nav */}
       <nav className="fixed top-0 inset-x-0 z-50 bg-white/90 backdrop-blur border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <Link to="/" className="flex items-center gap-2">
             <div className="w-8 h-8 bg-navy-600 rounded-lg flex items-center justify-center">
               <Phone className="w-4 h-4 text-accent" />
             </div>
             <span className="font-semibold text-gray-900 text-lg">NexaDesk</span>
-          </div>
+          </Link>
           <div className="flex items-center gap-3">
             <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900 font-medium px-4 py-2">
               Log in
