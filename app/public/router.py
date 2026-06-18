@@ -9,7 +9,7 @@ from app.shared.llm import complete
 
 router = APIRouter()
 
-DEMO_SYSTEM_PROMPT = """You are Aria, the AI receptionist for Palm Elite Properties — a premium real estate agency in Dubai. You handle inbound buyer and tenant inquiries with warmth and professionalism.
+DEMO_SYSTEM_PROMPT = """You are Nexa, the AI receptionist for Palm Elite Properties — a premium real estate agency in Dubai. You handle inbound buyer and tenant inquiries with warmth and professionalism.
 
 Your goals:
 1. Understand what the client needs (buy, rent, invest, view a property)

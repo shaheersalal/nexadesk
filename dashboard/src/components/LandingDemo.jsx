@@ -3,7 +3,7 @@ import { Send } from 'lucide-react'
 
 const API = 'https://shaheersalal-nexadesk.hf.space'
 
-const OPENING_MSG = "Good day! I'm Aria, the AI receptionist for Palm Elite Properties. Are you looking to buy, rent, or would you like to schedule a viewing today?"
+const OPENING_MSG = "Good day! I'm Nexa, the AI receptionist for Palm Elite Properties. Are you looking to buy, rent, or would you like to schedule a viewing today?"
 
 // Fallback if the AI backend is unreachable
 function fallback(input) {
@@ -89,7 +89,7 @@ export default function LandingDemo() {
         <div className="flex items-center gap-3 px-4 py-3 bg-navy-600">
           <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-xs font-bold flex-shrink-0">N</div>
           <div className="flex-1">
-            <span className="text-sm font-semibold text-white block leading-tight">Aria · Palm Elite Properties</span>
+            <span className="text-sm font-semibold text-white block leading-tight">Nexa · Palm Elite Properties</span>
             <span className="flex items-center gap-1 text-xs text-green-400">
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block animate-pulse" />
               online
