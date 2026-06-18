@@ -1,6 +1,7 @@
 from typing import Optional
 from uuid import uuid4
 
+import httpx
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import PointStruct, Filter, FieldCondition, MatchValue
 
@@ -46,6 +47,37 @@ async def store_chunks(
     return len(points)
 
 
+async def _rerank_with_jina(query: str, chunks: list[dict], top_n: int) -> list[dict]:
+    """Re-rank chunks using Jina reranker. Falls back to original order on any error."""
+    if not settings.JINA_API_KEY or not chunks:
+        return chunks[:top_n]
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            res = await client.post(
+                "https://api.jina.ai/v1/rerank",
+                headers={
+                    "Authorization": f"Bearer {settings.JINA_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": settings.JINA_RERANKER_MODEL,
+                    "query": query,
+                    "documents": [c["text"] for c in chunks],
+                    "top_n": min(top_n, len(chunks)),
+                },
+            )
+        if res.status_code != 200:
+            return chunks[:top_n]
+        reranked = []
+        for r in res.json().get("results", []):
+            c = dict(chunks[r["index"]])
+            c["score"] = round(r["relevance_score"], 3)
+            reranked.append(c)
+        return reranked
+    except Exception:
+        return chunks[:top_n]
+
+
 async def query_with_confidence(
     query: str,
     company_id: str,
@@ -55,6 +87,7 @@ async def query_with_confidence(
 ) -> dict:
     """
     Query Qdrant and return chunks with a confidence assessment.
+    Fetches top_k * 3 candidates, Jina re-ranks to top_k, then scores confidence.
 
     Returns:
       {
@@ -70,16 +103,17 @@ async def query_with_confidence(
 
     query_vector = await embed_single(query)
 
-    # Build filter: always scope to company
     conditions = [FieldCondition(key="company_id", match=MatchValue(value=company_id))]
     if property_id:
         conditions.append(FieldCondition(key="property_id", match=MatchValue(value=property_id)))
 
+    # Fetch 3× candidates so Jina has a wider pool to re-rank
+    fetch_k = top_k * 3
     results = await client.search(
         collection_name=settings.QDRANT_COLLECTION,
         query_vector=query_vector,
         query_filter=Filter(must=conditions),
-        limit=top_k,
+        limit=fetch_k,
         score_threshold=SCORE_MIN,
         with_payload=True,
     )
@@ -87,8 +121,7 @@ async def query_with_confidence(
     if not results:
         return {"confidence": "NO_MATCH", "chunks": [], "max_score": 0.0, "context_text": ""}
 
-    max_score = max(r.score for r in results)
-    chunks = [
+    candidates = [
         {
             "text": r.payload.get("text", ""),
             "score": round(r.score, 3),
@@ -96,6 +129,11 @@ async def query_with_confidence(
         }
         for r in results
     ]
+
+    # Jina re-rank — narrows candidates to top_k, best match first
+    chunks = await _rerank_with_jina(query, candidates, top_n=top_k)
+
+    max_score = max(c["score"] for c in chunks) if chunks else 0.0
 
     if max_score >= SCORE_CONFIDENT:
         confidence = "CONFIDENT"

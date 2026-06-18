@@ -14,6 +14,13 @@ class LeadCreate(BaseModel):
     notes: Optional[str] = None
     language: str = "en"
     assigned_to: Optional[UUID] = None
+    # Qualifier Agent fields
+    budget_min: Optional[int] = None
+    budget_max: Optional[int] = None
+    area_preference: Optional[str] = None
+    bedrooms_needed: Optional[int] = None
+    timeline: Optional[str] = None
+    intent: Optional[str] = None
 
 
 class LeadUpdate(BaseModel):
@@ -24,6 +31,14 @@ class LeadUpdate(BaseModel):
     score: Optional[int] = None
     notes: Optional[str] = None
     assigned_to: Optional[UUID] = None
+    # Qualifier Agent fields
+    budget_min: Optional[int] = None
+    budget_max: Optional[int] = None
+    area_preference: Optional[str] = None
+    bedrooms_needed: Optional[int] = None
+    timeline: Optional[str] = None
+    intent: Optional[str] = None
+    needs_human: Optional[bool] = None
 
 
 class LeadStatusUpdate(BaseModel):

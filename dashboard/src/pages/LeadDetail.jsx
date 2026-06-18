@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { api } from '../lib/api'
-import { ArrowLeft, Phone, Mail, User, MessageSquare, Calendar, Wrench, RefreshCw, Star } from 'lucide-react'
+import { ArrowLeft, Phone, Mail, User, MessageSquare, Calendar, Wrench, RefreshCw, Star, MapPin, BedDouble, DollarSign, Clock, Target } from 'lucide-react'
 import { format } from 'date-fns'
 
 function badge(status) {
@@ -60,6 +60,34 @@ function ScoreBreakdown({ breakdown }) {
   )
 }
 
+function QualifierFields({ lead }) {
+  const fields = [
+    { icon: Target,    label: 'Intent',   value: lead.intent },
+    { icon: MapPin,    label: 'Area',     value: lead.area_preference },
+    { icon: BedDouble, label: 'Bedrooms', value: lead.bedrooms_needed != null ? `${lead.bedrooms_needed} BR` : null },
+    { icon: DollarSign,label: 'Budget',   value: lead.budget_min || lead.budget_max
+        ? `AED ${(lead.budget_min || 0).toLocaleString()}${lead.budget_max ? ` – ${lead.budget_max.toLocaleString()}` : '+'}` : null },
+    { icon: Clock,     label: 'Timeline', value: lead.timeline },
+  ].filter(f => f.value)
+
+  if (fields.length === 0) return null
+
+  return (
+    <div className="card">
+      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Qualification</h3>
+      <div className="space-y-2">
+        {fields.map(({ icon: Icon, label, value }) => (
+          <div key={label} className="flex items-center gap-2 text-sm">
+            <Icon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+            <span className="text-gray-400 w-16 flex-shrink-0">{label}</span>
+            <span className="text-gray-700 font-medium capitalize">{value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function ConversationTranscript({ conversation }) {
   const transcript = conversation.transcript || []
   const isVoice = conversation.channel === 'voice'
@@ -100,6 +128,19 @@ function ConversationTranscript({ conversation }) {
       {conversation.summary && (
         <div className="bg-gray-50 rounded-lg px-3 py-2 mb-4 text-xs text-gray-600 leading-relaxed">
           <span className="font-medium text-gray-700">AI Summary: </span>{conversation.summary}
+        </div>
+      )}
+
+      {/* Recording player */}
+      {conversation.recording_url && (
+        <div className="mb-4">
+          <p className="text-xs text-gray-500 mb-1.5 font-medium">Recording</p>
+          <audio
+            controls
+            src={conversation.recording_url}
+            className="w-full h-9 rounded-lg"
+            style={{ accentColor: '#e8a87c' }}
+          />
         </div>
       )}
 
@@ -169,11 +210,16 @@ export default function LeadDetail() {
               <User className="w-6 h-6 text-accent" />
             </div>
             <h1 className="text-lg font-semibold text-gray-900">{lead.name || 'Unknown'}</h1>
-            <div className="flex items-center gap-2 mt-1 mb-4">
+            <div className="flex flex-wrap items-center gap-2 mt-1 mb-4">
               <span className="text-xs text-gray-400 capitalize">{lead.source} ·</span>
               <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${badge(lead.status)}`}>
                 {lead.status.replace('_', ' ')}
               </span>
+              {lead.needs_human && (
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-600">
+                  Needs human
+                </span>
+              )}
               {lead.language && lead.language !== 'en' && (
                 <span className="text-xs bg-blue-50 text-blue-500 px-2 py-0.5 rounded-full uppercase">{lead.language}</span>
               )}
@@ -201,6 +247,8 @@ export default function LeadDetail() {
               </p>
             </div>
           )}
+
+          <QualifierFields lead={lead} />
 
           {!reqType && <ScoreBreakdown breakdown={lead.score_breakdown} />}
 

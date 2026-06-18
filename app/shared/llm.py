@@ -1,4 +1,4 @@
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 import openai
 
 from app.config import get_settings
@@ -15,11 +15,12 @@ async def complete(
     messages: list[dict],
     max_tokens: int = 1024,
     temperature: float = 0.3,
+    model: Optional[str] = None,
 ) -> str:
-    """Single non-streaming completion."""
+    """Single non-streaming completion. `model` overrides the configured LLM_MODEL."""
     client = _client()
     response = await client.chat.completions.create(
-        model=settings.LLM_MODEL,
+        model=model or settings.LLM_MODEL,
         max_tokens=max_tokens,
         temperature=temperature,
         messages=[{"role": "system", "content": system}] + messages,

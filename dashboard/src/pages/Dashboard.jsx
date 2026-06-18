@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
-import { Users, Phone, CalendarDays, TrendingUp, MessageSquare, Wrench, RefreshCw, ShoppingBag } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import { Users, Phone, CalendarDays, TrendingUp, MessageSquare, Wrench, RefreshCw, ShoppingBag, Radio } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 function StatCard({ icon: Icon, label, value, sub, color = 'accent' }) {
@@ -26,18 +27,111 @@ function reqIcon(notes) {
   return { icon: ShoppingBag, color: 'text-accent bg-accent/10', label: 'Buyer Inquiry' }
 }
 
+function timeAgo(iso) {
+  const diff = Math.floor((Date.now() - new Date(iso)) / 1000)
+  if (diff < 60) return `${diff}s ago`
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  return `${Math.floor(diff / 3600)}h ago`
+}
+
+function LiveFeedItem({ item }) {
+  const isVoice = item.channel === 'voice'
+  return (
+    <Link
+      to={item.lead_id ? `/dashboard/leads/${item.lead_id}` : '#'}
+      className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors group"
+    >
+      <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
+        isVoice ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-500'
+      }`}>
+        {isVoice ? <Phone className="w-3.5 h-3.5" /> : <MessageSquare className="w-3.5 h-3.5" />}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-800 truncate group-hover:text-accent">
+          {item.lead_name || (isVoice ? 'Incoming call' : 'New chat')}
+        </p>
+        <p className="text-xs text-gray-400 capitalize">{item.channel}</p>
+      </div>
+      <div className="text-right flex-shrink-0">
+        <span className={`inline-block w-2 h-2 rounded-full mb-1 ${item.fresh ? 'bg-green-400 animate-pulse' : 'bg-gray-200'}`} />
+        <p className="text-xs text-gray-400">{timeAgo(item.started_at)}</p>
+      </div>
+    </Link>
+  )
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState(null)
   const [appointments, setAppointments] = useState([])
   const [recentLeads, setRecentLeads] = useState([])
+  const [liveFeed, setLiveFeed] = useState([])
+  const companyIdRef = useRef(null)
+
+  async function loadRecentLeads() {
+    const data = await api.getLeads({ limit: 20 })
+    const arr = Array.isArray(data) ? data : (data.leads || data.items || [])
+    setRecentLeads(arr.filter(l => l.conversations?.length > 0).slice(0, 6))
+  }
+
+  async function loadLiveFeed() {
+    const cid = companyIdRef.current
+    if (!cid) return
+    const { data } = await supabase
+      .from('conversations')
+      .select('id, channel, started_at, lead_id, leads(name)')
+      .eq('company_id', cid)
+      .order('started_at', { ascending: false })
+      .limit(8)
+    if (data) {
+      setLiveFeed(data.map(c => ({
+        ...c,
+        lead_name: c.leads?.name || null,
+        fresh: false,
+      })))
+    }
+  }
 
   useEffect(() => {
     api.getAnalytics().then(setStats).catch(console.error)
     api.getAppointments().then(setAppointments).catch(console.error)
-    api.getLeads({ limit: 20 }).then(data => {
-      const arr = Array.isArray(data) ? data : (data.leads || data.items || [])
-      setRecentLeads(arr.filter(l => l.conversations?.length > 0).slice(0, 6))
-    }).catch(console.error)
+    loadRecentLeads().catch(console.error)
+
+    // Get company_id once, then load feed + subscribe to realtime
+    supabase.from('users')
+      .select('company_id')
+      .then(async ({ data }) => {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+        const row = data?.find(r => r)
+        // Fetch company_id via auth user
+        const { data: uRow } = await supabase.from('users').select('company_id').eq('id', user.id).single()
+        if (!uRow?.company_id) return
+        companyIdRef.current = uRow.company_id
+        await loadLiveFeed()
+
+        const channel = supabase
+          .channel('live_conv_feed')
+          .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'conversations', filter: `company_id=eq.${uRow.company_id}` },
+            async (payload) => {
+              const c = payload.new
+              // Fetch lead name
+              let lead_name = null
+              if (c.lead_id) {
+                const { data: lead } = await supabase.from('leads').select('name').eq('id', c.lead_id).single()
+                lead_name = lead?.name || null
+              }
+              setLiveFeed(prev => [{ ...c, lead_name, fresh: true }, ...prev.slice(0, 7)])
+              // Also refresh the recent AI-handled requests list
+              loadRecentLeads().catch(console.error)
+            }
+          )
+          .subscribe()
+
+        return () => supabase.removeChannel(channel)
+      })
+      .catch(console.error)
   }, [])
 
   const statusChartData = stats
@@ -123,6 +217,26 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Live call feed */}
+      <div className="card mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <Radio className="w-4 h-4 text-green-500" />
+            Live Activity
+          </h2>
+          <span className="text-xs text-gray-400">last 8 sessions</span>
+        </div>
+        {liveFeed.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-6">No recent conversations</p>
+        ) : (
+          <div>
+            {liveFeed.map((item) => (
+              <LiveFeedItem key={item.id} item={item} />
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Upcoming appointments */}
       <div className="card">
