@@ -2,8 +2,9 @@ from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from app.auth.middleware import CurrentUser
 from app.chat.engine import chat_turn
 from app.dependencies import get_supabase_admin
 from app.shared.prompts import CHAT_GREETING
@@ -12,14 +13,15 @@ from app.config import get_settings
 router = APIRouter()
 settings = get_settings()
 
-# In-memory session history (Redis-backed sessions would be used in production)
+# In-memory session history cache — warm path only.
+# On cache miss (restart, new pod) we reload from Supabase conversations table.
 _sessions: dict[str, list[dict]] = {}
 
 
 class ChatMessage(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=4096)
     session_id: Optional[str] = None
-    company_id: str               # passed from embedded widget
+    company_id: str = Field(..., min_length=36, max_length=36)  # UUID
     lead_id: Optional[str] = None
 
 
@@ -34,7 +36,12 @@ class ChatResponse(BaseModel):
 @router.post("/message", response_model=ChatResponse)
 async def send_message(body: ChatMessage):
     session_id = body.session_id or str(uuid4())
-    history = _sessions.get(session_id, [])
+
+    # Reload history from Supabase if not in cache (e.g. after restart)
+    if session_id not in _sessions:
+        _sessions[session_id] = await _load_history_from_db(session_id)
+
+    history = _sessions[session_id]
 
     result = await chat_turn(
         user_message=body.message,
@@ -49,7 +56,7 @@ async def send_message(body: ChatMessage):
     history.append({"role": "assistant", "content": result["reply"]})
     _sessions[session_id] = history[-20:]  # keep last 20 turns
 
-    # Auto-create lead if not yet linked and score crossed threshold
+    # Auto-create lead if not yet linked and engagement crossed threshold
     lead_id = body.lead_id
     if not lead_id and result.get("score_delta", 0) > 0:
         lead_id = await _get_or_create_session_lead(session_id, body.company_id)
@@ -64,26 +71,46 @@ async def send_message(body: ChatMessage):
 
 
 @router.get("/history/{session_id}")
-async def get_history(session_id: str):
+async def get_history(session_id: str, current_user: CurrentUser):
+    """Fetch conversation transcript. Requires auth — dashboard use only."""
     sb = get_supabase_admin()
     result = (
         sb.table("conversations")
-        .select("transcript, language, started_at")
+        .select("transcript, language, started_at, company_id")
         .eq("session_id", session_id)
         .single()
         .execute()
     )
     if not result.data:
         raise HTTPException(status_code=404, detail="Session not found")
-    return result.data
+
+    # Verify the conversation belongs to the authenticated user's company
+    from app.dependencies import get_company_id as _resolve
+    try:
+        user_company = sb.table("users").select("company_id").eq("id", current_user["id"]).single().execute()
+        user_cid = (user_company.data or {}).get("company_id")
+        if user_cid and result.data.get("company_id") != user_cid:
+            raise HTTPException(status_code=403, detail="Access denied")
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # If lookup fails, still return data (non-fatal)
+
+    return {
+        "transcript": result.data.get("transcript"),
+        "language": result.data.get("language"),
+        "started_at": result.data.get("started_at"),
+    }
 
 
 @router.get("/greeting")
 async def get_greeting(company_id: str):
-    """Return a greeting for the chat widget on load."""
+    """Return greeting for the embedded chat widget (public endpoint)."""
     sb = get_supabase_admin()
     result = sb.table("companies").select("name, ai_persona").eq("id", company_id).single().execute()
-    company = result.data or {}
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Company not found")
+    company = result.data
     company_name = company.get("name", settings.APP_NAME)
     ai_name = settings.APP_NAME
 
@@ -93,15 +120,32 @@ async def get_greeting(company_id: str):
     }
 
 
+async def _load_history_from_db(session_id: str) -> list[dict]:
+    """Rebuild LLM message history from Supabase on cache miss."""
+    try:
+        sb = get_supabase_admin()
+        result = (
+            sb.table("conversations")
+            .select("transcript")
+            .eq("session_id", session_id)
+            .single()
+            .execute()
+        )
+        transcript = (result.data or {}).get("transcript") or []
+        # transcript items: {role, content, timestamp} — strip timestamp for LLM
+        history = [{"role": t["role"], "content": t["content"]} for t in transcript if "role" in t and "content" in t]
+        return history[-20:]
+    except Exception:
+        return []
+
+
 async def _get_or_create_session_lead(session_id: str, company_id: str) -> Optional[str]:
     """Create a placeholder lead linked to this chat session."""
     sb = get_supabase_admin()
-    # Check if conversation already has a lead
     conv = sb.table("conversations").select("lead_id").eq("session_id", session_id).execute()
     if conv.data and conv.data[0].get("lead_id"):
         return conv.data[0]["lead_id"]
 
-    # Create new lead
     lead_result = sb.table("leads").insert({
         "company_id": company_id,
         "source": "chat",
@@ -112,6 +156,5 @@ async def _get_or_create_session_lead(session_id: str, company_id: str) -> Optio
         return None
     lead_id = lead_result.data[0]["id"]
 
-    # Link to conversation
     sb.table("conversations").update({"lead_id": lead_id}).eq("session_id", session_id).execute()
     return lead_id

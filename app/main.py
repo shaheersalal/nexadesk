@@ -24,15 +24,31 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: initialise Qdrant collection
-    from app.dependencies import get_settings as gs
-    s = gs()
-    client = await get_qdrant(s)
-    await ensure_collection(client, s)
+    # Validate required env vars on startup so we fail fast with a clear message
+    required = {
+        "SUPABASE_URL": settings.SUPABASE_URL,
+        "SUPABASE_SERVICE_KEY": settings.SUPABASE_SERVICE_KEY,
+        "LLM_API_KEY": settings.LLM_API_KEY,
+    }
+    missing = [k for k, v in required.items() if not v]
+    if missing:
+        raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
 
-    os.makedirs("uploads", exist_ok=True)
+    # Startup: initialise Qdrant collection
+    client = await get_qdrant(settings)
+    await ensure_collection(client, settings)
+
+    uploads_dir = os.path.join(os.path.dirname(__file__), "..", "uploads")
+    os.makedirs(uploads_dir, exist_ok=True)
+
     yield
-    # Shutdown: nothing needed for demo
+
+    # Shutdown: close persistent connections
+    from app.dependencies import _qdrant_client, _redis_pool
+    if _qdrant_client:
+        await _qdrant_client.close()
+    if _redis_pool:
+        await _redis_pool.aclose()
 
 
 app = FastAPI(

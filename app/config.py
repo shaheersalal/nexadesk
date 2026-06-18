@@ -54,13 +54,18 @@ class Settings(BaseSettings):
     # Google Calendar
     GOOGLE_CALENDAR_CLIENT_ID: str = ""
     GOOGLE_CALENDAR_CLIENT_SECRET: str = ""
-    GOOGLE_CALENDAR_REDIRECT_URI: str = "http://localhost:8000/leads/calendar/callback"
+    GOOGLE_CALENDAR_REDIRECT_URI: str = ""  # Set to {APP_BASE_URL}/leads/calendar/callback in production
 
     # Email (Resend)
     RESEND_API_KEY: str = ""
 
-    # Upload
+    # Upload / Storage
     MAX_UPLOAD_SIZE_MB: int = 50
+    SUPABASE_STORAGE_BUCKET: str = "knowledge-base"
+
+    @property
+    def calendar_redirect_uri(self) -> str:
+        return self.GOOGLE_CALENDAR_REDIRECT_URI or f"{self.APP_BASE_URL}/leads/calendar/callback"
 
     @property
     def supported_languages_list(self) -> list[str]:

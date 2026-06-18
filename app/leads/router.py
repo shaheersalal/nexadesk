@@ -30,7 +30,7 @@ async def list_leads(
     status_filter: Optional[str] = Query(None, alias="status"),
     source: Optional[str] = None,
     limit: int = Query(50, le=200),
-    offset: int = 0,
+    offset: int = Query(0, ge=0, le=50000),
 ):
     q = _sb().table("leads").select("*, conversations(id, channel, started_at)").eq("company_id", company_id)
     if status_filter:

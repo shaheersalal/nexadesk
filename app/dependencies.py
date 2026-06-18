@@ -8,7 +8,6 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, VectorParams
 from supabase import create_client, Client
 import openai
-import openai
 
 from app.config import Settings, get_settings
 

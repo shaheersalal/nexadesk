@@ -32,7 +32,21 @@ async def ingest_file(
     doc_id = doc_id or str(uuid4())
     sb = get_supabase_admin()
 
-    # 1. Track document in Supabase (status=processing)
+    # 1. Upload raw file to Supabase Storage (best-effort — don't fail ingest if storage is unavailable)
+    storage_path = None
+    try:
+        from app.config import get_settings as _gs
+        bucket = _gs().SUPABASE_STORAGE_BUCKET
+        storage_path = f"{company_id}/{doc_id}/{filename}"
+        sb.storage.from_(bucket).upload(
+            path=storage_path,
+            file=file_bytes,
+            file_options={"content-type": "application/octet-stream", "upsert": "true"},
+        )
+    except Exception:
+        storage_path = None  # Storage not configured or failed — continue with ingest
+
+    # 2. Track document in Supabase (status=processing)
     sb.table("documents").upsert({
         "id": doc_id,
         "company_id": company_id,
@@ -41,25 +55,26 @@ async def ingest_file(
         "property_id": property_id,
         "status": "processing",
         "uploaded_by": uploaded_by,
+        **({"storage_path": storage_path} if storage_path else {}),
     }).execute()
 
     try:
-        # 2. Detect file type
+        # 3. Detect file type
         meta = detect_file_type(file_bytes, filename)
 
-        # 3. Extract text
+        # 4. Extract text
         raw_text = await extract_text(file_bytes, meta, filename)
 
-        # 4. Assess quality
+        # 5. Assess quality
         quality = assess_quality(raw_text)
 
-        # 5. Clean
+        # 6. Clean
         clean_text = await clean(raw_text, quality)
 
-        # 6. Chunk
+        # 7. Chunk
         chunks = smart_chunk(clean_text)
 
-        # 7. Embed + store in Qdrant
+        # 8. Embed + store in Qdrant
         chunk_count = await store_chunks(
             chunks=chunks,
             company_id=company_id,
@@ -75,7 +90,7 @@ async def ingest_file(
             client=_qdrant_client,
         )
 
-        # 8. Update Supabase record
+        # 9. Update Supabase record
         sb.table("documents").update({
             "status": "completed",
             "chunk_count": chunk_count,

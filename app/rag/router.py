@@ -27,8 +27,15 @@ Convert the raw speech into clean, structured knowledge base content:
 
 Output only the cleaned content starting with the title. No preamble or meta-commentary."""
 
-# In-memory job status tracker (fine for demo; use Redis for production)
+# In-memory job status tracker. Entries auto-expire after JOB_TTL_SECONDS.
 _job_status: dict[str, dict] = {}
+JOB_TTL_SECONDS = 3600  # 1 hour
+
+
+async def _expire_job(job_id: str) -> None:
+    """Remove a job entry after TTL to prevent unbounded dict growth."""
+    await asyncio.sleep(JOB_TTL_SECONDS)
+    _job_status.pop(job_id, None)
 
 
 # ── Ingest file upload ────────────────────────────────────────────────────────
@@ -53,6 +60,7 @@ async def ingest_document(
         _run_ingest_file,
         job_id, file_bytes, file.filename, company_id, category, current_user["id"], property_id
     )
+    background_tasks.add_task(asyncio.ensure_future, _expire_job(job_id))
 
     return {"job_id": job_id, "filename": file.filename, "status": "processing"}
 
@@ -99,6 +107,7 @@ async def ingest_text_endpoint(
         _run_ingest_text,
         job_id, body.text, company_id, body.title, body.category, body.property_id,
     )
+    background_tasks.add_task(asyncio.ensure_future, _expire_job(job_id))
 
     return {"job_id": job_id, "filename": filename, "status": "processing"}
 
@@ -203,6 +212,7 @@ async def ingest_voice(
         job_id, audio_bytes, audio.filename or "recording.webm",
         company_id, category, title, current_user["id"],
     )
+    background_tasks.add_task(asyncio.ensure_future, _expire_job(job_id))
 
     return {"job_id": job_id, "filename": label, "status": "transcribing"}
 

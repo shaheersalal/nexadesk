@@ -150,8 +150,6 @@ async def _persist_turn(
             "language": language,
         }).execute()
 
-    # Update lead score
+    # Update lead score atomically via RPC to prevent race conditions
     if lead_id and score_delta != 0:
-        result = sb.table("leads").select("score").eq("id", lead_id).single().execute()
-        current = result.data.get("score", 0) if result.data else 0
-        sb.table("leads").update({"score": max(0, current + score_delta)}).eq("id", lead_id).execute()
+        sb.rpc("increment_lead_score", {"p_lead_id": lead_id, "p_delta": score_delta}).execute()

@@ -28,10 +28,22 @@ settings = get_settings()
 AUDIO_BUFFER_CHUNKS = 8  # ~1 second of 8kHz mulaw
 
 
+def _validate_twilio(request: Request, form: dict) -> bool:
+    """Return True if Twilio signature is valid (or Twilio is not configured)."""
+    if not settings.TELEPHONY_AUTH_TOKEN:
+        return True  # Dev mode — no Twilio configured
+    from app.voice.telephony import validate_twilio_signature
+    sig = request.headers.get("X-Twilio-Signature", "")
+    return validate_twilio_signature(str(request.url), dict(form), sig)
+
+
 @router.post("/inbound")
 async def inbound_call(request: Request):
     """Twilio calls this when someone dials our number. Return TwiML to start stream."""
+    from fastapi import HTTPException
     form = await request.form()
+    if not _validate_twilio(request, form):
+        raise HTTPException(status_code=403, detail="Invalid Twilio signature")
     call_sid = form.get("CallSid", "unknown")
 
     # Resolve company_id from the called phone number
@@ -53,7 +65,10 @@ async def inbound_call(request: Request):
 @router.post("/status")
 async def call_status(request: Request):
     """Twilio status webhook — called when call ends."""
+    from fastapi import HTTPException
     form = await request.form()
+    if not _validate_twilio(request, form):
+        raise HTTPException(status_code=403, detail="Invalid Twilio signature")
     call_sid = form.get("CallSid", "")
     call_status = form.get("CallStatus", "")
     duration = form.get("CallDuration", 0)
