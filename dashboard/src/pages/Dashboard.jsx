@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import { Users, Phone, CalendarDays, TrendingUp, MessageSquare, Wrench, RefreshCw, ShoppingBag } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
