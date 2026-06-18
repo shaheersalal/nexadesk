@@ -11,9 +11,21 @@ from app.config import get_settings
 from app.dependencies import get_supabase_admin
 from app.rag.pipeline import ingest_file, ingest_text
 from app.rag.store import query_with_confidence
+from app.shared.llm import complete
 
 router = APIRouter()
 settings = get_settings()
+
+PURIFY_SYSTEM = """You are processing a voice transcript from a real estate agency owner. They spoke naturally about properties, prices, services, or business info.
+
+Convert the raw speech into clean, structured knowledge base content:
+- Remove filler words (um, uh, you know, like, so, basically, actually, right)
+- Convert spoken numbers: "one point five million" → "1,500,000", "three fifty" → "350,000"
+- Organize into clear paragraphs or bullet points
+- Preserve ALL factual details: prices, addresses, sizes, bedrooms, features, contacts, policies
+- Write a short descriptive title on the very first line (e.g. "Villa Listings — Arabian Ranches")
+
+Output only the cleaned content starting with the title. No preamble or meta-commentary."""
 
 # In-memory job status tracker (fine for demo; use Redis for production)
 _job_status: dict[str, dict] = {}
@@ -165,3 +177,77 @@ async def delete_document(doc_id: str, company_id: CompanyId, current_user: Curr
     sb.table("documents").delete().eq("id", doc_id).eq("company_id", company_id).execute()
     if _qdrant_client:
         await delete_doc_chunks(doc_id, _qdrant_client)
+
+
+# ── Voice ingest ──────────────────────────────────────────────────────────────
+
+@router.post("/ingest/voice")
+async def ingest_voice(
+    background_tasks: BackgroundTasks,
+    current_user: CurrentUser,
+    company_id: CompanyId,
+    audio: UploadFile = File(...),
+    category: str = Form(default="notes"),
+    title: Optional[str] = Form(default=None),
+):
+    audio_bytes = await audio.read()
+    if len(audio_bytes) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Audio too large (max 25MB)")
+
+    job_id = str(uuid4())
+    label = title or "Voice note"
+    _job_status[job_id] = {"status": "transcribing", "filename": label}
+
+    background_tasks.add_task(
+        _run_ingest_voice,
+        job_id, audio_bytes, audio.filename or "recording.webm",
+        company_id, category, title, current_user["id"],
+    )
+
+    return {"job_id": job_id, "filename": label, "status": "transcribing"}
+
+
+async def _run_ingest_voice(job_id, audio_bytes, filename, company_id, category, title, user_id):
+    label = title or "Voice note"
+    try:
+        import openai as _openai
+        s = get_settings()
+        client = _openai.AsyncOpenAI(api_key=s.LLM_API_KEY)
+
+        # Transcribe with Whisper
+        response = await client.audio.transcriptions.create(
+            model="whisper-1",
+            file=(filename, audio_bytes, "audio/webm"),
+            response_format="text",
+        )
+        transcript = str(response).strip()
+
+        if not transcript:
+            _job_status[job_id] = {"status": "failed", "filename": label, "error": "No speech detected"}
+            return
+
+        # Purify: clean up speech into structured KB content
+        purified = await complete(
+            system=PURIFY_SYSTEM,
+            messages=[{"role": "user", "content": transcript}],
+            max_tokens=1500,
+            temperature=0.2,
+        )
+
+        # Use first line as document title if not provided
+        lines = purified.strip().splitlines()
+        doc_title = title or (lines[0].strip("#").strip() if lines else label)
+
+        await ingest_text(
+            text=purified,
+            company_id=company_id,
+            metadata={
+                "source_type": "voice_recording",
+                "doc_category": category,
+                "filename": doc_title,
+            },
+        )
+
+        _job_status[job_id] = {"status": "completed", "filename": doc_title}
+    except Exception as e:
+        _job_status[job_id] = {"status": "failed", "filename": label, "error": str(e)}

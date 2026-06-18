@@ -14,6 +14,7 @@ MIME_TO_TYPE = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
     "application/msword": "doc",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
     "text/csv": "csv",
     "text/plain": "txt",
     "text/html": "html",
@@ -67,6 +68,8 @@ def detect_file_type(file_bytes: bytes, filename: str) -> InputMeta:
             "jpg": "image/jpeg",
             "jpeg": "image/jpeg",
             "png": "image/png",
+            "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "ppt": "application/vnd.ms-powerpoint",
         }
         mime = ext_map.get(ext, "application/octet-stream")
 

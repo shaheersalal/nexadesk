@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir redis==5.2.1
 RUN pip install --no-cache-dir "openai==1.57.4" "httpx>=0.26,<0.29"
 RUN pip install --no-cache-dir "python-jose[cryptography]==3.3.0" "passlib[bcrypt]==1.7.4" aiofiles==24.1.0
 RUN pip install --no-cache-dir tiktoken==0.8.0 langdetect==1.0.9
+RUN pip install --no-cache-dir python-pptx==1.0.2
 
 COPY . .
 

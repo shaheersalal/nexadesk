@@ -28,6 +28,8 @@ async def extract_text(file_bytes: bytes, meta: InputMeta, filename: str) -> str
         return _extract_html(file_bytes)
     if ft == "image":
         return _extract_image_ocr(file_bytes)
+    if ft == "pptx":
+        return _extract_pptx(file_bytes)
 
     # Unknown — try unstructured as catch-all
     return _extract_unstructured(file_bytes, filename)
@@ -108,6 +110,23 @@ def _extract_image_ocr(file_bytes: bytes) -> str:
     from PIL import Image
     img = Image.open(io.BytesIO(file_bytes))
     return pytesseract.image_to_string(img)
+
+
+def _extract_pptx(file_bytes: bytes) -> str:
+    from pptx import Presentation
+    prs = Presentation(io.BytesIO(file_bytes))
+    parts = []
+    for i, slide in enumerate(prs.slides, 1):
+        slide_texts = []
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                for para in shape.text_frame.paragraphs:
+                    text = para.text.strip()
+                    if text:
+                        slide_texts.append(text)
+        if slide_texts:
+            parts.append(f"Slide {i}:\n" + "\n".join(slide_texts))
+    return "\n\n".join(parts)
 
 
 def _extract_unstructured(file_bytes: bytes, filename: str) -> str:

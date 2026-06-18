@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 56" fill="none">
+
+  <!-- Icon mark: white rounded square for dark backgrounds -->
+  <rect x="4" y="4" width="48" height="48" rx="12" fill="rgba(255,255,255,0.12)"/>
+
+  <!-- Phone icon in accent on dark background -->
+  <g transform="translate(4,4) scale(1.5)">
+    <path d="M10 8h3.5l1.5 4-2 1.2c.9 1.8 2.3 3.2 4 4l1.2-2 4 1.5V20c0 1.1-.9 2-2 2C11.9 22 8 16.6 8 10c0-1.1.9-2 2-2z" fill="#e8a87c"/>
+  </g>
+
+  <!-- Wordmark: white + accent -->
+  <text x="66" y="37" font-family="'DM Sans', Inter, -apple-system, system-ui, sans-serif" font-size="26" letter-spacing="-0.5">
+    <tspan font-weight="700" fill="#ffffff">Nexa</tspan><tspan font-weight="400" fill="#e8a87c">Desk</tspan>
+  </text>
+
+  <!-- Tagline -->
+  <text x="67" y="50" font-family="'DM Sans', Inter, -apple-system, system-ui, sans-serif" font-size="9.5" font-weight="500" letter-spacing="1.8" fill="rgba(255,255,255,0.45)">AI RECEPTIONIST</text>
+
+</svg>

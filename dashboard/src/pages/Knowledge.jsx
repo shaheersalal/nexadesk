@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
-import { Upload, FileText, Trash2, CheckCircle, AlertCircle, Loader, CheckCheck } from 'lucide-react'
+import { Upload, FileText, Trash2, CheckCircle, AlertCircle, Loader, CheckCheck, Mic, MicOff, Square } from 'lucide-react'
 
 const CATEGORIES = ['faq', 'listing', 'policy', 'brochure', 'notes', 'other']
-const ACCEPT = '.pdf,.docx,.doc,.txt,.csv,.xlsx,.png,.jpg,.jpeg,.html'
+const ACCEPT = '.pdf,.docx,.doc,.txt,.csv,.xlsx,.pptx,.png,.jpg,.jpeg,.html'
 
 function QualityBadge({ score }) {
   const pct = Math.round(score * 100)
@@ -40,6 +40,14 @@ export default function Knowledge() {
   const [uploadCategory, setUploadCategory] = useState('other')
   const [toast, setToast] = useState(null)
   const fileRef = useRef()
+
+  // Voice recording state
+  const [recording, setRecording] = useState(false)
+  const [transcribing, setTranscribing] = useState(false)
+  const [recordSeconds, setRecordSeconds] = useState(0)
+  const mediaRecorderRef = useRef(null)
+  const chunksRef = useRef([])
+  const timerRef = useRef(null)
 
   function showToast(msg) {
     setToast(msg)
@@ -99,6 +107,57 @@ export default function Knowledge() {
     }
   }
 
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      chunksRef.current = []
+      const mr = new MediaRecorder(stream)
+      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+      mr.onstop = handleRecordingStop
+      mediaRecorderRef.current = mr
+      mr.start(250) // collect chunks every 250ms
+      setRecording(true)
+      setRecordSeconds(0)
+      timerRef.current = setInterval(() => setRecordSeconds(s => s + 1), 1000)
+    } catch {
+      showToast('Microphone access denied')
+    }
+  }
+
+  function stopRecording() {
+    clearInterval(timerRef.current)
+    mediaRecorderRef.current?.stop()
+    mediaRecorderRef.current?.stream.getTracks().forEach(t => t.stop())
+    setRecording(false)
+  }
+
+  async function handleRecordingStop() {
+    setTranscribing(true)
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+    const blob = new Blob(chunksRef.current, { type: mimeType })
+    const ext = mimeType.includes('webm') ? 'webm' : 'mp4'
+    const fd = new FormData()
+    fd.append('audio', blob, `recording.${ext}`)
+    fd.append('category', 'notes')
+    try {
+      const res = await api.ingestVoice(fd)
+      if (res?.job_id) {
+        setProcessingCount(n => n + 1)
+        showToast('Voice note transcribed and indexed')
+        api.getDocuments().then(setDocuments).catch(console.error)
+      }
+    } catch {
+      showToast('Transcription failed — please try again')
+    } finally {
+      setTranscribing(false)
+      setRecordSeconds(0)
+    }
+  }
+
+  function formatTime(s) {
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+  }
+
   async function handleDelete(id) {
     if (!confirm('Remove this document from the knowledge base?')) return
     await api.deleteDocument(id)
@@ -142,8 +201,58 @@ export default function Knowledge() {
         >
           <Upload className="w-8 h-8 text-gray-300 mx-auto mb-3" />
           <p className="text-sm text-gray-500 font-medium">Drag & drop files here, or click to browse</p>
-          <p className="text-xs text-gray-400 mt-1">PDF, DOCX, XLSX, TXT, CSV, PNG, JPG — messy docs welcome</p>
+          <p className="text-xs text-gray-400 mt-1">PDF, DOCX, PPTX, XLSX, CSV, TXT, PNG, JPG — any format welcome</p>
           <input ref={fileRef} type="file" accept={ACCEPT} multiple className="hidden" onChange={(e) => handleFiles([...e.target.files])} />
+        </div>
+      </div>
+
+      {/* Voice recording */}
+      <div className="card mb-6">
+        <h2 className="text-sm font-semibold text-gray-700 mb-1">Record a Voice Note</h2>
+        <p className="text-xs text-gray-400 mb-4">
+          Speak naturally — describe your properties, prices, policies, or anything. Nexa will transcribe, clean, and index it automatically.
+        </p>
+
+        <div className="flex items-center gap-5">
+          {/* Mic button */}
+          {!transcribing && (
+            <button
+              onClick={recording ? stopRecording : startRecording}
+              className={`w-14 h-14 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
+                recording
+                  ? 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-200 animate-pulse'
+                  : 'bg-navy-600 hover:bg-navy-700 shadow-md'
+              }`}
+            >
+              {recording
+                ? <Square className="w-5 h-5 text-white fill-white" />
+                : <Mic className="w-6 h-6 text-white" />
+              }
+            </button>
+          )}
+
+          {/* Status text */}
+          <div className="flex-1">
+            {transcribing ? (
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Loader className="w-4 h-4 animate-spin text-accent" />
+                Transcribing and indexing your voice note…
+              </div>
+            ) : recording ? (
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <span className="text-sm font-semibold text-gray-800">Recording — {formatTime(recordSeconds)}</span>
+                </div>
+                <p className="text-xs text-gray-400">Speak clearly. Press the stop button when done.</p>
+              </div>
+            ) : (
+              <div>
+                <p className="text-sm text-gray-600 font-medium">Press to start recording</p>
+                <p className="text-xs text-gray-400 mt-0.5">Works best in a quiet environment. No time limit.</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
