@@ -14,6 +14,7 @@ import Appointments from './pages/Appointments'
 import Settings from './pages/Settings'
 import AIAgent from './pages/AIAgent'
 import SupportInbox from './pages/SupportInbox'
+import Setup from './pages/Setup'
 
 function ProtectedRoute({ children, session }) {
   if (!session) return <Navigate to="/login" replace />
@@ -43,6 +44,13 @@ export default function App() {
         {/* Public routes */}
         <Route path="/" element={session ? <Navigate to="/dashboard" replace /> : <Landing />} />
         <Route path="/login" element={session ? <Navigate to="/dashboard" replace /> : <Login />} />
+
+        {/* Onboarding (protected, full-screen — no sidebar) */}
+        <Route path="/setup" element={
+          <ProtectedRoute session={session}>
+            <Setup />
+          </ProtectedRoute>
+        } />
 
         {/* Protected app — all under /dashboard */}
         <Route path="/dashboard" element={

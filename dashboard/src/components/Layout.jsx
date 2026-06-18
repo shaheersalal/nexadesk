@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, NavLink, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import {
   LayoutDashboard, Building2, BookOpen,
-  Settings, LogOut, Phone, Menu, X,
+  Settings, LogOut, Phone, Menu, X, Sparkles,
 } from 'lucide-react'
 import AssistantChat from './AssistantChat'
 
@@ -17,6 +17,19 @@ const NAV = [
 export default function Layout({ session }) {
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [onboardingComplete, setOnboardingComplete] = useState(true) // default true to avoid flash
+
+  useEffect(() => {
+    async function checkSetup() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data: userData } = await supabase.from('users').select('company_id').eq('id', user.id).single()
+      if (!userData?.company_id) return
+      const { data } = await supabase.from('companies').select('onboarding_complete').eq('id', userData.company_id).single()
+      setOnboardingComplete(data?.onboarding_complete ?? false)
+    }
+    checkSetup()
+  }, [])
 
   async function handleSignOut() {
     if (!window.confirm('Sign out of NexaDesk?')) return
@@ -102,6 +115,22 @@ export default function Layout({ session }) {
 
       {/* Main content */}
       <main className="flex-1 overflow-y-auto bg-gray-50 pt-14 md:pt-0">
+        {!onboardingComplete && (
+          <div className="bg-amber-50 border-b border-amber-200 px-5 py-3 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              <Sparkles className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <p className="text-sm text-amber-800">
+                Your AI receptionist isn't configured yet — it won't answer calls until you complete setup.
+              </p>
+            </div>
+            <Link
+              to="/setup"
+              className="text-sm font-semibold text-amber-900 hover:text-amber-700 whitespace-nowrap transition-colors"
+            >
+              Complete setup →
+            </Link>
+          </div>
+        )}
         <Outlet />
       </main>
 

@@ -169,4 +169,8 @@ export const api = {
   // Assistant
   assistantChat:   (data) => request('POST', '/assistant/chat', data),
   assistantNotify: (data) => request('POST', '/assistant/notify', data),
+
+  // Onboarding agent (Nexa)
+  onboardingChat:     (data) => request('POST', '/onboarding/chat', data),
+  onboardingComplete: (data) => request('POST', '/onboarding/complete', data),
 }
