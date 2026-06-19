@@ -432,7 +432,7 @@ export default function DemoPreviewModal({ onClose }) {
         <div className="w-full h-full" style={{ minHeight: 400 }}>
           {stage === 'slides' && SlideComp && (
             <div className="relative w-full h-full">
-              {/* Tap zones — left third goes back, right two-thirds goes forward */}
+              {/* Tap zones — left third goes back, right two-thirds goes forward/completes */}
               {!slideComplete && (
                 <>
                   <div className="absolute inset-y-0 left-0 z-10 cursor-pointer select-none"
@@ -441,7 +441,11 @@ export default function DemoPreviewModal({ onClose }) {
                   />
                   <div className="absolute inset-y-0 right-0 z-10 cursor-pointer select-none"
                     style={{ width: '67%' }}
-                    onClick={(e) => { e.stopPropagation(); next() }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (slide === SLIDES.length - 1) setSlideComplete(true)
+                      else next()
+                    }}
                   />
                 </>
               )}

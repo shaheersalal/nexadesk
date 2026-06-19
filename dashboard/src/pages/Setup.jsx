@@ -166,9 +166,10 @@ function SetPasswordScreen({ meta, onDone }) {
 export default function Setup() {
   const navigate = useNavigate()
 
-  // Capture BEFORE Supabase processes and clears the URL hash
-  const [launchHash] = useState(() => window.location.hash)
-  const [launchSearch] = useState(() => window.location.search)
+  // Use hash captured by inline script in index.html — runs before ANY
+  // module JS so Supabase cannot clear it first
+  const [launchHash] = useState(() => window.__launchHash || '')
+  const [launchSearch] = useState(() => window.__launchSearch || '')
 
   // 'loading' | 'set-password' | 'chat' | 'done'
   const [stage, setStage] = useState('loading')

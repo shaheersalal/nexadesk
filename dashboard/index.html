@@ -11,6 +11,8 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Capture URL before ANY module JS (including Supabase) can clear it -->
+    <script>window.__launchHash = location.hash; window.__launchSearch = location.search;</script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
