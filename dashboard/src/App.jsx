@@ -15,6 +15,9 @@ import Settings from './pages/Settings'
 import AIAgent from './pages/AIAgent'
 import SupportInbox from './pages/SupportInbox'
 import Setup from './pages/Setup'
+import AdminPanel from './pages/AdminPanel'
+
+const ADMIN_UID = '7227a933-56ef-45c4-8cbc-1c8331c74b21'
 
 function ProtectedRoute({ children, session }) {
   if (!session) return <Navigate to="/login" replace />
@@ -71,6 +74,13 @@ export default function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="support" element={<SupportInbox />} />
         </Route>
+
+        {/* Admin panel — restricted to Shaheer's UID */}
+        <Route path="/admin" element={
+          session?.user?.id === ADMIN_UID
+            ? <AdminPanel />
+            : <Navigate to="/" replace />
+        } />
 
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />

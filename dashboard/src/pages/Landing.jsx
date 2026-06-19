@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Phone, MessageSquare, TrendingUp, Building2, CheckCircle, ArrowRight, Clock, Globe, Linkedin } from 'lucide-react'
 import LandingDemo from '../components/LandingDemo'
-import BookDemoModal from '../components/BookDemoModal'
+import DemoPreviewModal from '../components/DemoPreviewModal'
 
 const FEATURES = [
   {
@@ -28,9 +28,9 @@ const FEATURES = [
 ]
 
 const STEPS = [
-  { n: '01', title: 'Book a demo call', desc: 'We schedule a 30-minute call to understand your agency, your properties, and how you currently handle inquiries.' },
+  { n: '01', title: 'See it in action', desc: 'Tour the live dashboard, lead pipeline, and AI conversations — no sign-up needed. Then request access in 60 seconds.' },
   { n: '02', title: 'We set everything up', desc: 'We configure your AI phone number, upload your knowledge base, and connect the chat widget to your website — fully handled.' },
-  { n: '03', title: 'You start closing deals', desc: 'Every call and chat is handled, qualified, and logged. You open your dashboard and follow up on the hottest leads.' },
+  { n: '03', title: 'You start closing deals', desc: 'Every call and chat is handled, qualified, and logged. Open your dashboard and follow up on only the hottest leads.' },
 ]
 
 export default function Landing() {
@@ -38,10 +38,10 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-white font-sans">
-      <BookDemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
+      {demoOpen && <DemoPreviewModal onClose={() => setDemoOpen(false)} />}
 
       {/* Nav */}
-      <nav className="fixed top-0 inset-x-0 z-50 bg-white/90 backdrop-blur border-b border-gray-100">
+      <nav className="fixed top-0 inset-x-0 z-40 bg-white/90 backdrop-blur border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
             <div className="w-8 h-8 bg-navy-600 rounded-lg flex items-center justify-center">
@@ -57,7 +57,7 @@ export default function Landing() {
               onClick={() => setDemoOpen(true)}
               className="text-sm bg-navy-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-navy-700 transition-colors"
             >
-              Book a Demo
+              See It in Action
             </button>
           </div>
         </div>
@@ -83,7 +83,7 @@ export default function Landing() {
               onClick={() => setDemoOpen(true)}
               className="inline-flex items-center justify-center gap-2 bg-accent text-white font-semibold px-8 py-3.5 rounded-xl hover:bg-accent-dark transition-colors text-sm"
             >
-              Book a Demo <ArrowRight className="w-4 h-4" />
+              See It in Action <ArrowRight className="w-4 h-4" />
             </button>
             <Link to="/login"
               className="inline-flex items-center justify-center gap-2 bg-white/10 text-white font-medium px-8 py-3.5 rounded-xl hover:bg-white/20 transition-colors text-sm border border-white/20">
@@ -134,7 +134,7 @@ export default function Landing() {
         <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-center gap-8 text-white text-sm font-medium">
           {[
             [Clock, '24/7 AI Coverage'],
-            [Globe, '10+ Languages Supported'],
+            [Globe, 'English, Spanish, French & Arabic'],
             [CheckCircle, 'Full Setup Included'],
           ].map(([Icon, label]) => (
             <div key={label} className="flex items-center gap-2">
@@ -149,7 +149,7 @@ export default function Landing() {
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-14">
             <h2 className="text-3xl font-bold text-gray-900">How it works</h2>
-            <p className="text-gray-500 mt-3">From first call to qualified client — we set it all up for you.</p>
+            <p className="text-gray-500 mt-3">From first look to qualified client — we set it all up for you.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {STEPS.map(s => (
@@ -190,7 +190,7 @@ export default function Landing() {
       <section className="py-20 px-6 bg-gray-50">
         <div className="max-w-2xl mx-auto">
           <div className="text-center mb-10">
-            <h2 className="text-3xl font-bold text-gray-900">See it in action</h2>
+            <h2 className="text-3xl font-bold text-gray-900">See It in Action</h2>
             <p className="text-gray-500 mt-3">This is exactly what your clients experience when they contact your agency.</p>
           </div>
           <LandingDemo />
@@ -227,7 +227,7 @@ export default function Landing() {
               onClick={() => setDemoOpen(true)}
               className="block w-full text-center bg-navy-600 text-white font-semibold py-3 rounded-xl hover:bg-navy-700 transition-colors"
             >
-              Book a Demo
+              See It in Action
             </button>
             <p className="text-xs text-gray-400 mt-3">No contracts · Cancel anytime</p>
           </div>
@@ -238,12 +238,12 @@ export default function Landing() {
       <section className="py-20 px-6 bg-navy-600">
         <div className="max-w-2xl mx-auto text-center">
           <h2 className="text-3xl font-bold text-white mb-4">Ready to stop missing clients?</h2>
-          <p className="text-white/60 mb-8">Book a demo and we'll have your AI receptionist live within 48 hours.</p>
+          <p className="text-white/60 mb-8">Your AI receptionist can be live within 48 hours — we handle the entire setup.</p>
           <button
             onClick={() => setDemoOpen(true)}
             className="inline-flex items-center gap-2 bg-accent text-white font-semibold px-10 py-4 rounded-xl hover:bg-accent-dark transition-colors"
           >
-            Book a Demo <ArrowRight className="w-4 h-4" />
+            See It in Action <ArrowRight className="w-4 h-4" />
           </button>
         </div>
       </section>

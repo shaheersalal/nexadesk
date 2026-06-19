@@ -18,6 +18,7 @@ from app.properties.router import router as properties_router
 from app.public.router import router as public_router
 from app.assistant.router import router as assistant_router
 from app.onboarding.router import router as onboarding_router
+from app.admin.router import router as admin_router
 
 settings = get_settings()
 
@@ -76,6 +77,7 @@ app.include_router(demo_chat_router, prefix="/demo", tags=["demo"])
 app.include_router(rag_router, prefix="/rag", tags=["rag"])
 app.include_router(leads_router, prefix="/leads", tags=["leads"])
 app.include_router(properties_router, prefix="/properties", tags=["properties"])
+app.include_router(admin_router, prefix="/admin", tags=["admin"])
 
 
 @app.get("/health")

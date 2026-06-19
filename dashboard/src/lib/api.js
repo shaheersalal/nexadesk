@@ -184,4 +184,8 @@ export const api = {
   // Onboarding agent (Nexa)
   onboardingChat:     (data) => request('POST', '/onboarding/chat', data),
   onboardingComplete: (data) => request('POST', '/onboarding/complete', data),
+
+  // Admin
+  getAdminRequests: ()     => request('GET', '/admin/requests'),
+  inviteUser:       (data) => request('POST', '/admin/invite', data),
 }

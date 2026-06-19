@@ -140,7 +140,7 @@ export default function LandingDemo() {
         </div>
       </div>
       <p className="text-xs text-gray-400 mt-2.5 text-center italic">
-        Live AI demo — this is exactly what your clients experience.
+        Live AI demo — responds in English, Spanish, French & Arabic.
       </p>
     </div>
   )
