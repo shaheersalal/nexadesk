@@ -244,8 +244,9 @@ function DemoForm({ onSuccess, onBack }) {
   const labelClass = 'block text-xs font-semibold text-white/50 uppercase tracking-wider mb-1.5'
 
   return (
-    <div className="h-full flex flex-col items-center justify-center p-6 md:p-10" style={{ background: 'linear-gradient(135deg, #0f1f3d 0%, #1a1a2e 100%)' }}>
-      <button onClick={onBack} className="self-start flex items-center gap-1.5 text-white/40 hover:text-white/70 text-sm mb-6 transition-colors">
+    <div className="h-full overflow-y-auto flex flex-col items-center p-6 md:p-8 pt-6" style={{ background: 'linear-gradient(135deg, #0f1f3d 0%, #1a1a2e 100%)' }}>
+      <div className="w-full max-w-md flex flex-col flex-1 justify-center min-h-max py-4">
+      <button onClick={onBack} className="self-start flex items-center gap-1.5 text-white/40 hover:text-white/70 text-sm mb-5 transition-colors">
         <ChevronLeft className="w-4 h-4" /> Back to preview
       </button>
       <div className="w-full max-w-md">
@@ -299,6 +300,7 @@ function DemoForm({ onSuccess, onBack }) {
             {loading ? 'Sending…' : <><span>Request Access</span> <ArrowRight className="w-4 h-4" /></>}
           </button>
         </form>
+      </div>
       </div>
     </div>
   )
@@ -430,6 +432,19 @@ export default function DemoPreviewModal({ onClose }) {
         <div className="w-full h-full" style={{ minHeight: 400 }}>
           {stage === 'slides' && SlideComp && (
             <div className="relative w-full h-full">
+              {/* Tap zones — left third goes back, right two-thirds goes forward */}
+              {!slideComplete && (
+                <>
+                  <div className="absolute inset-y-0 left-0 z-10 cursor-pointer select-none"
+                    style={{ width: '33%' }}
+                    onClick={(e) => { e.stopPropagation(); prev() }}
+                  />
+                  <div className="absolute inset-y-0 right-0 z-10 cursor-pointer select-none"
+                    style={{ width: '67%' }}
+                    onClick={(e) => { e.stopPropagation(); next() }}
+                  />
+                </>
+              )}
               <SlideComp />
 
               {/* Last-slide overlay + proceed button */}
