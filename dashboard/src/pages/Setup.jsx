@@ -166,7 +166,11 @@ function SetPasswordScreen({ meta, onDone }) {
 export default function Setup() {
   const navigate = useNavigate()
 
-  // 'loading' | 'set-password' | 'chat' | 'done' | 'redirect'
+  // Capture BEFORE Supabase processes and clears the URL hash
+  const [launchHash] = useState(() => window.location.hash)
+  const [launchSearch] = useState(() => window.location.search)
+
+  // 'loading' | 'set-password' | 'chat' | 'done'
   const [stage, setStage] = useState('loading')
   const [inviteMeta, setInviteMeta] = useState({})
   const [preExtracted, setPreExtracted] = useState({})
@@ -183,33 +187,29 @@ export default function Setup() {
   const messagesRef = useRef(null)
 
   useEffect(() => {
-    // Supabase processes the invite token in the URL hash automatically.
-    // onAuthStateChange fires SIGNED_IN when ready.
+    // Supabase clears the URL hash before firing SIGNED_IN, so we use
+    // launchHash/launchSearch captured synchronously at mount time.
+    const hasInviteToken = launchHash.includes('access_token') || launchSearch.includes('code')
+    const isInviteType   = launchHash.includes('type=invite')  || launchSearch.includes('type=invite')
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'INITIAL_SESSION') {
-        if (session) {
-          // Already authenticated (e.g. came back to /setup while logged in)
+        if (session && !hasInviteToken) {
+          // Already logged in, no invite token → go straight to chat
           beginChat(session.user.user_metadata)
-        } else {
-          // No session yet — check if invite token is in hash
-          const hash = window.location.hash
-          if (hash.includes('access_token')) {
-            // Supabase is processing — wait for SIGNED_IN
-          } else {
-            // No invite token, not logged in → login page
-            navigate('/login', { replace: true })
-          }
+        } else if (!session && !hasInviteToken) {
+          // Not logged in, no token → send to login
+          navigate('/login', { replace: true })
         }
+        // If hasInviteToken: Supabase is still processing it — wait for SIGNED_IN
       } else if (event === 'SIGNED_IN') {
         if (session) {
-          const hash = window.location.hash
-          // If invite type in hash → set-password flow
-          if (hash.includes('type=invite')) {
+          // Any SIGNED_IN on /setup with a token in the launch URL = invite flow
+          if (hasInviteToken) {
             window.history.replaceState(null, '', '/setup')
             setInviteMeta(session.user.user_metadata || {})
             setStage('set-password')
           } else {
-            // Normal sign-in redirect to /setup
             beginChat(session.user.user_metadata)
           }
         }
