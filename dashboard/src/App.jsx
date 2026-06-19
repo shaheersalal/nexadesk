@@ -25,8 +25,11 @@ export default function App() {
   const [session, setSession] = useState(undefined) // undefined = loading
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session))
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => setSession(s))
+    // onAuthStateChange fires INITIAL_SESSION immediately with the correct session
+    // (handles token refresh automatically — no race with getSession()).
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s)
+    })
     return () => subscription.unsubscribe()
   }, [])
 

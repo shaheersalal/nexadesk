@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../lib/api'
+import { api, getCompanyId } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { Users, Phone, CalendarDays, TrendingUp, MessageSquare, Wrench, RefreshCw, ShoppingBag, Radio } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -92,46 +92,48 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    api.getAnalytics().then(setStats).catch(console.error)
-    api.getAppointments().then(setAppointments).catch(console.error)
-    loadRecentLeads().catch(console.error)
+    let realtimeChannel = null
 
-    // Get company_id once, then load feed + subscribe to realtime
-    supabase.from('users')
-      .select('company_id')
-      .then(async ({ data }) => {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
-        const row = data?.find(r => r)
-        // Fetch company_id via auth user
-        const { data: uRow } = await supabase.from('users').select('company_id').eq('id', user.id).single()
-        if (!uRow?.company_id) return
-        companyIdRef.current = uRow.company_id
+    // Fire all initial data loads in parallel
+    Promise.all([
+      api.getAnalytics().then(setStats),
+      api.getAppointments().then(setAppointments),
+      loadRecentLeads(),
+    ]).catch(console.error)
+
+    // Separate async block for realtime — uses its own cleanup via ref
+    ;(async () => {
+      try {
+        const cid = await getCompanyId()
+        if (!cid) return
+        companyIdRef.current = cid
         await loadLiveFeed()
 
-        const channel = supabase
+        realtimeChannel = supabase
           .channel('live_conv_feed')
           .on(
             'postgres_changes',
-            { event: 'INSERT', schema: 'public', table: 'conversations', filter: `company_id=eq.${uRow.company_id}` },
+            { event: 'INSERT', schema: 'public', table: 'conversations', filter: `company_id=eq.${cid}` },
             async (payload) => {
               const c = payload.new
-              // Fetch lead name
               let lead_name = null
               if (c.lead_id) {
                 const { data: lead } = await supabase.from('leads').select('name').eq('id', c.lead_id).single()
                 lead_name = lead?.name || null
               }
               setLiveFeed(prev => [{ ...c, lead_name, fresh: true }, ...prev.slice(0, 7)])
-              // Also refresh the recent AI-handled requests list
               loadRecentLeads().catch(console.error)
             }
           )
           .subscribe()
+      } catch (e) {
+        console.error('Live feed setup error:', e)
+      }
+    })()
 
-        return () => supabase.removeChannel(channel)
-      })
-      .catch(console.error)
+    return () => {
+      if (realtimeChannel) supabase.removeChannel(realtimeChannel)
+    }
   }, [])
 
   const statusChartData = stats

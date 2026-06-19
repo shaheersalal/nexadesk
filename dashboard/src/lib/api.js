@@ -10,9 +10,16 @@ async function authHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-// ── Company ID (cached for the session) ──────────────────────────────────────
+// ── Company ID (cached per auth session) ─────────────────────────────────────
 
 let _companyId = null
+
+// Reset cache on logout so a second user logging in on the same tab
+// never inherits the previous user's company_id.
+supabase.auth.onAuthStateChange((event) => {
+  if (event === 'SIGNED_OUT') _companyId = null
+})
+
 async function getCompanyId() {
   if (_companyId) return _companyId
   const { data: { user } } = await supabase.auth.getUser()
@@ -21,6 +28,9 @@ async function getCompanyId() {
   _companyId = data?.company_id
   return _companyId
 }
+
+// Exported so Dashboard can reuse without duplicating the fetch logic
+export { getCompanyId }
 
 // ── HF API request (writes / business logic only) ────────────────────────────
 

@@ -45,7 +45,7 @@ async def capture_lead_fields(
     sb = get_supabase_admin()
     try:
         if lead_id:
-            sb.table("leads").update(updates).eq("id", lead_id).execute()
+            sb.table("leads").update(updates).eq("id", lead_id).eq("company_id", company_id).execute()
         else:
             updates["company_id"] = company_id
             updates["source"] = "chat"
@@ -58,13 +58,13 @@ async def capture_lead_fields(
     return lead_id
 
 
-async def flag_escalation(lead_id: Optional[str]) -> None:
+async def flag_escalation(lead_id: Optional[str], company_id: str) -> None:
     """Mark a lead as needing human follow-up."""
     if not lead_id:
         return
     try:
         sb = get_supabase_admin()
-        sb.table("leads").update({"needs_human": True, "status": "contacted"}).eq("id", lead_id).execute()
+        sb.table("leads").update({"needs_human": True, "status": "contacted"}).eq("id", lead_id).eq("company_id", company_id).execute()
     except Exception:
         pass
 

@@ -200,7 +200,7 @@ async def run(
         )
 
     if intent == "escalate":
-        await flag_escalation(new_lead_id)
+        await flag_escalation(new_lead_id, company_id)
 
     reply = translate_from_english(reply_english, detected_lang)
 
