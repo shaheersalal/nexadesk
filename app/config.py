@@ -67,8 +67,8 @@ class Settings(BaseSettings):
     JINA_API_KEY: str = ""
     JINA_RERANKER_MODEL: str = "jina-reranker-v2-base-multilingual"
 
-    # Admin one-click invite token
-    ADMIN_INVITE_SECRET: str = ""
+    # Admin one-click invite token (HF secret name: ADMINTOKEN)
+    ADMINTOKEN: str = ""
 
     @property
     def calendar_redirect_uri(self) -> str:

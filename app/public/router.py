@@ -125,7 +125,7 @@ nexadesk.site"""
     <pre style="font-family:inherit;font-size:13px;line-height:1.7;color:#1e293b;white-space:pre-wrap;margin:0">{payoneer_template}</pre>
   </div>
 
-  <a href="https://shaheersalal-nexadesk.hf.space/admin/invite-quick?request_id={sb_id}&email={body.email}&name={body.name}&token={settings.ADMIN_INVITE_SECRET}"
+  <a href="https://shaheersalal-nexadesk.hf.space/admin/invite-quick?request_id={sb_id}&email={body.email}&name={body.name}&token={settings.ADMINTOKEN}"
      style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:14px">
     Activate Account →
   </a>

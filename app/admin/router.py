@@ -44,9 +44,9 @@ h2{{color:#1e3a5f;margin-bottom:8px}} p{{color:#64748b;font-size:15px}}
 @router.get("/invite-quick", include_in_schema=False)
 async def invite_quick(request_id: str, email: str, name: str, token: str):
     settings = get_settings()
-    if not settings.ADMIN_INVITE_SECRET:
-        return _html("Not configured", "<p>ADMIN_INVITE_SECRET is not set on the server.</p>", "#f87171")
-    if not hmac.compare_digest(token, settings.ADMIN_INVITE_SECRET):
+    if not settings.ADMINTOKEN:
+        return _html("Not configured", "<p>ADMINTOKEN is not set on the server.</p>", "#f87171")
+    if not hmac.compare_digest(token, settings.ADMINTOKEN):
         return _html("Invalid token", "<p>This link is invalid or has already been used.</p>", "#f87171")
 
     sb = get_supabase_admin()
