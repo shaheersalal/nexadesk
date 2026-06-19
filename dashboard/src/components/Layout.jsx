@@ -3,8 +3,10 @@ import { Outlet, NavLink, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import {
   LayoutDashboard, Building2, BookOpen,
-  Settings, LogOut, Phone, Menu, X, Sparkles,
+  Settings, LogOut, Phone, Menu, X, Sparkles, ShieldCheck,
 } from 'lucide-react'
+
+const ADMIN_UID = '7227a933-56ef-45c4-8cbc-1c8331c74b21'
 import AssistantChat from './AssistantChat'
 
 const NAV = [
@@ -95,6 +97,19 @@ export default function Layout({ session }) {
             </NavLink>
           ))}
         </nav>
+
+        {session?.user?.id === ADMIN_UID && (
+          <div className="px-3 pb-2">
+            <Link
+              to="/admin"
+              onClick={closeSidebar}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-amber-400 hover:bg-navy-700 hover:text-amber-300 transition-colors"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              Admin Panel
+            </Link>
+          </div>
+        )}
 
         <div className="px-3 pb-4 border-t border-navy-700 pt-3 space-y-1">
           <div className="flex items-center gap-3 px-3 pt-2 pb-1">

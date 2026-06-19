@@ -123,9 +123,9 @@ nexadesk.site"""
     <pre style="font-family:inherit;font-size:13px;line-height:1.7;color:#1e293b;white-space:pre-wrap;margin:0">{payoneer_template}</pre>
   </div>
 
-  <a href="https://nexadesk.site/admin"
+  <a href="https://nexadesk.site/login"
      style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:14px">
-    Activate Account →
+    Open Admin Panel →
   </a>
   <p style="font-size:12px;color:#94a3b8;margin-top:12px">
     Click above to open the admin panel and send the invite once payment is confirmed.
