@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     JINA_API_KEY: str = ""
     JINA_RERANKER_MODEL: str = "jina-reranker-v2-base-multilingual"
 
+    # Admin one-click invite token
+    ADMIN_INVITE_SECRET: str = ""
+
     @property
     def calendar_redirect_uri(self) -> str:
         return self.GOOGLE_CALENDAR_REDIRECT_URI or f"{self.APP_BASE_URL}/leads/calendar/callback"

@@ -49,9 +49,10 @@ class DemoRequest(BaseModel):
 async def book_demo(body: DemoRequest):
     settings = get_settings()
 
+    sb_id = ""
     try:
         sb = get_supabase_admin()
-        sb.table("demo_requests").insert({
+        result = sb.table("demo_requests").insert({
             "name": body.name,
             "email": body.email,
             "agency_name": body.agency,
@@ -60,6 +61,7 @@ async def book_demo(body: DemoRequest):
             "monthly_calls": body.monthly_calls,
             "status": "pending",
         }).execute()
+        sb_id = (result.data or [{}])[0].get("id", "")
     except Exception:
         pass
 
@@ -123,12 +125,12 @@ nexadesk.site"""
     <pre style="font-family:inherit;font-size:13px;line-height:1.7;color:#1e293b;white-space:pre-wrap;margin:0">{payoneer_template}</pre>
   </div>
 
-  <a href="https://nexadesk.site/login"
+  <a href="https://shaheersalal-nexadesk.hf.space/admin/invite-quick?request_id={sb_id}&email={body.email}&name={body.name}&token={settings.ADMIN_INVITE_SECRET}"
      style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:14px">
-    Open Admin Panel →
+    Activate Account →
   </a>
   <p style="font-size:12px;color:#94a3b8;margin-top:12px">
-    Click above to open the admin panel and send the invite once payment is confirmed.
+    Click once payment is confirmed — sends the invite email directly, no login needed.
   </p>
 </div>""",
                 },

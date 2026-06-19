@@ -1,6 +1,9 @@
+import hmac
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from app.config import get_settings
 from app.dependencies import get_supabase_admin, get_current_user
 
 ADMIN_UID = "7227a933-56ef-45c4-8cbc-1c8331c74b21"
@@ -25,6 +28,41 @@ class InviteBody(BaseModel):
     request_id: str
     email: str
     name: str
+
+
+def _html(title, body_html, color="#34d399"):
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>{title}</title>
+<style>body{{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0f1f3d}}
+.box{{background:#fff;border-radius:16px;padding:40px 48px;max-width:420px;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.3)}}
+h2{{color:#1e3a5f;margin-bottom:8px}} p{{color:#64748b;font-size:15px}}
+.dot{{width:48px;height:48px;border-radius:50%;background:{color};display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:24px}}</style>
+</head><body><div class="box"><div class="dot">{'✓' if color=='#34d399' else '✗'}</div>
+<h2>{title}</h2>{body_html}</div></body></html>""")
+
+
+@router.get("/invite-quick", include_in_schema=False)
+async def invite_quick(request_id: str, email: str, name: str, token: str):
+    settings = get_settings()
+    if not settings.ADMIN_INVITE_SECRET:
+        return _html("Not configured", "<p>ADMIN_INVITE_SECRET is not set on the server.</p>", "#f87171")
+    if not hmac.compare_digest(token, settings.ADMIN_INVITE_SECRET):
+        return _html("Invalid token", "<p>This link is invalid or has already been used.</p>", "#f87171")
+
+    sb = get_supabase_admin()
+    try:
+        sb.auth.admin.invite_user_by_email(
+            email,
+            options={"data": {"full_name": name}, "redirect_to": "https://nexadesk.site/setup"},
+        )
+    except Exception as e:
+        err = str(e)
+        if "already been invited" in err.lower() or "already registered" in err.lower():
+            return _html("Already invited", f"<p>{name} ({email}) was already sent an invite.</p>", "#fbbf24")
+        return _html("Error", f"<p>{err}</p>", "#f87171")
+
+    sb.table("demo_requests").update({"status": "invited"}).eq("id", request_id).execute()
+    return _html("Invite sent!", f"<p>An account activation email has been sent to <strong>{email}</strong>.<br><br>They'll set their password and land on the onboarding page.</p>")
 
 
 @router.post("/invite")
