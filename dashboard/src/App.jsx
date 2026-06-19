@@ -51,12 +51,8 @@ export default function App() {
         <Route path="/" element={session ? <Navigate to="/dashboard" replace /> : <Landing />} />
         <Route path="/login" element={session ? <Navigate to="/dashboard" replace /> : <Login />} />
 
-        {/* Onboarding (protected, full-screen — no sidebar) */}
-        <Route path="/setup" element={
-          <ProtectedRoute session={session}>
-            <Setup />
-          </ProtectedRoute>
-        } />
+        {/* Onboarding — handles its own auth (invite token in URL hash) */}
+        <Route path="/setup" element={<Setup />} />
 
         {/* Protected app — all under /dashboard */}
         <Route path="/dashboard" element={

@@ -52,9 +52,19 @@ async def invite_quick(request_id: str, email: str, name: str, token: str):
 
     sb = get_supabase_admin()
     try:
+        req_row = sb.table("demo_requests").select("*").eq("id", request_id).maybe_single().execute()
+        meta = {"full_name": name}
+        if req_row.data:
+            r = req_row.data
+            meta.update({
+                "agency_name":   r.get("agency_name", ""),
+                "phone":         r.get("phone", ""),
+                "country":       r.get("country", ""),
+                "monthly_calls": r.get("monthly_calls", ""),
+            })
         sb.auth.admin.invite_user_by_email(
             email,
-            options={"data": {"full_name": name}, "redirect_to": "https://nexadesk.site/setup"},
+            options={"data": meta, "redirect_to": "https://nexadesk.site/setup"},
         )
     except Exception as e:
         err = str(e)
