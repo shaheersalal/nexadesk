@@ -264,7 +264,7 @@ export default function Setup() {
 
       if (res.complete) {
         setComplete(true)
-        setReceptionist(res.extracted.receptionist_name || 'Aria')
+        setReceptionist(res.extracted.receptionist_name || 'Nexa')
         setAgencyName(res.extracted.agency_name || 'your agency')
         setSaving(true)
         await api.onboardingComplete({ extracted: res.extracted })

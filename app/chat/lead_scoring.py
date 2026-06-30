@@ -5,6 +5,8 @@ Accumulated score is stored on the lead record in Supabase.
 """
 from dataclasses import dataclass
 
+from app.shared.patterns import PHONE_REGEX, EMAIL_REGEX
+
 
 @dataclass
 class ScoringEvent:
@@ -62,11 +64,10 @@ def score_message(user_message: str, assistant_message: str) -> list[ScoringEven
                 ))
                 break  # one event per rule per turn
 
-    # Contact info detection (simple regex)
-    import re
-    if re.search(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b", user_message):
+    # Contact info detection
+    if PHONE_REGEX.search(user_message):
         events.append(ScoringEvent(rule="shared_phone", delta=SCORING_RULES["shared_phone"], triggered_by="phone number"))
-    if re.search(r"\b[\w.+-]+@[\w-]+\.\w{2,}\b", user_message):
+    if EMAIL_REGEX.search(user_message):
         events.append(ScoringEvent(rule="shared_email", delta=SCORING_RULES["shared_email"], triggered_by="email address"))
     if _has_name(user_message):
         events.append(ScoringEvent(rule="shared_name", delta=SCORING_RULES["shared_name"], triggered_by="name"))

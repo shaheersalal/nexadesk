@@ -2,23 +2,9 @@ import { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { api, getCompanyId } from '../lib/api'
 import { supabase } from '../lib/supabase'
-import { Users, Phone, CalendarDays, TrendingUp, MessageSquare, Wrench, RefreshCw, ShoppingBag, Radio } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-
-function StatCard({ icon: Icon, label, value, sub, color = 'accent' }) {
-  return (
-    <div className="card flex items-start gap-4">
-      <div className={`p-2.5 rounded-xl ${color === 'accent' ? 'bg-accent/10' : 'bg-blue-50'}`}>
-        <Icon className={`w-5 h-5 ${color === 'accent' ? 'text-accent' : 'text-blue-500'}`} />
-      </div>
-      <div>
-        <p className="text-2xl font-semibold text-gray-900">{value}</p>
-        <p className="text-sm text-gray-500">{label}</p>
-        {sub && <p className="text-xs text-green-600 mt-0.5">{sub}</p>}
-      </div>
-    </div>
-  )
-}
+import { Phone, CalendarDays, MessageSquare, Wrench, RefreshCw, ShoppingBag, Radio, Flame, CheckCircle2 } from 'lucide-react'
+import ScoreBadge from '../components/ScoreBadge'
+import EmptyState from '../components/EmptyState'
 
 function reqIcon(notes) {
   if (!notes) return { icon: MessageSquare, color: 'text-gray-400 bg-gray-50', label: 'Inquiry' }
@@ -31,7 +17,14 @@ function timeAgo(iso) {
   const diff = Math.floor((Date.now() - new Date(iso)) / 1000)
   if (diff < 60) return `${diff}s ago`
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  return `${Math.floor(diff / 3600)}h ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  return `${Math.floor(diff / 86400)}d ago`
+}
+
+function isToday(iso) {
+  const d = new Date(iso)
+  const now = new Date()
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
 }
 
 function LiveFeedItem({ item }) {
@@ -61,16 +54,18 @@ function LiveFeedItem({ item }) {
 }
 
 export default function Dashboard() {
-  const [stats, setStats] = useState(null)
   const [appointments, setAppointments] = useState([])
   const [recentLeads, setRecentLeads] = useState([])
+  const [hotLeads, setHotLeads] = useState([])
   const [liveFeed, setLiveFeed] = useState([])
+  const [last24h, setLast24h] = useState([])
   const companyIdRef = useRef(null)
 
-  async function loadRecentLeads() {
-    const data = await api.getLeads({ limit: 20 })
+  async function loadLeads() {
+    const data = await api.getLeads({ limit: 50 })
     const arr = Array.isArray(data) ? data : (data.leads || data.items || [])
     setRecentLeads(arr.filter(l => l.conversations?.length > 0).slice(0, 6))
+    setHotLeads(arr.filter(l => (l.score || 0) >= 70 && l.status === 'new').slice(0, 5))
   }
 
   async function loadLiveFeed() {
@@ -89,19 +84,25 @@ export default function Dashboard() {
         fresh: false,
       })))
     }
+
+    const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
+    const { data: recent } = await supabase
+      .from('conversations')
+      .select('id, channel, started_at, lead_id, leads(name)')
+      .eq('company_id', cid)
+      .gte('started_at', since)
+      .order('started_at', { ascending: false })
+    if (recent) setLast24h(recent.map(c => ({ ...c, lead_name: c.leads?.name || null })))
   }
 
   useEffect(() => {
     let realtimeChannel = null
 
-    // Fire all initial data loads in parallel
     Promise.all([
-      api.getAnalytics().then(setStats),
       api.getAppointments().then(setAppointments),
-      loadRecentLeads(),
+      loadLeads(),
     ]).catch(console.error)
 
-    // Separate async block for realtime — uses its own cleanup via ref
     ;(async () => {
       try {
         const cid = await getCompanyId()
@@ -122,7 +123,8 @@ export default function Dashboard() {
                 lead_name = lead?.name || null
               }
               setLiveFeed(prev => [{ ...c, lead_name, fresh: true }, ...prev.slice(0, 7)])
-              loadRecentLeads().catch(console.error)
+              setLast24h(prev => [{ ...c, lead_name }, ...prev])
+              loadLeads().catch(console.error)
             }
           )
           .subscribe()
@@ -136,55 +138,116 @@ export default function Dashboard() {
     }
   }, [])
 
-  const statusChartData = stats
-    ? Object.entries(stats.leads_by_status).map(([name, count]) => ({ name, count }))
-    : []
-
-  const sourceChartData = stats
-    ? Object.entries(stats.leads_by_source).map(([name, count]) => ({ name, count }))
-    : []
+  const todaysAppointments = appointments.filter(a => isToday(a.datetime))
+  const callsToday = last24h.filter(c => c.channel === 'voice').length
+  const chatsToday = last24h.filter(c => c.channel !== 'voice').length
 
   return (
     <div className="p-4 md:p-8">
       <div className="mb-6 md:mb-8">
         <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
-        <p className="text-gray-500 text-sm mt-1">Your AI receptionist at a glance</p>
+        <p className="text-gray-500 text-sm mt-1">What needs your attention today</p>
       </div>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard icon={Users}        label="Total leads"         value={stats?.total_leads ?? '—'}             sub={`+${stats?.leads_today ?? 0} today`} />
-        <StatCard icon={TrendingUp}   label="Avg lead score"      value={stats?.avg_score ?? '—'}               color="blue" />
-        <StatCard icon={CalendarDays} label="Upcoming appts"      value={stats?.appointments_upcoming ?? '—'}   color="blue" />
-        <StatCard icon={MessageSquare} label="Total conversations" value={stats?.total_conversations ?? '—'}    />
-      </div>
-
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      {/* Today's Actions */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        {/* Hot leads to contact */}
         <div className="card">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">Leads by Status</h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={statusChartData} barSize={24}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Bar dataKey="count" fill="#e8a87c" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <h2 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+            <Flame className="w-4 h-4 text-red-500" />
+            Hot Leads to Contact
+          </h2>
+          {hotLeads.length === 0 ? (
+            <EmptyState
+              icon={CheckCircle2}
+              title="All caught up"
+              hint="No hot leads waiting on a first contact right now."
+            />
+          ) : (
+            <div className="space-y-1">
+              {hotLeads.map(lead => (
+                <Link
+                  key={lead.id}
+                  to={`/dashboard/leads/${lead.id}`}
+                  className="flex items-center justify-between gap-2 py-2 border-b border-gray-50 last:border-0 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors group"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate group-hover:text-accent">{lead.name || 'Unknown'}</p>
+                    <p className="text-xs text-gray-400">{timeAgo(lead.created_at)}</p>
+                  </div>
+                  <ScoreBadge score={lead.score} />
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
 
+        {/* Last 24h activity */}
         <div className="card">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">Leads by Source</h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={sourceChartData} barSize={24}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Bar dataKey="count" fill="#1a1a2e" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <h2 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+            <Radio className="w-4 h-4 text-green-500" />
+            Last 24h Activity
+          </h2>
+          <div className="flex items-center gap-4 mb-3">
+            <div className="flex items-center gap-2 text-sm">
+              <Phone className="w-3.5 h-3.5 text-green-600" />
+              <span className="font-semibold text-gray-900">{callsToday}</span>
+              <span className="text-gray-400">calls</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <MessageSquare className="w-3.5 h-3.5 text-blue-500" />
+              <span className="font-semibold text-gray-900">{chatsToday}</span>
+              <span className="text-gray-400">chats</span>
+            </div>
+          </div>
+          {last24h.length === 0 ? (
+            <EmptyState
+              icon={Radio}
+              title="No activity yet"
+              hint="Calls and chats from the last 24 hours will show up here."
+            />
+          ) : (
+            <div className="space-y-1">
+              {last24h.slice(0, 5).map(item => (
+                <LiveFeedItem key={item.id} item={item} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Today's appointments */}
+        <div className="card">
+          <h2 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+            <CalendarDays className="w-4 h-4 text-accent" />
+            Today's Appointments
+          </h2>
+          {todaysAppointments.length === 0 ? (
+            <EmptyState
+              icon={CalendarDays}
+              title="Nothing scheduled today"
+              hint="Appointments booked for today will show up here."
+              actionLabel="View all appointments"
+              actionTo="/dashboard/appointments"
+            />
+          ) : (
+            <div className="space-y-1">
+              {todaysAppointments.map(appt => (
+                <Link
+                  key={appt.id}
+                  to={appt.lead_id ? `/dashboard/leads/${appt.lead_id}` : '/dashboard/appointments'}
+                  className="flex items-center justify-between gap-2 py-2 border-b border-gray-50 last:border-0 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors group"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate group-hover:text-accent">{appt.leads?.name || 'Unknown lead'}</p>
+                    <p className="text-xs text-gray-400">{appt.properties?.title || appt.type}</p>
+                  </div>
+                  <p className="text-xs font-medium text-gray-700 flex-shrink-0">
+                    {new Date(appt.datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -230,7 +293,11 @@ export default function Dashboard() {
           <span className="text-xs text-gray-400">last 8 sessions</span>
         </div>
         {liveFeed.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-6">No recent conversations</p>
+          <EmptyState
+            icon={Radio}
+            title="No recent conversations"
+            hint="Calls and chats handled by your AI receptionist will appear here in real time."
+          />
         ) : (
           <div>
             {liveFeed.map((item) => (
@@ -246,7 +313,13 @@ export default function Dashboard() {
           <h2 className="text-sm font-semibold text-gray-700">Upcoming Appointments</h2>
         </div>
         {appointments.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-8">No upcoming appointments</p>
+          <EmptyState
+            icon={CalendarDays}
+            title="No upcoming appointments"
+            hint="Appointments your AI books with clients will show up here."
+            actionLabel="View all appointments"
+            actionTo="/dashboard/appointments"
+          />
         ) : (
           <div className="space-y-3">
             {appointments.slice(0, 5).map((appt) => (

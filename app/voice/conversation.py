@@ -9,6 +9,7 @@ from app.rag.store import query_with_confidence
 from app.chat.lead_scoring import score_message, compute_total_delta
 from app.voice.call_session import CallSession
 from app.dependencies import get_supabase_admin
+from app.shared.patterns import PHONE_REGEX, EMAIL_REGEX
 
 settings = get_settings()
 
@@ -96,11 +97,11 @@ def _update_lead_data(session: CallSession, events, user_text: str) -> None:
     import re
     for event in events:
         if event.rule == "shared_phone":
-            match = re.search(r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b", user_text)
+            match = PHONE_REGEX.search(user_text)
             if match:
                 session.lead_data["phone"] = match.group()
         if event.rule == "shared_email":
-            match = re.search(r"\b[\w.+-]+@[\w-]+\.\w{2,}\b", user_text)
+            match = EMAIL_REGEX.search(user_text)
             if match:
                 session.lead_data["email"] = match.group()
         if event.rule == "shared_name":

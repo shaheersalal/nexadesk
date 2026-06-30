@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -9,6 +10,8 @@ import os
 from app.config import get_settings
 from app.dependencies import get_qdrant, ensure_collection
 
+logger = logging.getLogger("nexadesk")
+
 from app.voice.router import router as voice_router
 from app.chat.router import router as chat_router
 from app.chat.demo_router import router as demo_chat_router
@@ -19,6 +22,8 @@ from app.public.router import router as public_router
 from app.assistant.router import router as assistant_router
 from app.onboarding.router import router as onboarding_router
 from app.admin.router import router as admin_router
+from app.companies.router import router as companies_router
+from app.pricing.router import router as pricing_router
 
 settings = get_settings()
 
@@ -34,6 +39,25 @@ async def lifespan(app: FastAPI):
     missing = [k for k, v in required.items() if not v]
     if missing:
         raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
+
+    # Twilio signature validation is skipped entirely when TELEPHONY_AUTH_TOKEN is blank
+    # (see app/voice/router.py _validate_twilio) — fine for local dev, a silent webhook
+    # spoofing risk if ever blank in production.
+    if settings.APP_ENV == "production" and not settings.TELEPHONY_AUTH_TOKEN:
+        logger.error(
+            "TELEPHONY_AUTH_TOKEN is blank in production — Twilio webhook signature "
+            "validation is DISABLED, voice webhooks accept unsigned requests from anyone."
+        )
+
+    # Refuse to boot in production with the placeholder secret key — it's
+    # public in this repo's source, so leaving it set means anyone can forge
+    # signed tokens (sessions, etc.) that the app will trust.
+    if settings.APP_ENV == "production" and settings.APP_SECRET_KEY == "change-me-in-production":
+        raise RuntimeError(
+            "APP_SECRET_KEY is still the default placeholder value in production. "
+            "Generate a real secret (e.g. `openssl rand -hex 32`) and set it in your "
+            "production environment before starting the app."
+        )
 
     # Startup: initialise Qdrant collection
     client = await get_qdrant(settings)
@@ -78,6 +102,8 @@ app.include_router(rag_router, prefix="/rag", tags=["rag"])
 app.include_router(leads_router, prefix="/leads", tags=["leads"])
 app.include_router(properties_router, prefix="/properties", tags=["properties"])
 app.include_router(admin_router, prefix="/admin", tags=["admin"])
+app.include_router(companies_router, prefix="/companies", tags=["companies"])
+app.include_router(pricing_router, prefix="/pricing", tags=["pricing"])
 
 
 @app.get("/health")

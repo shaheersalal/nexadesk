@@ -22,7 +22,7 @@ Collect this information in this order, asking exactly ONE question per message 
 3. Areas or neighborhoods they specialize in (get at least 2-3 specific names)
 4. Price ranges — if they do sales, ask sale price range; if rentals, ask rental price range (ask separately)
 5. Working hours (days and times)
-6. What to name their AI receptionist (suggest "Aria" as a popular choice)
+6. What to name their AI receptionist (suggest "Nexa" as a popular choice)
 7. Preferred tone: Professional, Friendly, or Luxury
 8. Languages the receptionist should handle (mention they can add Arabic, Urdu, French, etc.)
 9. A human agent's name and phone number for when calls need to be transferred
@@ -80,7 +80,7 @@ def _is_complete(extracted: dict) -> bool:
 
 
 def _generate_system_prompt(data: dict) -> str:
-    name = data.get("receptionist_name", "Aria")
+    name = data.get("receptionist_name", "Nexa")
     agency = data.get("agency_name", "the agency")
     city = data.get("city", "")
     services = data.get("services", ["sales", "rentals"])
@@ -200,7 +200,7 @@ async def onboarding_complete(
 ):
     sb = get_supabase_admin()
     system_prompt = _generate_system_prompt(body.extracted)
-    receptionist_name = body.extracted.get("receptionist_name", "Aria")
+    receptionist_name = body.extracted.get("receptionist_name", "Nexa")
 
     update_payload = {
         "receptionist_name": receptionist_name,

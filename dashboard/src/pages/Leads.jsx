@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import { Plus, Phone, MessageSquare, Search } from 'lucide-react'
+import ScoreBadge from '../components/ScoreBadge'
 
 const COLUMNS = [
   { key: 'new',         label: 'New',         color: 'bg-gray-100 text-gray-700' },
@@ -29,15 +30,7 @@ function LeadCard({ lead, onStatusChange }) {
       {lead.email && <p className="text-xs text-gray-400 mb-2 truncate">{lead.email}</p>}
 
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1">
-          <div className="w-16 h-1.5 rounded-full bg-gray-100 overflow-hidden">
-            <div
-              className="h-full bg-accent rounded-full"
-              style={{ width: `${Math.min(100, lead.score)}%` }}
-            />
-          </div>
-          <span className="text-xs text-gray-400">{lead.score}</span>
-        </div>
+        <ScoreBadge score={lead.score} />
         <select
           value={lead.status}
           onChange={(e) => onStatusChange(lead.id, e.target.value)}

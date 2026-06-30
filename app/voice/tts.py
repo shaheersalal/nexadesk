@@ -2,11 +2,14 @@
 ElevenLabs TTS client — streaming audio synthesis.
 Returns audio bytes (MP3) that get sent back to Twilio.
 """
+import logging
+
 import httpx
 
 from app.config import get_settings
 
 settings = get_settings()
+logger = logging.getLogger("nexadesk.voice")
 
 ELEVENLABS_BASE = "https://api.elevenlabs.io/v1"
 
@@ -35,6 +38,7 @@ async def synthesize(text: str, voice_id: str | None = None) -> bytes:
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.post(url, json=payload, headers=headers)
         if response.status_code != 200:
+            logger.error(f"ElevenLabs TTS request failed: {response.status_code} {response.text}")
             return b""
         return response.content
 
@@ -57,5 +61,6 @@ async def synthesize_to_mulaw(text: str) -> bytes:
             timeout=10,
         )
         return result.stdout
-    except Exception:
+    except Exception as e:
+        logger.error(f"TTS mulaw conversion failed: {e}")
         return b""

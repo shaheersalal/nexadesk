@@ -8,14 +8,19 @@ from app.auth.middleware import CurrentUser
 from app.chat.engine import chat_turn
 from app.dependencies import get_supabase_admin
 from app.shared.prompts import CHAT_GREETING
+from app.shared import session_store
 from app.config import get_settings
 
 router = APIRouter()
 settings = get_settings()
 
-# In-memory session history cache — warm path only.
-# On cache miss (restart, new pod) we reload from Supabase conversations table.
-_sessions: dict[str, list[dict]] = {}
+# Session history cache lives in Redis (shared across all uvicorn workers).
+# On cache miss (TTL expiry, restart) we reload from Supabase conversations table.
+SESSION_TTL_SECONDS = 1800  # 30 min of inactivity
+
+
+def _session_key(session_id: str) -> str:
+    return f"chat:session:{session_id}"
 
 
 class ChatMessage(BaseModel):
@@ -37,11 +42,10 @@ class ChatResponse(BaseModel):
 async def send_message(body: ChatMessage):
     session_id = body.session_id or str(uuid4())
 
-    # Reload history from Supabase if not in cache (e.g. after restart)
-    if session_id not in _sessions:
-        _sessions[session_id] = await _load_history_from_db(session_id)
-
-    history = _sessions[session_id]
+    # Reload history from Supabase if not in cache (e.g. TTL expiry, restart)
+    history = await session_store.get_json(_session_key(session_id))
+    if history is None:
+        history = await _load_history_from_db(session_id)
 
     result = await chat_turn(
         user_message=body.message,
@@ -51,10 +55,11 @@ async def send_message(body: ChatMessage):
         lead_id=body.lead_id,
     )
 
-    # Update in-memory history
+    # Update cached history
     history.append({"role": "user", "content": body.message})
     history.append({"role": "assistant", "content": result["reply"]})
-    _sessions[session_id] = history[-20:]  # keep last 20 turns
+    history = history[-20:]  # keep last 20 turns
+    await session_store.set_json(_session_key(session_id), history, SESSION_TTL_SECONDS)
 
     # Auto-create lead if not yet linked and engagement crossed threshold
     lead_id = body.lead_id

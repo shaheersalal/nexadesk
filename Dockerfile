@@ -1,7 +1,8 @@
 FROM python:3.11-slim
 
-# gcc needed for some packages (bcrypt, cryptography)
-RUN apt-get update && apt-get install -y --no-install-recommends gcc && rm -rf /var/lib/apt/lists/*
+# gcc needed for some packages (bcrypt, cryptography); ffmpeg needed by
+# app/voice/tts.py to convert ElevenLabs MP3 output to 8kHz mulaw for Twilio
+RUN apt-get update && apt-get install -y --no-install-recommends gcc ffmpeg && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

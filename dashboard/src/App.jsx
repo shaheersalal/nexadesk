@@ -6,6 +6,7 @@ import Layout from './components/Layout'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import Analytics from './pages/Analytics'
 import Leads from './pages/Leads'
 import LeadDetail from './pages/LeadDetail'
 import Properties from './pages/Properties'
@@ -61,6 +62,7 @@ export default function App() {
           </ProtectedRoute>
         }>
           <Route index element={<Dashboard />} />
+          <Route path="analytics" element={<Analytics />} />
           <Route path="leads" element={<Leads />} />
           <Route path="leads/:id" element={<LeadDetail />} />
           <Route path="properties" element={<Properties />} />
@@ -68,7 +70,11 @@ export default function App() {
           <Route path="appointments" element={<Appointments />} />
           <Route path="ai-agent" element={<AIAgent />} />
           <Route path="settings" element={<Settings />} />
-          <Route path="support" element={<SupportInbox />} />
+          <Route path="support" element={
+            session?.user?.id === ADMIN_UID
+              ? <SupportInbox />
+              : <Navigate to="/dashboard" replace />
+          } />
         </Route>
 
         {/* Admin panel — restricted to Shaheer's UID */}

@@ -163,6 +163,9 @@ export const api = {
   // Analytics — computed client-side from Supabase (fast, no HF roundtrip)
   getAnalytics: () => sbAnalytics(),
 
+  // Company — writes: HF API (RLS has no UPDATE policy for direct writes)
+  updateCompany: (data) => request('PATCH', '/companies/me', data),
+
   // Properties — reads: Supabase direct, writes: HF API (triggers RAG ingest)
   getProperties:   ()         => sbProperties(),
   createProperty:  (data)     => request('POST', '/properties/', data),

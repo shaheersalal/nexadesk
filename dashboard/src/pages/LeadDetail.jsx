@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import { ArrowLeft, Phone, Mail, User, MessageSquare, Calendar, Wrench, RefreshCw, Star, MapPin, BedDouble, DollarSign, Clock, Target } from 'lucide-react'
 import { format } from 'date-fns'
+import { scoreTier } from '../components/ScoreBadge'
 
 function badge(status) {
   const map = {
@@ -25,7 +26,7 @@ function requestType(notes) {
 
 function ScoreMeter({ score }) {
   const pct = Math.min(100, score)
-  const color = pct >= 60 ? 'bg-green-500' : pct >= 30 ? 'bg-yellow-400' : 'bg-gray-300'
+  const color = scoreTier(score).ring
   return (
     <div>
       <div className="flex items-center justify-between text-xs text-gray-500 mb-1">

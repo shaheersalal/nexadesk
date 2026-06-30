@@ -8,20 +8,20 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.shared import llm
+from app.shared import session_store
 
 router = APIRouter()
 
-_sessions: dict[str, list[dict]] = {}
-_counts:   dict[str, int]        = {}
-
 MAX_MESSAGES = 15
-MAX_SESSIONS = 5000   # evict oldest 500 when reached
+SESSION_TTL_SECONDS = 1800  # 30 min — Redis expires demo sessions natively, no manual eviction needed
 
-def _evict() -> None:
-    keys = list(_sessions.keys())[:500]
-    for k in keys:
-        _sessions.pop(k, None)
-        _counts.pop(k, None)
+
+def _history_key(session_id: str) -> str:
+    return f"demo:history:{session_id}"
+
+
+def _count_key(session_id: str) -> str:
+    return f"demo:count:{session_id}"
 
 DEMO_SYSTEM_PROMPT = """\
 You are Nadia, the AI receptionist for Prestige Properties — a premium Gulf real estate agency.
@@ -63,16 +63,14 @@ class DemoChatResponse(BaseModel):
 async def demo_chat(body: DemoChatRequest):
     session_id = body.session_id or str(uuid4())
 
-    if _counts.get(session_id, 0) >= MAX_MESSAGES:
+    count = await session_store.get_json(_count_key(session_id)) or 0
+    if count >= MAX_MESSAGES:
         return DemoChatResponse(
             reply="You've reached the demo limit. Reach Shaheer directly at shaheer@shaheer.dev to discuss deploying NexaDesk for your agency.",
             session_id=session_id,
         )
 
-    if len(_sessions) >= MAX_SESSIONS:
-        _evict()
-
-    history = _sessions.get(session_id, [])
+    history = await session_store.get_json(_history_key(session_id)) or []
     history.append({"role": "user", "content": body.message})
 
     reply = await llm.complete(
@@ -83,7 +81,7 @@ async def demo_chat(body: DemoChatRequest):
     )
 
     history.append({"role": "assistant", "content": reply})
-    _sessions[session_id] = history[-20:]
-    _counts[session_id]   = _counts.get(session_id, 0) + 1
+    await session_store.set_json(_history_key(session_id), history[-20:], SESSION_TTL_SECONDS)
+    await session_store.set_json(_count_key(session_id), count + 1, SESSION_TTL_SECONDS)
 
     return DemoChatResponse(reply=reply, session_id=session_id)

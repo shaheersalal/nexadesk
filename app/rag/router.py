@@ -1,4 +1,3 @@
-import asyncio
 from typing import Optional
 from uuid import uuid4
 
@@ -12,6 +11,7 @@ from app.dependencies import get_supabase_admin
 from app.rag.pipeline import ingest_file, ingest_text
 from app.rag.store import query_with_confidence
 from app.shared.llm import complete
+from app.shared import session_store
 
 router = APIRouter()
 settings = get_settings()
@@ -27,15 +27,18 @@ Convert the raw speech into clean, structured knowledge base content:
 
 Output only the cleaned content starting with the title. No preamble or meta-commentary."""
 
-# In-memory job status tracker. Entries auto-expire after JOB_TTL_SECONDS.
-_job_status: dict[str, dict] = {}
+# Job status lives in Redis (shared across all uvicorn workers) and expires
+# natively after JOB_TTL_SECONDS — long enough for Knowledge.jsx's 3s poll
+# loop to observe the final status after completion.
 JOB_TTL_SECONDS = 3600  # 1 hour
 
 
-async def _expire_job(job_id: str) -> None:
-    """Remove a job entry after TTL to prevent unbounded dict growth."""
-    await asyncio.sleep(JOB_TTL_SECONDS)
-    _job_status.pop(job_id, None)
+def _job_key(job_id: str) -> str:
+    return f"rag:job:{job_id}"
+
+
+async def _set_job_status(job_id: str, status: dict) -> None:
+    await session_store.set_json(_job_key(job_id), status, JOB_TTL_SECONDS)
 
 
 # ── Ingest file upload ────────────────────────────────────────────────────────
@@ -54,13 +57,12 @@ async def ingest_document(
         raise HTTPException(status_code=413, detail=f"File exceeds {settings.MAX_UPLOAD_SIZE_MB}MB limit")
 
     job_id = str(uuid4())
-    _job_status[job_id] = {"status": "processing", "filename": file.filename}
+    await _set_job_status(job_id, {"status": "processing", "filename": file.filename})
 
     background_tasks.add_task(
         _run_ingest_file,
         job_id, file_bytes, file.filename, company_id, category, current_user["id"], property_id
     )
-    background_tasks.add_task(asyncio.ensure_future, _expire_job(job_id))
 
     return {"job_id": job_id, "filename": file.filename, "status": "processing"}
 
@@ -75,9 +77,9 @@ async def _run_ingest_file(job_id, file_bytes, filename, company_id, category, u
             uploaded_by=user_id,
             property_id=property_id,
         )
-        _job_status[job_id] = {"status": "completed", "filename": filename, **result}
+        await _set_job_status(job_id, {"status": "completed", "filename": filename, **result})
     except Exception as e:
-        _job_status[job_id] = {"status": "failed", "filename": filename, "error": str(e)}
+        await _set_job_status(job_id, {"status": "failed", "filename": filename, "error": str(e)})
 
 
 # ── Ingest plain text ─────────────────────────────────────────────────────────
@@ -101,13 +103,12 @@ async def ingest_text_endpoint(
 
     job_id = str(uuid4())
     filename = body.title or "pasted_text"
-    _job_status[job_id] = {"status": "processing", "filename": filename}
+    await _set_job_status(job_id, {"status": "processing", "filename": filename})
 
     background_tasks.add_task(
         _run_ingest_text,
         job_id, body.text, company_id, body.title, body.category, body.property_id,
     )
-    background_tasks.add_task(asyncio.ensure_future, _expire_job(job_id))
 
     return {"job_id": job_id, "filename": filename, "status": "processing"}
 
@@ -125,16 +126,16 @@ async def _run_ingest_text(job_id, text, company_id, title, category, property_i
                 "filename": filename,
             },
         )
-        _job_status[job_id] = {"status": "completed", "filename": filename, **result}
+        await _set_job_status(job_id, {"status": "completed", "filename": filename, **result})
     except Exception as e:
-        _job_status[job_id] = {"status": "failed", "filename": filename, "error": str(e)}
+        await _set_job_status(job_id, {"status": "failed", "filename": filename, "error": str(e)})
 
 
 # ── Job status ────────────────────────────────────────────────────────────────
 
 @router.get("/status/{job_id}")
 async def get_job_status(job_id: str, current_user: CurrentUser):
-    status = _job_status.get(job_id)
+    status = await session_store.get_json(_job_key(job_id))
     if not status:
         raise HTTPException(status_code=404, detail="Job not found")
     return status
@@ -205,14 +206,13 @@ async def ingest_voice(
 
     job_id = str(uuid4())
     label = title or "Voice note"
-    _job_status[job_id] = {"status": "transcribing", "filename": label}
+    await _set_job_status(job_id, {"status": "transcribing", "filename": label})
 
     background_tasks.add_task(
         _run_ingest_voice,
         job_id, audio_bytes, audio.filename or "recording.webm",
         company_id, category, title, current_user["id"],
     )
-    background_tasks.add_task(asyncio.ensure_future, _expire_job(job_id))
 
     return {"job_id": job_id, "filename": label, "status": "transcribing"}
 
@@ -233,7 +233,7 @@ async def _run_ingest_voice(job_id, audio_bytes, filename, company_id, category,
         transcript = str(response).strip()
 
         if not transcript:
-            _job_status[job_id] = {"status": "failed", "filename": label, "error": "No speech detected"}
+            await _set_job_status(job_id, {"status": "failed", "filename": label, "error": "No speech detected"})
             return
 
         # Purify: clean up speech into structured KB content
@@ -258,6 +258,6 @@ async def _run_ingest_voice(job_id, audio_bytes, filename, company_id, category,
             },
         )
 
-        _job_status[job_id] = {"status": "completed", "filename": doc_title}
+        await _set_job_status(job_id, {"status": "completed", "filename": doc_title})
     except Exception as e:
-        _job_status[job_id] = {"status": "failed", "filename": label, "error": str(e)}
+        await _set_job_status(job_id, {"status": "failed", "filename": label, "error": str(e)})

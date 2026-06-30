@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { api } from '../lib/api'
 import { Save, Link as LinkIcon, Copy, Check } from 'lucide-react'
 
 export default function Settings() {
@@ -7,6 +8,7 @@ export default function Settings() {
   const [form, setForm] = useState({})
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState(null)
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
@@ -32,10 +34,17 @@ export default function Settings() {
   async function handleSave(e) {
     e.preventDefault()
     setSaving(true)
-    await supabase.from('companies').update(form).eq('id', company.id)
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    setError(null)
+    try {
+      const updated = await api.updateCompany(form)
+      setCompany(updated)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (err) {
+      setError(err.message || 'Failed to save changes')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const widgetCode = company ? `<script>
@@ -90,6 +99,10 @@ export default function Settings() {
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-none"
           />
         </div>
+
+        {error && (
+          <p className="text-sm text-red-600">{error}</p>
+        )}
 
         <div className="flex justify-end">
           <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2">

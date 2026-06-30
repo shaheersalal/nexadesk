@@ -6,6 +6,7 @@ Voice routes:
 """
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, Depends
@@ -13,7 +14,7 @@ from fastapi.responses import Response
 
 from app.config import get_settings
 from app.dependencies import get_redis, get_supabase_admin
-from app.voice.telephony import build_stream_twiml, build_fallback_twiml
+from app.voice.telephony import build_stream_twiml, build_fallback_twiml, twilio_client
 from app.voice.call_session import create_session, load_session, save_session, delete_session
 from app.voice.stt import transcribe_mulaw_b64
 from app.voice.tts import synthesize_to_mulaw
@@ -23,6 +24,7 @@ from app.shared.prompts import CALL_GREETING, LEAD_SUMMARY_PROMPT
 
 router = APIRouter()
 settings = get_settings()
+logger = logging.getLogger("nexadesk.voice")
 
 # Buffer to accumulate audio before transcribing (avoid transcribing tiny chunks)
 AUDIO_BUFFER_CHUNKS = 8  # ~1 second of 8kHz mulaw
@@ -152,8 +154,17 @@ async def _send_tts(websocket: WebSocket, text: str, call_sid: str) -> None:
         }
         await websocket.send_text(json.dumps(msg))
     else:
-        # Fallback: send a mark event so Twilio uses <Say> (handled in TwiML)
-        pass
+        # TTS synthesis failed (no API key, ElevenLabs error, or ffmpeg conversion
+        # failure) — the Media Stream WS protocol can't inject <Say> mid-stream,
+        # so the only way to give the caller audible speech is to redirect the
+        # live call out of the stream via the REST API and let Twilio's own
+        # <Say> verb speak the fallback TwiML.
+        logger.error(f"TTS synthesis returned no audio for call {call_sid}, falling back to Twilio <Say>")
+        try:
+            twiml = build_fallback_twiml(text)
+            twilio_client().calls(call_sid).update(twiml=twiml)
+        except Exception as e:
+            logger.error(f"Twilio <Say> fallback failed for call {call_sid}: {e}")
 
 
 async def _finalize_call(session, duration: int) -> None:

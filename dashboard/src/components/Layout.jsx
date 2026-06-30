@@ -2,24 +2,31 @@ import { useState, useEffect } from 'react'
 import { Outlet, NavLink, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import {
-  LayoutDashboard, Building2, BookOpen,
-  Settings, LogOut, Phone, Menu, X, Sparkles, ShieldCheck,
+  LayoutDashboard, Building2, BookOpen, Users, Calendar, Bot,
+  Settings, LogOut, Phone, Menu, X, Sparkles, ShieldCheck, MessageSquare, LifeBuoy, BarChart3,
 } from 'lucide-react'
 
 const ADMIN_UID = '7227a933-56ef-45c4-8cbc-1c8331c74b21'
 import AssistantChat from './AssistantChat'
+import SupportChat from './SupportChat'
 
 const NAV = [
-  { to: '/dashboard',            label: 'Dashboard',  icon: LayoutDashboard, exact: true },
-  { to: '/dashboard/properties', label: 'Properties', icon: Building2 },
-  { to: '/dashboard/knowledge',  label: 'Knowledge',  icon: BookOpen },
-  { to: '/dashboard/settings',   label: 'Settings',   icon: Settings },
+  { to: '/dashboard',             label: 'Dashboard',    icon: LayoutDashboard, exact: true },
+  { to: '/dashboard/analytics',   label: 'Analytics',    icon: BarChart3 },
+  { to: '/dashboard/leads',       label: 'Leads',        icon: Users },
+  { to: '/dashboard/properties',  label: 'Properties',   icon: Building2 },
+  { to: '/dashboard/appointments',label: 'Appointments', icon: Calendar },
+  { to: '/dashboard/knowledge',   label: 'Knowledge',    icon: BookOpen },
+  { to: '/dashboard/ai-agent',    label: 'AI Agent',     icon: Bot },
+  { to: '/dashboard/settings',    label: 'Settings',     icon: Settings },
 ]
 
 export default function Layout({ session }) {
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [onboardingComplete, setOnboardingComplete] = useState(true) // default true to avoid flash
+  const [supportOpen, setSupportOpen] = useState(false)
+  const isAdmin = session?.user?.id === ADMIN_UID
 
   useEffect(() => {
     async function checkSetup() {
@@ -98,8 +105,16 @@ export default function Layout({ session }) {
           ))}
         </nav>
 
-        {session?.user?.id === ADMIN_UID && (
-          <div className="px-3 pb-2">
+        {isAdmin && (
+          <div className="px-3 pb-2 space-y-1">
+            <Link
+              to="/dashboard/support"
+              onClick={closeSidebar}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-amber-400 hover:bg-navy-700 hover:text-amber-300 transition-colors"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Support Inbox
+            </Link>
             <Link
               to="/admin"
               onClick={closeSidebar}
@@ -118,6 +133,15 @@ export default function Layout({ session }) {
             </div>
             <p className="text-white text-xs font-medium truncate flex-1">{session?.user?.email}</p>
           </div>
+          {!isAdmin && (
+            <button
+              onClick={() => { setSupportOpen(true); closeSidebar() }}
+              className="flex items-center gap-2 text-gray-400 hover:text-white text-xs transition-colors w-full px-3 py-1.5 rounded-lg hover:bg-navy-700"
+            >
+              <LifeBuoy className="w-3.5 h-3.5" />
+              Support
+            </button>
+          )}
           <button
             onClick={handleSignOut}
             className="flex items-center gap-2 text-gray-400 hover:text-white text-xs transition-colors w-full px-3 py-1.5 rounded-lg hover:bg-navy-700"
@@ -150,6 +174,7 @@ export default function Layout({ session }) {
       </main>
 
       <AssistantChat />
+      {supportOpen && <SupportChat onClose={() => setSupportOpen(false)} />}
     </div>
   )
 }
