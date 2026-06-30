@@ -26,8 +26,9 @@ httpx>=0.26,<0.29
 tiktoken==0.8.0
 python-pptx==1.0.2
 
-# Language detection
+# Language detection + translation
 langdetect==1.0.9
+deep-translator==1.11.4
 
 # Utilities
 python-jose[cryptography]==3.3.0

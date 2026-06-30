@@ -6,6 +6,14 @@ services:
     ports:
       - "8000:8000"
     env_file: .env
+    environment:
+      # .env is shared with the host-machine dev setup, where these point at
+      # localhost + Docker Desktop's host-mapped ports. Inside this compose
+      # network, qdrant/redis must be reached by service name on their
+      # internal ports instead -- override here rather than touching .env.
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: "6333"
+      REDIS_URL: redis://redis:6379/0
     volumes:
       - upload_data:/app/uploads
     depends_on:
@@ -21,7 +29,9 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      # qdrant/qdrant:latest ships no curl -- a curl-based healthcheck never
+      # passes and blocks `app` from starting forever (depends_on: service_healthy).
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5

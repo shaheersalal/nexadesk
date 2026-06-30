@@ -3,8 +3,10 @@ from pydantic import BaseModel
 from typing import Optional
 import httpx
 
+from app.agents.orchestrator import run as orchestrator_run
 from app.config import get_settings
 from app.dependencies import get_supabase_admin
+from app.shared.demo_company import resolve_demo_company
 from app.shared.llm import complete
 
 router = APIRouter()
@@ -143,7 +145,26 @@ nexadesk.site"""
 async def demo_chat(body: DemoChatRequest):
     if len(body.messages) > 30:
         raise HTTPException(status_code=400, detail="Session too long")
-    # Keep only last 10 turns to control cost
+    if not body.messages:
+        raise HTTPException(status_code=400, detail="No messages")
+
+    # RAG-grounded path: real orchestrator (same pipeline as the dashboard chat
+    # and voice demo) against the seeded demo company's actual knowledge base,
+    # so this answers from real ingested content instead of a hardcoded prompt.
+    company = await resolve_demo_company()
+    if company:
+        history = body.messages[:-1][-10:]
+        user_message = body.messages[-1]["content"]
+        result = await orchestrator_run(
+            user_message=user_message,
+            company_id=company["id"],
+            history=history,
+            company=company,
+            lead_id=None,
+        )
+        return {"response": result["reply"]}
+
+    # Fallback if no demo company is seeded yet — hardcoded prompt, same as before.
     recent = body.messages[-10:]
     response = await complete(
         system=DEMO_SYSTEM_PROMPT,

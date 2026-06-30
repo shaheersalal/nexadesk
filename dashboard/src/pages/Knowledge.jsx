@@ -201,7 +201,10 @@ export default function Knowledge() {
         >
           <Upload className="w-8 h-8 text-gray-300 mx-auto mb-3" />
           <p className="text-sm text-gray-500 font-medium">Drag & drop files here, or click to browse</p>
-          <p className="text-xs text-gray-400 mt-1">PDF, DOCX, PPTX, XLSX, CSV, TXT, PNG, JPG — any format welcome</p>
+          <p className="text-xs text-gray-400 mt-1">
+            Export your listings as CSV/Excel from your portal account, or just snap a photo of a printed listing sheet — Nexa reads both.
+            Also takes PDF, DOCX, PPTX, TXT.
+          </p>
           <input ref={fileRef} type="file" accept={ACCEPT} multiple className="hidden" onChange={(e) => handleFiles([...e.target.files])} />
         </div>
       </div>

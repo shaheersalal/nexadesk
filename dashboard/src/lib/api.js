@@ -37,10 +37,14 @@ export { getCompanyId }
 async function request(method, path, body, isFormData = false) {
   const headers = await authHeaders()
   if (!isFormData) headers['Content-Type'] = 'application/json'
+  // No timeout on file uploads (isFormData) — ingestion of larger files can
+  // legitimately take longer. Everything else gets a 5s cap so a backend
+  // outage shows as a fast, honest failure instead of an indefinite hang.
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers,
     body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
+    signal: isFormData ? undefined : AbortSignal.timeout(5000),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
@@ -184,8 +188,7 @@ export const api = {
   assistantChat:   (data) => request('POST', '/assistant/chat', data),
   assistantNotify: (data) => request('POST', '/assistant/notify', data),
 
-  // Onboarding agent (Nexa)
-  onboardingChat:     (data) => request('POST', '/onboarding/chat', data),
+  // Onboarding
   onboardingComplete: (data) => request('POST', '/onboarding/complete', data),
 
   // Admin

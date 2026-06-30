@@ -17,6 +17,7 @@ class CallSession:
     call_sid: str
     company_id: str
     language: str = "en"
+    language_confirmed: bool = False  # False until the first turn's audio has been language-detected
     conversation_history: list[dict] = field(default_factory=list)
     lead_data: dict = field(default_factory=dict)
     score: int = 0

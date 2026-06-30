@@ -5,6 +5,7 @@ import redis.asyncio as aioredis
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from qdrant_client import AsyncQdrantClient
+from qdrant_client.http.exceptions import UnexpectedResponse
 from qdrant_client.models import Distance, VectorParams
 from supabase import create_client, Client
 import openai
@@ -52,13 +53,20 @@ async def ensure_collection(client: AsyncQdrantClient, settings: Settings) -> No
     collections = await client.get_collections()
     names = [c.name for c in collections.collections]
     if settings.QDRANT_COLLECTION not in names:
-        await client.create_collection(
-            collection_name=settings.QDRANT_COLLECTION,
-            vectors_config=VectorParams(
-                size=settings.EMBED_DIMENSIONS,
-                distance=Distance.COSINE,
-            ),
-        )
+        try:
+            await client.create_collection(
+                collection_name=settings.QDRANT_COLLECTION,
+                vectors_config=VectorParams(
+                    size=settings.EMBED_DIMENSIONS,
+                    distance=Distance.COSINE,
+                ),
+            )
+        except UnexpectedResponse as e:
+            # Multiple --workers each run this lifespan check concurrently on
+            # startup; the losers of the create race hit a 409 here even
+            # though the collection now exists, which is not a real failure.
+            if e.status_code != 409:
+                raise
 
 
 # ── Redis ─────────────────────────────────────────────────────────────────────

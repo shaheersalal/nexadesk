@@ -18,11 +18,26 @@ export default function Login() {
     setLoading(true)
     setError('')
 
-    const { error } = mode === 'login'
-      ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password })
+    const authCall = mode === 'login'
+      ? supabase.auth.signInWithPassword({ email, password })
+      : supabase.auth.signUp({ email, password })
 
-    if (error) setError(error.message)
+    // No silent background retry — if it doesn't resolve quickly, surface a
+    // direct message and stop, rather than leaving the button stuck on
+    // "Please wait…" indefinitely.
+    const timeout = new Promise((resolve) =>
+      setTimeout(() => resolve({ error: { message: 'TIMEOUT' } }), 5000)
+    )
+
+    const { error } = await Promise.race([authCall, timeout])
+
+    if (error) {
+      setError(
+        error.message === 'TIMEOUT'
+          ? "That's taking longer than it should — please try again in a few minutes."
+          : error.message
+      )
+    }
     setLoading(false)
   }
 

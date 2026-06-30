@@ -32,6 +32,7 @@ async def process_voice_turn(
     """
     english_query, detected_lang = normalize_for_llm(user_text)
     session.language = detected_lang
+    session.language_confirmed = True
 
     # RAG retrieval
     rag_result = await query_with_confidence(
@@ -86,25 +87,28 @@ async def process_voice_turn(
     session.transcript_parts.append(f"Caller: {user_text}")
     session.transcript_parts.append(f"AI: {reply}")
 
-    # Update lead data from scoring events
-    _update_lead_data(session, events, user_text)
+    # Update lead data from scoring events. Matched against the English-normalized
+    # text (not the caller's raw words) since the name-capture regex only knows
+    # English phrasing ("my name is...") — translate_to_english preserves digits
+    # and email addresses verbatim, so phone/email extraction still works either way.
+    _update_lead_data(session, events, english_query)
 
     return reply, score_delta
 
 
-def _update_lead_data(session: CallSession, events, user_text: str) -> None:
+def _update_lead_data(session: CallSession, events, english_text: str) -> None:
     """Extract contact signals and store on the session."""
     import re
     for event in events:
         if event.rule == "shared_phone":
-            match = PHONE_REGEX.search(user_text)
+            match = PHONE_REGEX.search(english_text)
             if match:
                 session.lead_data["phone"] = match.group()
         if event.rule == "shared_email":
-            match = EMAIL_REGEX.search(user_text)
+            match = EMAIL_REGEX.search(english_text)
             if match:
                 session.lead_data["email"] = match.group()
         if event.rule == "shared_name":
-            match = re.search(r"(?:my name(?:\s+is)?\s+|i(?:'m| am)\s+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)", user_text)
+            match = re.search(r"(?:my name(?:\s+is)?\s+|i(?:'m| am)\s+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)", english_text)
             if match:
                 session.lead_data["name"] = match.group(1)

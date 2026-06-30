@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { api } from '../lib/api'
-import { Save, Link as LinkIcon, Copy, Check } from 'lucide-react'
+import { Save, Link as LinkIcon, Mail, Copy, Check } from 'lucide-react'
+
+const LISTINGS_INBOUND_DOMAIN = 'listings.nexadesk.site'
 
 export default function Settings() {
   const [company, setCompany] = useState(null)
@@ -10,6 +12,7 @@ export default function Settings() {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState(null)
   const [copied, setCopied] = useState(false)
+  const [emailCopied, setEmailCopied] = useState(false)
 
   useEffect(() => {
     loadCompany()
@@ -59,6 +62,14 @@ export default function Settings() {
     navigator.clipboard.writeText(widgetCode)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const listingsAddress = company ? `listings+${company.id}@${LISTINGS_INBOUND_DOMAIN}` : ''
+
+  function copyListingsAddress() {
+    navigator.clipboard.writeText(listingsAddress)
+    setEmailCopied(true)
+    setTimeout(() => setEmailCopied(false), 2000)
   }
 
   return (
@@ -128,6 +139,26 @@ export default function Settings() {
             className="absolute top-3 right-3 text-gray-500 hover:text-white transition-colors"
           >
             {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Email-forward listing ingestion */}
+      <div className="card mt-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Mail className="w-4 h-4 text-gray-400" />
+          <h2 className="text-sm font-semibold text-gray-700">Forward Listings by Email</h2>
+        </div>
+        <p className="text-xs text-gray-400 mb-3">
+          Forward or CC any email with a listing sheet, CSV/Excel export, or photo attached to this address — Nexa reads it automatically. No setup needed on your end.
+        </p>
+        <div className="bg-gray-900 rounded-lg p-4 relative">
+          <pre className="text-xs text-green-400 overflow-x-auto whitespace-pre-wrap">{listingsAddress}</pre>
+          <button
+            onClick={copyListingsAddress}
+            className="absolute top-3 right-3 text-gray-500 hover:text-white transition-colors"
+          >
+            {emailCopied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
           </button>
         </div>
       </div>

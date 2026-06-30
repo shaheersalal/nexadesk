@@ -70,7 +70,7 @@ export default function LandingDemo() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: history }),
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(5000),
       })
       if (!res.ok) throw new Error()
       const data = await res.json()
@@ -140,7 +140,7 @@ export default function LandingDemo() {
         </div>
       </div>
       <p className="text-xs text-gray-400 mt-2.5 text-center italic">
-        Live AI demo — responds in English, Spanish, French & Arabic.
+        Live AI demo — speaks your client's language, automatically.
       </p>
     </div>
   )

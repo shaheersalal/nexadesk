@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # TTS
     TTS_API_KEY: str = ""
-    TTS_MODEL: str = "eleven_turbo_v2"
+    TTS_MODEL: str = "eleven_turbo_v2_5"  # multilingual (32 languages) + low latency; v2 is English-only
     TTS_VOICE_ID: str = ""
 
     # Embeddings
@@ -58,6 +58,8 @@ class Settings(BaseSettings):
 
     # Email (Resend)
     RESEND_API_KEY: str = ""
+    RESEND_WEBHOOK_SECRET: str = ""  # Svix signing secret for inbound-email webhook verification; skipped if unset
+    LISTINGS_INBOUND_DOMAIN: str = "listings.nexadesk.site"  # must be a verified Resend receiving domain
 
     # Upload / Storage
     MAX_UPLOAD_SIZE_MB: int = 50

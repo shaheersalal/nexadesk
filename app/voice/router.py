@@ -121,7 +121,8 @@ async def media_stream(websocket: WebSocket, call_sid: str):
                     combined_b64 = _combine_audio_chunks(audio_buffer)
                     audio_buffer = []
 
-                    transcript = await transcribe_mulaw_b64(combined_b64, session.language)
+                    stt_language = session.language if session.language_confirmed else None
+                    transcript = await transcribe_mulaw_b64(combined_b64, stt_language)
                     if transcript.strip():
                         reply, _ = await process_voice_turn(transcript, session)
                         await save_session(session, redis)
@@ -136,7 +137,8 @@ async def media_stream(websocket: WebSocket, call_sid: str):
         # Transcribe any remaining buffer
         if audio_buffer:
             combined = _combine_audio_chunks(audio_buffer)
-            leftover = await transcribe_mulaw_b64(combined, session.language)
+            stt_language = session.language if session.language_confirmed else None
+            leftover = await transcribe_mulaw_b64(combined, stt_language)
             if leftover.strip():
                 await process_voice_turn(leftover, session)
         await save_session(session, redis)

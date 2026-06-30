@@ -14,7 +14,13 @@ RUN pip install --no-cache-dir "qdrant-client==1.12.1"
 RUN pip install --no-cache-dir redis==5.2.1
 RUN pip install --no-cache-dir "openai==1.57.4" "httpx>=0.26,<0.29"
 RUN pip install --no-cache-dir "python-jose[cryptography]==3.3.0" "passlib[bcrypt]==1.7.4" aiofiles==24.1.0
-RUN pip install --no-cache-dir tiktoken==0.8.0 langdetect==1.0.9
+# tiktoken normally lazy-downloads its BPE file from Azure blob storage on
+# first use -- baking it into the image at build time means app startup never
+# depends on that external host being reachable (a flaky blip there would
+# otherwise crash the whole container on every restart).
+ENV TIKTOKEN_CACHE_DIR=/app/.tiktoken_cache
+RUN pip install --no-cache-dir tiktoken==0.8.0 langdetect==1.0.9 deep-translator==1.11.4 \
+    && python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
 RUN pip install --no-cache-dir python-pptx==1.0.2
 
 COPY . .

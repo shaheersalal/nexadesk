@@ -6,6 +6,7 @@ import {
   Database, Puzzle, Code2,
 } from 'lucide-react'
 import LandingDemo from '../components/LandingDemo'
+import VoiceDemoWidget from '../components/VoiceDemoWidget'
 import DemoPreviewModal from '../components/DemoPreviewModal'
 import PricingCalculator from '../components/PricingCalculator'
 import DiscountChat from '../components/DiscountChat'
@@ -84,7 +85,7 @@ const FAQS = [
   },
   {
     q: 'What languages does the AI support?',
-    a: 'English, Spanish, French, and Arabic out of the box, with automatic language detection on both voice and chat.',
+    a: 'Speaks your client\'s language — automatically. From Arabic to Spanish to Urdu and everything in between, NexaDesk detects and replies in whatever language your client uses, on both voice and chat.',
   },
   {
     q: 'Can I change my plan later?',
@@ -135,6 +136,7 @@ function FaqItem({ item, open, onToggle }) {
 
 export default function Landing() {
   const [demoOpen, setDemoOpen] = useState(false)
+  const [demoMode, setDemoMode] = useState('chat')
   const [offerPlan, setOfferPlan] = useState(null)
   const [openFaq, setOpenFaq] = useState(0)
   const [activeSection, setActiveSection] = useState('hero')
@@ -270,7 +272,7 @@ export default function Landing() {
         <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-center gap-8 text-white text-sm font-medium">
           {[
             [Clock, '24/7 AI Coverage'],
-            [Globe, 'English, Spanish, French & Arabic'],
+            [Globe, "Speaks your client's language — automatically"],
             [CheckCircle, 'Full Setup Included'],
           ].map(([Icon, label]) => (
             <div key={label} className="flex items-center gap-2">
@@ -288,7 +290,22 @@ export default function Landing() {
               <h2 className="text-3xl font-bold text-gray-900">See It in Action</h2>
               <p className="text-gray-500 mt-3">This is exactly what your clients experience when they contact your agency.</p>
             </div>
-            <LandingDemo />
+            <div className="flex justify-center gap-2 mb-6">
+              {[['chat', 'Chat'], ['voice', 'Voice']].map(([mode, label]) => (
+                <button
+                  key={mode}
+                  onClick={() => setDemoMode(mode)}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${
+                    demoMode === mode
+                      ? 'bg-accent text-white'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:text-gray-700'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {demoMode === 'chat' ? <LandingDemo /> : <VoiceDemoWidget />}
           </div>
         </Reveal>
       </section>

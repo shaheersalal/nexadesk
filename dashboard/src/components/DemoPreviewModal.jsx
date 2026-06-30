@@ -138,7 +138,7 @@ function Slide4Multilingual() {
     <div className="h-full flex flex-col p-6 md:p-10" style={{ background: 'linear-gradient(135deg, #1a0533 0%, #2d1b69 100%)' }}>
       <p className="text-xs font-semibold text-violet-300 uppercase tracking-widest mb-2">Multilingual AI</p>
       <h2 className="text-2xl md:text-4xl font-bold text-white mb-2">Speaks Your Clients' Language</h2>
-      <p className="text-violet-200/70 text-sm md:text-base mb-6">Nexa auto-detects and replies in English, Spanish, French, and Arabic — no setup needed.</p>
+      <p className="text-violet-200/70 text-sm md:text-base mb-6">Nexa auto-detects your client's language and replies in kind — from Arabic to Spanish to Urdu, no setup needed.</p>
       <div className="grid grid-cols-2 gap-3 flex-1">
         {langs.map(l => (
           <div key={l.lang} style={{ background: 'rgba(255,255,255,0.07)', borderRadius: 12, padding: 14, border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -201,7 +201,7 @@ const SLIDES = [
   { component: Slide1Dashboard, title: 'Live Dashboard', desc: 'Real-time metrics and AI activity at a glance' },
   { component: Slide2Leads, title: 'Lead Pipeline', desc: 'Every enquiry scored, ranked, and ready to act on' },
   { component: Slide3Transcript, title: 'Full Transcripts', desc: 'Every conversation logged automatically' },
-  { component: Slide4Multilingual, title: 'Multilingual AI', desc: 'Responds in English, Spanish, French & Arabic' },
+  { component: Slide4Multilingual, title: 'Multilingual AI', desc: "Speaks your client's language — automatically" },
   { component: Slide5Appointments, title: 'Auto Appointments', desc: 'Viewings booked without you lifting a finger' },
 ]
 
@@ -209,6 +209,8 @@ const SLIDES = [
 
 const COUNTRIES = ['United States', 'United Kingdom', 'UAE', 'Saudi Arabia', 'Qatar', 'Kuwait', 'Bahrain', 'Oman', 'Canada', 'Australia', 'Other']
 const CALL_RANGES = ['Under 100', '100–300', '300–500', '500–1000', '1000+']
+
+const PENDING_LEAD_KEY = 'nexadesk_pending_lead'
 
 function DemoForm({ onSuccess, onBack }) {
   const [form, setForm] = useState({ name: '', email: '', agency: '', phone: '', country: '', monthly_calls: '' })
@@ -225,18 +227,45 @@ function DemoForm({ onSuccess, onBack }) {
     }
     setLoading(true)
     setError('')
+
+    // Persist before any network call — if both the backend and the fallback
+    // fail, the submission isn't silently lost.
+    localStorage.setItem(PENDING_LEAD_KEY, JSON.stringify({ ...form, submitted_at: new Date().toISOString() }))
+
+    let delivered = false
     try {
       const res = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/book-demo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
+        signal: AbortSignal.timeout(5000),
       })
-      if (!res.ok) throw new Error('Network error')
-      onSuccess()
+      if (res.ok) delivered = true
     } catch {
-      setError('Something went wrong. Please try again.')
-    } finally {
-      setLoading(false)
+      // backend unreachable or timed out — fall through to the Vercel fallback
+    }
+
+    if (!delivered) {
+      try {
+        const fallbackRes = await fetch('/api/capture-lead', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(form),
+          signal: AbortSignal.timeout(5000),
+        })
+        if (fallbackRes.ok) delivered = true
+      } catch {
+        // both paths failed
+      }
+    }
+
+    setLoading(false)
+
+    if (delivered) {
+      localStorage.removeItem(PENDING_LEAD_KEY)
+      onSuccess()
+    } else {
+      setError("That didn't go through — please try again in a few minutes.")
     }
   }
 

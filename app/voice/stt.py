@@ -16,20 +16,25 @@ settings = get_settings()
 DEEPGRAM_URL = "https://api.deepgram.com/v1/listen"
 
 
-async def transcribe_audio_chunk(audio_bytes: bytes, language: str = "en") -> str:
+async def transcribe_audio_chunk(audio_bytes: bytes, language: str | None = "en") -> str:
     """
     Send a raw audio chunk to Deepgram for transcription.
     audio_bytes: raw mulaw/8000Hz audio (from Twilio Media Stream)
+    language: explicit Deepgram language code, or None to auto-detect (used
+        for the first turn of a call, before we know what the caller speaks).
     Returns the transcript string (may be empty if no speech detected).
     """
     params = {
         "model": settings.STT_MODEL,
-        "language": language,
         "encoding": "mulaw",
         "sample_rate": "8000",
         "punctuate": "true",
         "smart_format": "true",
     }
+    if language:
+        params["language"] = language
+    else:
+        params["detect_language"] = "true"
     headers = {
         "Authorization": f"Token {settings.STT_API_KEY}",
         "Content-Type": "audio/mulaw",
@@ -52,7 +57,7 @@ async def transcribe_audio_chunk(audio_bytes: bytes, language: str = "en") -> st
         return ""
 
 
-async def transcribe_mulaw_b64(audio_b64: str, language: str = "en") -> str:
+async def transcribe_mulaw_b64(audio_b64: str, language: str | None = "en") -> str:
     """Transcribe base64-encoded mulaw audio (format Twilio sends over WebSocket)."""
     audio_bytes = base64.b64decode(audio_b64)
     if len(audio_bytes) < 160:  # Too small — likely silence
