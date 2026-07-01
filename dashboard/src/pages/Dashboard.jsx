@@ -69,12 +69,14 @@ export default function Dashboard() {
   }
 
   async function loadLiveFeed() {
-    const cid = companyIdRef.current
-    if (!cid) return
+    if (!companyIdRef.current) return
+    // No company_id filter — RLS (accessible_company_ids()) returns rows from
+    // all accessible companies for parent accounts, own-company only for others.
+    // The realtime subscription below is still scoped to own company_id only
+    // (acceptable Phase 6 limitation; multi-company realtime would need N subscriptions).
     const { data } = await supabase
       .from('conversations')
       .select('id, channel, started_at, lead_id, leads(name)')
-      .eq('company_id', cid)
       .order('started_at', { ascending: false })
       .limit(8)
     if (data) {
@@ -89,7 +91,6 @@ export default function Dashboard() {
     const { data: recent } = await supabase
       .from('conversations')
       .select('id, channel, started_at, lead_id, leads(name)')
-      .eq('company_id', cid)
       .gte('started_at', since)
       .order('started_at', { ascending: false })
     if (recent) setLast24h(recent.map(c => ({ ...c, lead_name: c.leads?.name || null })))

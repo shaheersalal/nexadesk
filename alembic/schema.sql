@@ -1,6 +1,6 @@
 -- NexaDesk — Supabase/Postgres Schema
 -- This file is a generated SNAPSHOT of the live database, regenerated from
--- information_schema / pg_catalog as of 2026-06-30 (Phase 2 schema reconciliation).
+-- information_schema / pg_catalog as of 2026-07-01 (Phase 6: parent/child companies).
 -- It documents current state — it is not run directly against a fresh database step
 -- by step. For actual schema changes going forward, see migrations/README.md: write a
 -- numbered file in migrations/, apply it live, then regenerate this file.
@@ -25,7 +25,9 @@ CREATE TABLE IF NOT EXISTS companies (
     receptionist_name    TEXT        DEFAULT 'Nexa',
     system_prompt        TEXT,
     onboarding_data      JSONB       DEFAULT '{}',
-    onboarding_complete  BOOLEAN     DEFAULT FALSE
+    onboarding_complete  BOOLEAN     DEFAULT FALSE,
+    -- Phase 6: NULL = top-level account; non-NULL = child of that company (one level only)
+    parent_company_id    UUID        REFERENCES companies(id)
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -209,6 +211,39 @@ CREATE OR REPLACE FUNCTION current_company_id() RETURNS UUID AS $$
     SELECT company_id FROM users WHERE id = auth.uid();
 $$ LANGUAGE SQL SECURITY DEFINER STABLE;
 
+-- Phase 6: returns the caller's own company_id PLUS any direct children
+-- (for a top-level/parent account). Children return only their own id.
+-- Used by RLS policies and backend dependency get_accessible_company_ids().
+CREATE OR REPLACE FUNCTION accessible_company_ids() RETURNS SETOF uuid AS $$
+    SELECT id FROM companies WHERE id = current_company_id()
+    UNION
+    SELECT id FROM companies WHERE parent_company_id = current_company_id()
+$$ LANGUAGE SQL SECURITY DEFINER STABLE;
+
+-- Phase 6: enforce exactly-one-level nesting for companies.
+-- A company that already has a parent cannot itself become a parent.
+CREATE OR REPLACE FUNCTION enforce_one_level_company_nesting()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+  grandparent_id uuid;
+BEGIN
+  IF NEW.parent_company_id IS NOT NULL THEN
+    IF NEW.parent_company_id = NEW.id THEN
+      RAISE EXCEPTION 'A company cannot be its own parent';
+    END IF;
+    SELECT parent_company_id INTO grandparent_id FROM companies WHERE id = NEW.parent_company_id;
+    IF grandparent_id IS NOT NULL THEN
+      RAISE EXCEPTION 'parent_company_id must point to a top-level company (one level of nesting only)';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_enforce_one_level_company_nesting
+  BEFORE INSERT OR UPDATE OF parent_company_id ON companies
+  FOR EACH ROW EXECUTE FUNCTION enforce_one_level_company_nesting();
+
 CREATE OR REPLACE FUNCTION increment_lead_score(p_lead_id UUID, p_delta INTEGER) RETURNS VOID AS $$
     UPDATE leads SET score = GREATEST(0, COALESCE(score, 0) + p_delta) WHERE id = p_lead_id;
 $$ LANGUAGE SQL;
@@ -239,6 +274,23 @@ declare
 begin
   -- Skip auto-provision for the admin account
   if new.id = admin_uid then
+    return new;
+  end if;
+
+  -- Phase 6: if this is a child-account invite, link the user to the
+  -- pre-created child company instead of auto-provisioning a new one.
+  -- The invite_user_by_email call sets raw_user_meta_data->>'child_company_id'.
+  if (new.raw_user_meta_data->>'child_company_id') is not null then
+    insert into public.users (id, company_id, full_name, role)
+    values (
+      new.id,
+      (new.raw_user_meta_data->>'child_company_id')::uuid,
+      coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
+      'owner'
+    )
+    on conflict (id) do update
+      set company_id = excluded.company_id,
+          role       = excluded.role;
     return new;
   end if;
 
@@ -309,13 +361,38 @@ ALTER TABLE support_messages   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE demo_requests      ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
-CREATE POLICY "company_isolation_properties"    ON properties    FOR ALL USING (company_id = current_company_id());
-CREATE POLICY "company_isolation_leads"         ON leads         FOR ALL USING (company_id = current_company_id());
-CREATE POLICY "company_isolation_conversations" ON conversations FOR ALL USING (company_id = current_company_id());
-CREATE POLICY "company_isolation_appointments"  ON appointments  FOR ALL USING (company_id = current_company_id());
-CREATE POLICY "company_isolation_documents"     ON documents     FOR ALL USING (company_id = current_company_id());
-CREATE POLICY "users_own_row"                   ON users         FOR ALL USING (id = auth.uid());
-CREATE POLICY "users_see_company"               ON companies     FOR SELECT USING (id = current_company_id());
+-- Phase 6: SELECT is widened to accessible_company_ids() (self + children for a parent
+-- account, self only for child/normal). INSERT/UPDATE/DELETE remain scoped strictly to
+-- current_company_id() — all real writes go through the service-role backend client (which
+-- bypasses RLS), but this provides defense-in-depth against future direct-client writes.
+CREATE POLICY "company_isolation_properties_select" ON properties FOR SELECT USING (company_id = ANY(SELECT accessible_company_ids()));
+CREATE POLICY "company_isolation_properties_insert" ON properties FOR INSERT WITH CHECK (company_id = current_company_id());
+CREATE POLICY "company_isolation_properties_update" ON properties FOR UPDATE USING (company_id = current_company_id()) WITH CHECK (company_id = current_company_id());
+CREATE POLICY "company_isolation_properties_delete" ON properties FOR DELETE USING (company_id = current_company_id());
+
+CREATE POLICY "company_isolation_leads_select" ON leads FOR SELECT USING (company_id = ANY(SELECT accessible_company_ids()));
+CREATE POLICY "company_isolation_leads_insert" ON leads FOR INSERT WITH CHECK (company_id = current_company_id());
+CREATE POLICY "company_isolation_leads_update" ON leads FOR UPDATE USING (company_id = current_company_id()) WITH CHECK (company_id = current_company_id());
+CREATE POLICY "company_isolation_leads_delete" ON leads FOR DELETE USING (company_id = current_company_id());
+
+CREATE POLICY "company_isolation_conversations_select" ON conversations FOR SELECT USING (company_id = ANY(SELECT accessible_company_ids()));
+CREATE POLICY "company_isolation_conversations_insert" ON conversations FOR INSERT WITH CHECK (company_id = current_company_id());
+CREATE POLICY "company_isolation_conversations_update" ON conversations FOR UPDATE USING (company_id = current_company_id()) WITH CHECK (company_id = current_company_id());
+CREATE POLICY "company_isolation_conversations_delete" ON conversations FOR DELETE USING (company_id = current_company_id());
+
+CREATE POLICY "company_isolation_appointments_select" ON appointments FOR SELECT USING (company_id = ANY(SELECT accessible_company_ids()));
+CREATE POLICY "company_isolation_appointments_insert" ON appointments FOR INSERT WITH CHECK (company_id = current_company_id());
+CREATE POLICY "company_isolation_appointments_update" ON appointments FOR UPDATE USING (company_id = current_company_id()) WITH CHECK (company_id = current_company_id());
+CREATE POLICY "company_isolation_appointments_delete" ON appointments FOR DELETE USING (company_id = current_company_id());
+
+CREATE POLICY "company_isolation_documents_select" ON documents FOR SELECT USING (company_id = ANY(SELECT accessible_company_ids()));
+CREATE POLICY "company_isolation_documents_insert" ON documents FOR INSERT WITH CHECK (company_id = current_company_id());
+CREATE POLICY "company_isolation_documents_update" ON documents FOR UPDATE USING (company_id = current_company_id()) WITH CHECK (company_id = current_company_id());
+CREATE POLICY "company_isolation_documents_delete" ON documents FOR DELETE USING (company_id = current_company_id());
+
+CREATE POLICY "users_own_row"   ON users    FOR ALL    USING (id = auth.uid());
+-- companies: parent can see own row + children (for switcher dropdown); others see own only
+CREATE POLICY "users_see_company" ON companies FOR SELECT USING (id = ANY(SELECT accessible_company_ids()));
 
 -- demo_requests: public landing page form — anyone can submit, only the admin
 -- account can read/update (lead follow-up triage)
@@ -348,6 +425,7 @@ CREATE POLICY "support_update" ON support_messages FOR UPDATE
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Indexes
 -- ─────────────────────────────────────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_companies_parent     ON companies(parent_company_id);
 CREATE INDEX IF NOT EXISTS idx_leads_company       ON leads(company_id);
 CREATE INDEX IF NOT EXISTS idx_leads_status        ON leads(status);
 CREATE INDEX IF NOT EXISTS idx_leads_score         ON leads(score DESC);

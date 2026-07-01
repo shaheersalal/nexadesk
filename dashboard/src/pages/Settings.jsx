@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { api } from '../lib/api'
-import { Save, Link as LinkIcon, Mail, Copy, Check } from 'lucide-react'
+import { api, getAccessibleCompanies } from '../lib/api'
+import { Save, Link as LinkIcon, Mail, Copy, Check, Building2, Plus, Send } from 'lucide-react'
 
 const LISTINGS_INBOUND_DOMAIN = 'listings.nexadesk.site'
 
@@ -13,10 +13,39 @@ export default function Settings() {
   const [error, setError] = useState(null)
   const [copied, setCopied] = useState(false)
   const [emailCopied, setEmailCopied] = useState(false)
+  const [childCompanies, setChildCompanies] = useState([])
+  const [childForm, setChildForm] = useState({ name: '', invite_email: '', full_name: '' })
+  const [inviting, setInviting] = useState(false)
+  const [inviteResult, setInviteResult] = useState(null)
 
   useEffect(() => {
     loadCompany()
+    loadChildCompanies()
   }, [])
+
+  async function loadChildCompanies() {
+    try {
+      const all = await getAccessibleCompanies()
+      // Only children have parent_company_id set; exclude own row
+      setChildCompanies(all.filter((c) => c.parent_company_id !== null))
+    } catch {}
+  }
+
+  async function handleInviteChild(e) {
+    e.preventDefault()
+    setInviting(true)
+    setInviteResult(null)
+    try {
+      const result = await api.createChildCompany(childForm)
+      setInviteResult({ ok: true, msg: `Invite sent to ${result.invite_sent_to}. "${result.name}" is now a branch office.` })
+      setChildForm({ name: '', invite_email: '', full_name: '' })
+      loadChildCompanies()
+    } catch (err) {
+      setInviteResult({ ok: false, msg: err.message || 'Failed to create branch office' })
+    } finally {
+      setInviting(false)
+    }
+  }
 
   async function loadCompany() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -162,6 +191,75 @@ export default function Settings() {
           </button>
         </div>
       </div>
+
+      {/* Branch offices / child accounts — visible only for top-level (parent) accounts */}
+      {company && !company.parent_company_id && (
+        <div className="card mt-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Building2 className="w-4 h-4 text-gray-400" />
+            <h2 className="text-sm font-semibold text-gray-700">Branch Offices</h2>
+          </div>
+          <p className="text-xs text-gray-400 mb-4">
+            Invite a branch office or sub-team as a child account. They get their own login and data, while you see an aggregated view across all offices in your dashboard.
+          </p>
+
+          {childCompanies.length > 0 && (
+            <ul className="mb-4 space-y-1">
+              {childCompanies.map((c) => (
+                <li key={c.id} className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2">
+                  <Building2 className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                  {c.name}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <form onSubmit={handleInviteChild} className="space-y-3">
+            <h3 className="text-xs font-semibold text-gray-600">Add a branch office</h3>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Branch name</label>
+              <input
+                required
+                value={childForm.name}
+                onChange={(e) => setChildForm({ ...childForm, name: e.target.value })}
+                placeholder="e.g. Dubai Marina Branch"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Branch manager email</label>
+              <input
+                required
+                type="email"
+                value={childForm.invite_email}
+                onChange={(e) => setChildForm({ ...childForm, invite_email: e.target.value })}
+                placeholder="manager@branch.com"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Manager name (optional)</label>
+              <input
+                value={childForm.full_name}
+                onChange={(e) => setChildForm({ ...childForm, full_name: e.target.value })}
+                placeholder="Full name"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+            </div>
+            {inviteResult && (
+              <p className={`text-sm ${inviteResult.ok ? 'text-green-600' : 'text-red-600'}`}>
+                {inviteResult.msg}
+              </p>
+            )}
+            <div className="flex justify-end">
+              <button type="submit" disabled={inviting} className="btn-primary flex items-center gap-2">
+                <Send className="w-4 h-4" />
+                {inviting ? 'Sending invite…' : 'Invite Branch'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   )
 }

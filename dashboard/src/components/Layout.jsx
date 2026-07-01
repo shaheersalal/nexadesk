@@ -4,7 +4,9 @@ import { supabase } from '../lib/supabase'
 import {
   LayoutDashboard, Building2, BookOpen, Users, Calendar, Bot,
   Settings, LogOut, Phone, Menu, X, Sparkles, ShieldCheck, MessageSquare, LifeBuoy, BarChart3,
+  ChevronsUpDown,
 } from 'lucide-react'
+import { getAccessibleCompanies, getSelectedCompanyId, setSelectedCompanyId } from '../lib/api'
 
 const ADMIN_UID = '7227a933-56ef-45c4-8cbc-1c8331c74b21'
 import AssistantChat from './AssistantChat'
@@ -26,6 +28,8 @@ export default function Layout({ session }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [onboardingComplete, setOnboardingComplete] = useState(true) // default true to avoid flash
   const [supportOpen, setSupportOpen] = useState(false)
+  const [accessibleCompanies, setAccessibleCompanies] = useState([])
+  const [selectedId, setSelectedId] = useState(getSelectedCompanyId())
   const isAdmin = session?.user?.id === ADMIN_UID
 
   useEffect(() => {
@@ -37,8 +41,21 @@ export default function Layout({ session }) {
       const { data } = await supabase.from('companies').select('onboarding_complete').eq('id', userData.company_id).single()
       setOnboardingComplete(data?.onboarding_complete ?? false)
     }
+    async function loadCompanies() {
+      try {
+        const companies = await getAccessibleCompanies()
+        setAccessibleCompanies(companies)
+      } catch {}
+    }
     checkSetup()
+    loadCompanies()
   }, [])
+
+  function handleCompanySwitch(id) {
+    setSelectedCompanyId(id || null)
+    setSelectedId(id || null)
+    window.location.reload()
+  }
 
   async function handleSignOut() {
     if (!window.confirm('Sign out of NexaDesk?')) return
@@ -85,6 +102,25 @@ export default function Layout({ session }) {
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Company switcher — shown only for parent accounts with 2+ accessible companies */}
+        {accessibleCompanies.length > 1 && (
+          <div className="px-3 py-2 border-b border-navy-700">
+            <div className="relative">
+              <select
+                value={selectedId || ''}
+                onChange={(e) => handleCompanySwitch(e.target.value)}
+                className="w-full appearance-none bg-navy-700 text-white text-xs rounded-lg px-3 py-2 pr-7 focus:outline-none focus:ring-1 focus:ring-accent cursor-pointer"
+              >
+                <option value="">All offices</option>
+                {accessibleCompanies.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <ChevronsUpDown className="w-3.5 h-3.5 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+          </div>
+        )}
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {NAV.map(({ to, label, icon: Icon, exact }) => (

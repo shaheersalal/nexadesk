@@ -5,7 +5,7 @@ from datetime import datetime, timezone, date
 from fastapi import APIRouter, HTTPException, Depends, status, Query, Request
 from fastapi.responses import RedirectResponse
 
-from app.auth.middleware import CurrentUser, CompanyId
+from app.auth.middleware import CurrentUser, CompanyId, AccessibleCompanyIds
 from app.dependencies import get_supabase_admin
 from app.leads.models import (
     LeadCreate, LeadUpdate, LeadStatusUpdate,
@@ -21,18 +21,28 @@ def _sb():
     return get_supabase_admin()
 
 
+def _resolve_ids(accessible: list[str], filter_id: Optional[str]) -> list[str]:
+    """If filter_id is provided and is within the accessible set, narrow to it; else use all."""
+    if filter_id and filter_id in accessible:
+        return [filter_id]
+    return accessible
+
+
 # ── Leads CRUD ────────────────────────────────────────────────────────────────
 
 @router.get("/")
 async def list_leads(
     company_id: CompanyId,
+    accessible_company_ids: AccessibleCompanyIds,
     current_user: CurrentUser,
     status_filter: Optional[str] = Query(None, alias="status"),
     source: Optional[str] = None,
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0, le=50000),
+    filter_company_id: Optional[str] = Query(None, description="Narrow to one child company id"),
 ):
-    q = _sb().table("leads").select("*, conversations(id, channel, started_at)").eq("company_id", company_id)
+    ids = _resolve_ids(accessible_company_ids, filter_company_id)
+    q = _sb().table("leads").select("*, conversations(id, channel, started_at)").in_("company_id", ids)
     if status_filter:
         q = q.eq("status", status_filter)
     if source:
@@ -103,11 +113,14 @@ async def delete_lead(lead_id: UUID, company_id: CompanyId, current_user: Curren
 @router.get("/appointments/upcoming")
 async def list_appointments(
     company_id: CompanyId,
+    accessible_company_ids: AccessibleCompanyIds,
     current_user: CurrentUser,
     from_date: Optional[date] = None,
     limit: int = Query(20, le=100),
+    filter_company_id: Optional[str] = Query(None, description="Narrow to one child company id"),
 ):
-    q = _sb().table("appointments").select("*, leads(name, phone), properties(title, address)").eq("company_id", company_id)
+    ids = _resolve_ids(accessible_company_ids, filter_company_id)
+    q = _sb().table("appointments").select("*, leads(name, phone), properties(title, address)").in_("company_id", ids)
     if from_date:
         q = q.gte("datetime", from_date.isoformat())
     else:
@@ -174,26 +187,32 @@ async def delete_appointment(appt_id: UUID, company_id: CompanyId, current_user:
 # ── Analytics ─────────────────────────────────────────────────────────────────
 
 @router.get("/analytics/summary")
-async def get_analytics(company_id: CompanyId, current_user: CurrentUser):
+async def get_analytics(
+    company_id: CompanyId,
+    accessible_company_ids: AccessibleCompanyIds,
+    current_user: CurrentUser,
+    filter_company_id: Optional[str] = Query(None, description="Narrow to one child company id"),
+):
     sb = _sb()
     today = date.today().isoformat()
+    ids = _resolve_ids(accessible_company_ids, filter_company_id)
 
-    leads = sb.table("leads").select("source, status, score").eq("company_id", company_id).execute()
+    leads = sb.table("leads").select("source, status, score").in_("company_id", ids).execute()
     leads_data = leads.data or []
 
-    conversations = sb.table("conversations").select("channel").eq("company_id", company_id).execute()
+    conversations = sb.table("conversations").select("channel").in_("company_id", ids).execute()
     conv_data = conversations.data or []
 
     appointments = (
         sb.table("appointments").select("id")
-        .eq("company_id", company_id)
+        .in_("company_id", ids)
         .gte("datetime", datetime.now(timezone.utc).isoformat())
         .eq("status", "scheduled")
         .execute()
     )
 
     leads_today_count = len(
-        sb.table("leads").select("id").eq("company_id", company_id).gte("created_at", today).execute().data or []
+        sb.table("leads").select("id").in_("company_id", ids).gte("created_at", today).execute().data or []
     )
 
     by_source: dict[str, int] = {}

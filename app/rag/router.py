@@ -1,11 +1,11 @@
 from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, BackgroundTasks, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.auth.middleware import CurrentUser, CompanyId
+from app.auth.middleware import CurrentUser, CompanyId, AccessibleCompanyIds
 from app.config import get_settings
 from app.dependencies import get_supabase_admin
 from app.rag.pipeline import ingest_file, ingest_text
@@ -167,12 +167,18 @@ async def query_rag(
 # ── List documents ────────────────────────────────────────────────────────────
 
 @router.get("/documents")
-async def list_documents(company_id: CompanyId, current_user: CurrentUser):
+async def list_documents(
+    company_id: CompanyId,
+    accessible_company_ids: AccessibleCompanyIds,
+    current_user: CurrentUser,
+    filter_company_id: Optional[str] = Query(None, description="Narrow to one child company id"),
+):
+    ids = [filter_company_id] if filter_company_id and filter_company_id in accessible_company_ids else accessible_company_ids
     sb = get_supabase_admin()
     result = (
         sb.table("documents")
         .select("*")
-        .eq("company_id", company_id)
+        .in_("company_id", ids)
         .order("created_at", desc=True)
         .execute()
     )

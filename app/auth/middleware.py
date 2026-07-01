@@ -8,10 +8,12 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, status
 
 from app.dependencies import get_current_user, get_supabase_admin, get_company_id
+from app.shared.accessible_companies import get_accessible_company_ids
 
 # Re-export for convenience
 CurrentUser = Annotated[dict, Depends(get_current_user)]
 CompanyId = Annotated[str, Depends(get_company_id)]
+AccessibleCompanyIds = Annotated[list[str], Depends(get_accessible_company_ids)]
 
 
 async def require_owner_or_admin(current_user: CurrentUser) -> dict:

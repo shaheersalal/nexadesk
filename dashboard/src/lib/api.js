@@ -13,11 +13,15 @@ async function authHeaders() {
 // ── Company ID (cached per auth session) ─────────────────────────────────────
 
 let _companyId = null
+let _accessibleCompanies = null
+const SELECTED_COMPANY_KEY = 'nexadesk_selected_company'
 
-// Reset cache on logout so a second user logging in on the same tab
-// never inherits the previous user's company_id.
 supabase.auth.onAuthStateChange((event) => {
-  if (event === 'SIGNED_OUT') _companyId = null
+  if (event === 'SIGNED_OUT') {
+    _companyId = null
+    _accessibleCompanies = null
+    localStorage.removeItem(SELECTED_COMPANY_KEY)
+  }
 })
 
 async function getCompanyId() {
@@ -29,8 +33,34 @@ async function getCompanyId() {
   return _companyId
 }
 
-// Exported so Dashboard can reuse without duplicating the fetch logic
+// Exported so Dashboard and Layout can reuse without duplicating the fetch logic
 export { getCompanyId }
+
+// ── Phase 6: company switcher (parent/child multi-tenant) ─────────────────────
+// Returns the company the user has manually selected via the switcher, or null
+// (= aggregate across all accessible companies via RLS).
+export function getSelectedCompanyId() {
+  return localStorage.getItem(SELECTED_COMPANY_KEY) || null
+}
+
+export function setSelectedCompanyId(id) {
+  if (id) localStorage.setItem(SELECTED_COMPANY_KEY, id)
+  else localStorage.removeItem(SELECTED_COMPANY_KEY)
+}
+
+// Returns all company rows the current user can access (self + children for a
+// parent account, self only for normal/child accounts). RLS scopes this query.
+// Result is cached for the auth session lifetime.
+export async function getAccessibleCompanies() {
+  if (_accessibleCompanies) return _accessibleCompanies
+  const { data, error } = await supabase
+    .from('companies')
+    .select('id, name, parent_company_id')
+    .order('name')
+  if (error) throw new Error(error.message)
+  _accessibleCompanies = data || []
+  return _accessibleCompanies
+}
 
 // ── HF API request (writes / business logic only) ────────────────────────────
 
@@ -54,15 +84,20 @@ async function request(method, path, body, isFormData = false) {
   return res.json()
 }
 
-// ── Supabase direct reads (fast — no HF roundtrip) ───────────────────────────
+// ── Supabase direct reads (fast — no HF roundtrip) ────────────────────────────
+// Phase 6: company_id filter removed from list queries. The updated RLS policy
+// (accessible_company_ids()) scopes each query to exactly the right rows:
+//   • single-company / child users  → only their own company's rows (unchanged)
+//   • parent account, no switcher   → aggregated across self + all children
+//   • parent account, switcher set  → narrowed to the selected company id
 
 async function sbLeads(params = {}) {
-  const cid = await getCompanyId()
+  const selectedId = getSelectedCompanyId()
   let q = supabase.from('leads')
     .select('*, conversations(id, channel, started_at)')
-    .eq('company_id', cid)
     .order('created_at', { ascending: false })
     .limit(params.limit || 50)
+  if (selectedId) q = q.eq('company_id', selectedId)
   if (params.status) q = q.eq('status', params.status)
   if (params.source) q = q.eq('source', params.source)
   const { data, error } = await q
@@ -71,57 +106,61 @@ async function sbLeads(params = {}) {
 }
 
 async function sbLead(id) {
-  const cid = await getCompanyId()
+  // RLS scopes single-record reads to accessible companies automatically.
   const { data, error } = await supabase.from('leads')
     .select('*, conversations(*), appointments(*)')
     .eq('id', id)
-    .eq('company_id', cid)
     .single()
   if (error) throw new Error(error.message)
   return data
 }
 
 async function sbAppointments() {
-  const cid = await getCompanyId()
-  const { data, error } = await supabase.from('appointments')
+  const selectedId = getSelectedCompanyId()
+  let q = supabase.from('appointments')
     .select('*, leads(name, phone), properties(title, address)')
-    .eq('company_id', cid)
     .gte('datetime', new Date().toISOString())
     .order('datetime')
     .limit(20)
+  if (selectedId) q = q.eq('company_id', selectedId)
+  const { data, error } = await q
   if (error) throw new Error(error.message)
   return data
 }
 
 async function sbProperties() {
-  const cid = await getCompanyId()
-  const { data, error } = await supabase.from('properties')
+  const selectedId = getSelectedCompanyId()
+  let q = supabase.from('properties')
     .select('*')
-    .eq('company_id', cid)
     .order('created_at', { ascending: false })
+  if (selectedId) q = q.eq('company_id', selectedId)
+  const { data, error } = await q
   if (error) throw new Error(error.message)
   return data
 }
 
 async function sbDocuments() {
-  const cid = await getCompanyId()
-  const { data, error } = await supabase.from('documents')
+  const selectedId = getSelectedCompanyId()
+  let q = supabase.from('documents')
     .select('*')
-    .eq('company_id', cid)
     .order('created_at', { ascending: false })
+  if (selectedId) q = q.eq('company_id', selectedId)
+  const { data, error } = await q
   if (error) throw new Error(error.message)
   return data
 }
 
 async function sbAnalytics() {
-  const cid = await getCompanyId()
+  const selectedId = getSelectedCompanyId()
   const todayIso = new Date(new Date().setHours(0, 0, 0, 0)).toISOString()
 
+  function f(q) { return selectedId ? q.eq('company_id', selectedId) : q }
+
   const [leadsRes, todayRes, apptRes, convRes] = await Promise.all([
-    supabase.from('leads').select('source, status, score').eq('company_id', cid),
-    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('company_id', cid).gte('created_at', todayIso),
-    supabase.from('appointments').select('id', { count: 'exact', head: true }).eq('company_id', cid).gte('datetime', new Date().toISOString()).eq('status', 'scheduled'),
-    supabase.from('conversations').select('id', { count: 'exact', head: true }).eq('company_id', cid),
+    f(supabase.from('leads').select('source, status, score')),
+    f(supabase.from('leads').select('id', { count: 'exact', head: true }).gte('created_at', todayIso)),
+    f(supabase.from('appointments').select('id', { count: 'exact', head: true }).gte('datetime', new Date().toISOString()).eq('status', 'scheduled')),
+    f(supabase.from('conversations').select('id', { count: 'exact', head: true })),
   ])
 
   if (leadsRes.error) throw new Error(leadsRes.error.message)
@@ -168,7 +207,9 @@ export const api = {
   getAnalytics: () => sbAnalytics(),
 
   // Company — writes: HF API (RLS has no UPDATE policy for direct writes)
-  updateCompany: (data) => request('PATCH', '/companies/me', data),
+  updateCompany:           (data) => request('PATCH', '/companies/me', data),
+  listAccessibleCompanies: ()     => request('GET', '/companies/accessible'),
+  createChildCompany:      (data) => request('POST', '/companies/child', data),
 
   // Properties — reads: Supabase direct, writes: HF API (triggers RAG ingest)
   getProperties:   ()         => sbProperties(),

@@ -3,7 +3,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 
-from app.auth.middleware import CurrentUser, CompanyId
+from typing import Optional
+from fastapi import Query
+from app.auth.middleware import CurrentUser, CompanyId, AccessibleCompanyIds
 from app.dependencies import get_supabase_admin
 from app.properties.models import PropertyCreate, PropertyUpdate, property_to_text
 
@@ -15,9 +17,14 @@ def _supabase():
 
 
 @router.get("/")
-async def list_properties(company_id: CompanyId):
+async def list_properties(
+    company_id: CompanyId,
+    accessible_company_ids: AccessibleCompanyIds,
+    filter_company_id: Optional[str] = Query(None, description="Narrow to one child company id"),
+):
+    ids = [filter_company_id] if filter_company_id and filter_company_id in accessible_company_ids else accessible_company_ids
     sb = _supabase()
-    result = sb.table("properties").select("*").eq("company_id", company_id).order("created_at", desc=True).execute()
+    result = sb.table("properties").select("*").in_("company_id", ids).order("created_at", desc=True).execute()
     return result.data
 
 
