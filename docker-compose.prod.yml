@@ -49,6 +49,18 @@ services:
       retries: 5
     restart: always
 
+  # Exposes the backend publicly over HTTPS with no account or port-forwarding needed.
+  # The public URL changes every restart — run:
+  #   docker compose -f docker-compose.prod.yml logs -f cloudflare
+  # to get the current https://*.trycloudflare.com URL, then set that as
+  # APP_BASE_URL in .env and VITE_API_URL for the frontend build.
+  cloudflare:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://app:8000
+    depends_on:
+      - app
+    restart: always
+
 volumes:
   qdrant_data:
   redis_data:

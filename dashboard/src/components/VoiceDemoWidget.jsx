@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { Mic, Loader2, Volume2 } from 'lucide-react'
 
-const DEFAULT_API_BASE = 'https://shaheersalal-nexadesk.hf.space'
+const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const CONNECT_TIMEOUT_MS = 5000
 const FALLBACK_MSG = "Demo is warming up — try again in a moment."
 

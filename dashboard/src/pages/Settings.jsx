@@ -79,13 +79,14 @@ export default function Settings() {
     }
   }
 
+  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000'
   const widgetCode = company ? `<script>
   window.NexaDeskConfig = {
     companyId: "${company.id}",
-    apiBase: "https://shaheersalal-nexadesk.hf.space",
+    apiBase: "${apiBase}",
   };
 </script>
-<script src="https://shaheersalal-nexadesk.hf.space/widget.js" defer></script>` : ''
+<script src="${apiBase}/widget.js" defer></script>` : ''
 
   function copyWidget() {
     navigator.clipboard.writeText(widgetCode)

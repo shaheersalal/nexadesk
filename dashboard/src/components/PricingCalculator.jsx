@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Sparkles } from 'lucide-react'
 
-const API = 'https://shaheersalal-nexadesk.hf.space'
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 // Local mirror of the backend formula (app/pricing/router.py) — used only for
 // instant slider/card feedback. The real price for any "Offer" action always

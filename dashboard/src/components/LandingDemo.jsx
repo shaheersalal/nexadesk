@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Send } from 'lucide-react'
 
-const API = 'https://shaheersalal-nexadesk.hf.space'
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 const OPENING_MSG = "Good day! I'm Nexa, the AI receptionist for Palm Elite Properties. Are you looking to buy, rent, or would you like to schedule a viewing today?"
 

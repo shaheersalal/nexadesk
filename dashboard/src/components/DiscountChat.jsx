@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Send, Tag } from 'lucide-react'
 
-const API = 'https://shaheersalal-nexadesk.hf.space'
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 function getSessionId() {
   let id = sessionStorage.getItem('nexadesk_discount_session')
