@@ -1,17 +1,29 @@
 # Self-Hosting NexaDesk (Docker)
 
-This runs the backend on a local machine instead of (or alongside) the Hugging
-Face Space, using `docker-compose.prod.yml`. There is no managed always-on
-host behind this — if the machine sleeps, reboots, or Docker Desktop restarts,
-the stack stops and must be started again manually. The frontend's fallback
-behavior (see "What happens when it's down" below) is what keeps the public
-site honest in the meantime.
+The backend runs on your local machine via `docker-compose.prod.yml` and is
+exposed publicly at **https://api.nexadesk.site** via a named Cloudflare
+Tunnel (tunnel ID `2227df6b-94dd-478e-beb1-20688425b808`, CNAME record in
+Namecheap DNS). The URL never changes — no HuggingFace dependency.
+
+There is no managed always-on host — if the machine sleeps, reboots, or
+Docker Desktop restarts, the stack stops and must be started again manually.
+The frontend's fallback behavior keeps the public site honest in the meantime.
+
+**Prerequisites (one-time on a new machine):**
+1. Install cloudflared, run `cloudflared tunnel login`, then
+   `cloudflared tunnel create nexadesk-api` — update the tunnel UUID above
+   and in `~/.cloudflared/config.yml`.
+2. Add CNAME `api → 2227df6b-94dd-478e-beb1-20688425b808.cfargotunnel.com`
+   in Namecheap DNS for nexadesk.site.
 
 ## Start it up
 
 ```
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml -p nexadesk_prod up -d --build
 ```
+
+Use `-p nexadesk_prod` to keep the prod containers separate from the dev
+stack (which runs via `docker-compose.yml` on port 8100).
 
 First run builds the image (a few minutes). After that, `up -d` (no
 `--build`) is enough unless backend code changed.
@@ -19,8 +31,8 @@ First run builds the image (a few minutes). After that, `up -d` (no
 Verify it's healthy:
 
 ```
-docker compose -f docker-compose.prod.yml ps
-curl http://localhost:8000/docs
+docker compose -f docker-compose.prod.yml -p nexadesk_prod ps
+curl https://api.nexadesk.site/docs
 ```
 
 All three services (`app`, `qdrant`, `redis`) should show `Up`/`healthy`.

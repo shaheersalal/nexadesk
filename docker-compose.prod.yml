@@ -49,14 +49,16 @@ services:
       retries: 5
     restart: always
 
-  # Exposes the backend publicly over HTTPS with no account or port-forwarding needed.
-  # The public URL changes every restart — run:
-  #   docker compose -f docker-compose.prod.yml logs -f cloudflare
-  # to get the current https://*.trycloudflare.com URL, then set that as
-  # APP_BASE_URL in .env and VITE_API_URL for the frontend build.
+  # Named Cloudflare Tunnel → permanent URL: https://api.nexadesk.site
+  # Credentials live in ~/.cloudflared/ (never in this repo).
+  # To set up on a fresh machine: run cloudflared tunnel login, then
+  # cloudflared tunnel create nexadesk-api, update the UUID below and in
+  # ~/.cloudflared/config.yml, and add the CNAME in Namecheap DNS.
   cloudflare:
     image: cloudflare/cloudflared:latest
-    command: tunnel --no-autoupdate --url http://app:8000
+    command: tunnel --no-autoupdate run nexadesk-api
+    volumes:
+      - C:/Users/DELL/.cloudflared:/home/nonroot/.cloudflared:ro
     depends_on:
       - app
     restart: always
