@@ -4,48 +4,24 @@ nexadesk.site and shaheer.dev).
 
 Push-to-talk, not continuous streaming: the client records one full turn with
 MediaRecorder and sends the finished blob as a single binary WS frame. Each
-turn is: Whisper STT -> agents/orchestrator.run() (real RAG-grounded reply,
-same pipeline as the dashboard chat) -> OpenAI TTS -> binary audio frame back.
+turn is: faster-whisper STT -> orchestrator (RAG-grounded reply) -> Kokoro TTS
+-> binary MP3 frame back to the browser.
 
-Uses EMBED_API_KEY (the genuine OpenAI account key, also used for embeddings)
-for Whisper + tts-1, since LLM_API_KEY may point at a non-OpenAI model.
+Both STT and TTS are fully self-hosted (no API key needed).
 """
-import io
 import logging
-import uuid
 
-import openai
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.agents.orchestrator import run as orchestrator_run
-from app.config import get_settings
 from app.shared.demo_company import resolve_demo_company
+from app.voice_demo.local_stt import transcribe
+from app.voice_demo.local_tts import synthesize
 
 router = APIRouter()
-settings = get_settings()
 logger = logging.getLogger("nexadesk.voice_demo")
 
-MAX_TURNS = 20  # mirrors chat demo_router's MAX_MESSAGES ceiling, per-connection here
-
-
-def _openai_client() -> openai.AsyncOpenAI:
-    return openai.AsyncOpenAI(api_key=settings.EMBED_API_KEY)
-
-
-async def _transcribe(audio_bytes: bytes) -> str:
-    """OpenAI Whisper STT. Browser MediaRecorder defaults to webm/opus."""
-    client = _openai_client()
-    buf = io.BytesIO(audio_bytes)
-    buf.name = "audio.webm"
-    response = await client.audio.transcriptions.create(model="whisper-1", file=buf)
-    return response.text
-
-
-async def _synthesize(text: str) -> bytes:
-    """OpenAI TTS, tts-1 model. Returns MP3 bytes."""
-    client = _openai_client()
-    response = await client.audio.speech.create(model="tts-1", voice="alloy", input=text)
-    return response.content
+MAX_TURNS = 20
 
 
 @router.websocket("/stream")
@@ -78,12 +54,12 @@ async def voice_demo_stream(websocket: WebSocket):
 
             await websocket.send_json({"type": "status", "stage": "transcribing"})
             try:
-                transcript = await _transcribe(audio_bytes)
+                transcript = await transcribe(audio_bytes)
             except Exception as e:
-                logger.error(f"Voice demo STT failed: {e}")
+                logger.error("Voice demo STT failed: %s", e)
                 await websocket.send_json({
                     "type": "error",
-                    "message": "Demo is warming up — try again in a moment.",
+                    "message": "Transcription failed — try again.",
                 })
                 continue
 
@@ -104,7 +80,7 @@ async def voice_demo_stream(websocket: WebSocket):
                     lead_id=lead_id,
                 )
             except Exception as e:
-                logger.error(f"Voice demo orchestrator failed: {e}")
+                logger.error("Voice demo orchestrator failed: %s", e)
                 await websocket.send_json({
                     "type": "error",
                     "message": "Demo is warming up — try again in a moment.",
@@ -120,9 +96,9 @@ async def voice_demo_stream(websocket: WebSocket):
             await websocket.send_json({"type": "status", "stage": "speaking"})
 
             try:
-                audio_reply = await _synthesize(reply)
+                audio_reply = await synthesize(reply)
             except Exception as e:
-                logger.error(f"Voice demo TTS failed: {e}")
+                logger.error("Voice demo TTS failed: %s", e)
                 await websocket.send_json({
                     "type": "error",
                     "message": "Got a reply but couldn't voice it — see the text above.",

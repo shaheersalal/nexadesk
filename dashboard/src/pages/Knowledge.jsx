@@ -64,6 +64,7 @@ export default function Knowledge() {
       api.getDocuments().then((docs) => {
         setDocuments(docs)
         const stillPending = docs.filter((d) => d.status === 'processing').length
+        if (stillPending === 0) showToast('All documents indexed and ready')
         setProcessingCount(stillPending)
       }).catch(console.error)
     }, 3000)
@@ -83,6 +84,8 @@ export default function Knowledge() {
       setProcessingCount((n) => n + queued)
       showToast(`${queued === 1 ? 'File' : `${queued} files`} uploaded — indexing in background`)
       api.getDocuments().then(setDocuments).catch(console.error)
+    } else if (files.length > 0) {
+      showToast('Upload failed — check your connection and try again')
     }
   }
 
@@ -104,6 +107,10 @@ export default function Knowledge() {
       setProcessingCount((n) => n + 1)
       showToast('Text added — indexing in background')
       api.getDocuments().then(setDocuments).catch(console.error)
+    } else {
+      setTextInput(text)
+      setTextTitle(title !== 'Pasted text' ? title : '')
+      showToast('Failed to add text — please try again')
     }
   }
 

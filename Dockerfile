@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 # gcc needed for some packages (bcrypt, cryptography); ffmpeg needed by
 # app/voice/tts.py to convert ElevenLabs MP3 output to 8kHz mulaw for Twilio
-RUN apt-get update && apt-get install -y --no-install-recommends gcc ffmpeg && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends gcc ffmpeg espeak-ng libespeak-ng1 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -22,6 +22,22 @@ ENV TIKTOKEN_CACHE_DIR=/app/.tiktoken_cache
 RUN pip install --no-cache-dir tiktoken==0.8.0 langdetect==1.0.9 deep-translator==1.11.4 \
     && python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')"
 RUN pip install --no-cache-dir python-pptx==1.0.2
+
+# Self-hosted STT (faster-whisper) + TTS (kokoro-onnx)
+RUN pip install --no-cache-dir faster-whisper==1.1.1
+RUN pip install --no-cache-dir kokoro-onnx soundfile
+
+# Pre-warm Whisper base.en (~150 MB) — baked into the image so the first
+# voice demo request never blocks on a model download.
+ENV WHISPER_CACHE_DIR=/app/.models/whisper
+RUN python -c "\
+from faster_whisper import WhisperModel; \
+WhisperModel('base.en', device='cpu', compute_type='int8', download_root='/app/.models/whisper')"
+
+# Kokoro v1.0 int8 model + voices — pre-downloaded on the host into
+# models/kokoro/ and COPYed in so the build never depends on GitHub uptime.
+ENV KOKORO_CACHE_DIR=/app/.models/kokoro
+COPY models/kokoro /app/.models/kokoro
 
 COPY . .
 

@@ -38,6 +38,10 @@ dist/
 .vscode/
 .idea/
 
+# ML model files (large binaries — downloaded separately, not versioned)
+models/
+.models/
+
 # Credentials
 cloudflared-creds/
 *.pem

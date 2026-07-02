@@ -189,12 +189,12 @@ export default function Landing() {
             <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900 font-medium px-4 py-2">
               Log in
             </Link>
-            <button
-              onClick={() => setDemoOpen(true)}
+            <Link
+              to="/login?mode=signup"
               className="text-sm bg-navy-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-navy-700 transition-colors"
             >
-              See It in Action
-            </button>
+              Sign up
+            </Link>
           </div>
         </div>
       </nav>
