@@ -202,10 +202,7 @@ export default function Landing() {
       {/* Hero */}
       <section id="hero" className="pt-32 pb-20 px-6 bg-gradient-to-b from-navy-600 to-navy-700">
         <div className="max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 bg-white/10 text-accent text-xs font-medium px-3 py-1.5 rounded-full mb-6">
-            <Clock className="w-3 h-3" />
-            Your AI answers. You close deals.
-          </div>
+          <p className="text-accent text-sm font-medium tracking-wide mb-4">Your AI answers. You close deals.</p>
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
             Never Miss a Client.<br />
             <span className="text-accent">Your AI Receptionist</span><br />
