@@ -292,7 +292,7 @@ export default function Landing() {
                 Talk or type — ask about any property, Golden Visa, mortgage rates, or investment returns. Nexa responds in your language.
               </p>
               <a
-                href="https://nexadesk-1j2y-p5gc1nuno-shaheer-salal-s-projects.vercel.app/"
+                href="https://nexadesk-1j2y.vercel.app/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 bg-accent text-white px-8 py-3 rounded-full font-semibold text-sm hover:opacity-90 transition-opacity"
