@@ -5,6 +5,8 @@ import {
   Linkedin, Briefcase, Wrench, RefreshCw, ShoppingBag, ChevronDown, Lock, Tag,
   Database, Puzzle, Code2,
 } from 'lucide-react'
+import LandingDemo from '../components/LandingDemo'
+import VoiceDemoWidget from '../components/VoiceDemoWidget'
 import DemoPreviewModal from '../components/DemoPreviewModal'
 import PricingCalculator from '../components/PricingCalculator'
 import DiscountChat from '../components/DiscountChat'
@@ -134,6 +136,7 @@ function FaqItem({ item, open, onToggle }) {
 
 export default function Landing() {
   const [demoOpen, setDemoOpen] = useState(false)
+  const [demoMode, setDemoMode] = useState('chat')
   const [offerPlan, setOfferPlan] = useState(null)
   const [openFaq, setOpenFaq] = useState(0)
   const [activeSection, setActiveSection] = useState('hero')
@@ -279,28 +282,27 @@ export default function Landing() {
       {/* Demo */}
       <section id="demo" className="py-20 px-6 bg-gray-50 scroll-mt-16">
         <Reveal>
-          <div className="max-w-2xl mx-auto text-center">
-            <h2 className="text-3xl font-bold text-gray-900">See It in Action</h2>
-            <p className="text-gray-500 mt-3 mb-10">This is exactly what your clients experience when they contact your agency.</p>
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10 flex flex-col items-center gap-6">
-              <div className="flex gap-3 flex-wrap justify-center">
-                {['🎙️ Voice Demo', '💬 Chat Demo', '🌐 Urdu · Arabic · English', '💰 Currency Conversion'].map(f => (
-                  <span key={f} className="text-xs bg-gray-50 border border-gray-200 text-gray-600 px-3 py-1.5 rounded-full">{f}</span>
-                ))}
-              </div>
-              <p className="text-gray-500 text-sm max-w-sm">
-                Talk or type — ask about any property, Golden Visa, mortgage rates, or investment returns. Nexa responds in your language.
-              </p>
-              <a
-                href="https://nexadesk-1j2y.vercel.app/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 bg-accent text-white px-8 py-3 rounded-full font-semibold text-sm hover:opacity-90 transition-opacity"
-              >
-                Open Live Demo <ArrowRight size={16} />
-              </a>
-              <p className="text-xs text-gray-400">Opens in a new tab — no sign-up required</p>
+          <div className="max-w-2xl mx-auto">
+            <div className="text-center mb-10">
+              <h2 className="text-3xl font-bold text-gray-900">See It in Action</h2>
+              <p className="text-gray-500 mt-3">This is exactly what your clients experience when they contact your agency.</p>
             </div>
+            <div className="flex justify-center gap-2 mb-6">
+              {[['chat', 'Chat'], ['voice', 'Voice']].map(([mode, label]) => (
+                <button
+                  key={mode}
+                  onClick={() => setDemoMode(mode)}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${
+                    demoMode === mode
+                      ? 'bg-accent text-white'
+                      : 'bg-white text-gray-500 border border-gray-200 hover:text-gray-700'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {demoMode === 'chat' ? <LandingDemo /> : <VoiceDemoWidget />}
           </div>
         </Reveal>
       </section>

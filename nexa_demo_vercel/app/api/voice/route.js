@@ -3,20 +3,28 @@ import { VOICE_SYSTEM, LANG_NAMES } from '@/lib/demoPrompt'
 
 export const maxDuration = 30
 
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+}
+
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: CORS })
+}
+
 export async function POST(request) {
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   try {
     const formData = await request.formData()
-    const audioFile = formData.get('audio')   // File/Blob
+    const audioFile = formData.get('audio')
     const lang      = formData.get('lang') || 'en'
     const history   = JSON.parse(formData.get('history') || '[]')
 
     if (!audioFile) {
-      return Response.json({ error: 'No audio' }, { status: 400 })
+      return Response.json({ error: 'No audio' }, { status: 400, headers: CORS })
     }
 
-    // ── STT ──────────────────────────────────────────────────────────
-    // Give the file a proper name so whisper knows the container format.
     const ext = audioFile.type?.includes('mp4') || audioFile.type?.includes('m4a') ? 'm4a'
               : audioFile.type?.includes('ogg') ? 'ogg'
               : 'webm'
@@ -29,12 +37,9 @@ export async function POST(request) {
     const transcript = transcription.text?.trim()
 
     if (!transcript) {
-      return Response.json({ error: "Didn't catch that — try again." }, { status: 422 })
+      return Response.json({ error: "Didn't catch that — try again." }, { status: 422, headers: CORS })
     }
 
-    // ── LLM ──────────────────────────────────────────────────────────
-    // Embed the language instruction directly in the user message — much more
-    // reliable than burying it in a long system prompt.
     const langName = LANG_NAMES[lang]
     const userContent = langName
       ? `[Respond in ${langName} only — do not use English]\n\n${transcript}`
@@ -54,10 +59,9 @@ export async function POST(request) {
 
     const reply = completion.choices[0].message.content?.trim()
     if (!reply) {
-      return Response.json({ error: 'No response — try again.' }, { status: 500 })
+      return Response.json({ error: 'No response — try again.' }, { status: 500, headers: CORS })
     }
 
-    // ── TTS ──────────────────────────────────────────────────────────
     const tts = await openai.audio.speech.create({
       model: 'tts-1',
       voice: 'alloy',
@@ -70,13 +74,12 @@ export async function POST(request) {
     return Response.json({
       transcript,
       reply,
-      // Stored in history without the language prefix so context stays clean
       historyUser:      transcript,
       historyAssistant: reply,
       audio: audioBuffer.toString('base64'),
-    })
+    }, { headers: CORS })
   } catch (err) {
     console.error('Voice error:', err)
-    return Response.json({ error: 'Something went wrong — try again.' }, { status: 500 })
+    return Response.json({ error: 'Something went wrong — try again.' }, { status: 500, headers: CORS })
   }
 }

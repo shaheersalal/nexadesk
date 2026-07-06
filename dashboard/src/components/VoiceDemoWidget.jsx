@@ -1,186 +1,211 @@
+'use client'
 import { useState, useRef, useCallback } from 'react'
-import { Mic, Loader2, Volume2 } from 'lucide-react'
+import { Mic, MicOff, Loader2, Volume2 } from 'lucide-react'
 
-const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-const CONNECT_TIMEOUT_MS = 5000
-const FALLBACK_MSG = "Demo is warming up — try again in a moment."
+const VERCEL_API = 'https://nexadesk-1j2y.vercel.app'
 
-function wsUrl(apiBase) {
-  return apiBase.replace(/^http/, 'ws') + '/voice-demo/stream'
+const LANGUAGES = [
+  { code: 'en',   label: 'English'  },
+  { code: 'ur',   label: 'اردو'     },
+  { code: 'ar',   label: 'العربية'  },
+  { code: 'auto', label: 'Auto'     },
+]
+
+const MIN_RECORD_MS     = 1500
+const ENCODER_WARMUP_MS = 250
+
+function bestMimeType() {
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus']
+  return candidates.find(t => MediaRecorder.isTypeSupported(t)) ?? ''
 }
 
-const STAGE_LABELS = {
-  idle: 'Hold to talk',
-  connecting: 'Connecting…',
-  recording: 'Listening… release to send',
-  transcribing: 'Transcribing…',
-  thinking: 'Thinking…',
-  speaking: 'Speaking…',
-}
-
-const BUSY_STAGES = ['connecting', 'transcribing', 'thinking', 'speaking']
-
-/**
- * Self-contained push-to-talk voice demo. Pass `apiBase` to point it at any
- * backend running the WS /voice-demo/stream endpoint — same component drops
- * onto nexadesk.site or shaheer.dev unchanged.
- */
-export default function VoiceDemoWidget({ apiBase = DEFAULT_API_BASE }) {
-  const [stage, setStage] = useState('idle')
+export default function VoiceDemoWidget() {
+  const [stage, setStage]           = useState('idle')   // idle | recording | processing | speaking | error
+  const [lang, setLang]             = useState('en')
   const [transcript, setTranscript] = useState('')
-  const [replyText, setReplyText] = useState('')
-  const [errorMsg, setErrorMsg] = useState('')
+  const [replyText, setReplyText]   = useState('')
+  const [errorMsg, setErrorMsg]     = useState('')
+  const [history, setHistory]       = useState([])
 
-  const wsRef = useRef(null)
-  const mediaRecorderRef = useRef(null)
-  const chunksRef = useRef([])
-  const audioRef = useRef(null)
+  const recorderRef  = useRef(null)
+  const chunksRef    = useRef([])
+  const streamRef    = useRef(null)
+  const langRef      = useRef('en')
+  const startRef     = useRef(0)
+  const shouldSend   = useRef(true)
+  const audioRef     = useRef(null)
 
-  const showFallback = useCallback((msg) => {
-    setStage('error')
-    setErrorMsg(msg || FALLBACK_MSG)
-  }, [])
+  const handleLangChange = (code) => { setLang(code); langRef.current = code }
 
-  const handleMessage = useCallback((event) => {
-    if (typeof event.data === 'string') {
-      let msg
-      try {
-        msg = JSON.parse(event.data)
-      } catch {
-        return
-      }
-      if (msg.type === 'status') setStage(msg.stage)
-      else if (msg.type === 'transcript') setTranscript(msg.text)
-      else if (msg.type === 'reply_text') setReplyText(msg.text)
-      else if (msg.type === 'error') showFallback(msg.message)
-    } else {
-      const blob = new Blob([event.data], { type: 'audio/mpeg' })
-      const url = URL.createObjectURL(blob)
-      if (audioRef.current) {
-        audioRef.current.src = url
-        audioRef.current.play().catch(() => {})
-      }
-    }
-  }, [showFallback])
+  const showError = (msg) => { setStage('error'); setErrorMsg(msg) }
 
-  const ensureSocket = useCallback(() => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      return Promise.resolve(wsRef.current)
-    }
-    return new Promise((resolve, reject) => {
-      let settled = false
-      const ws = new WebSocket(wsUrl(apiBase))
-      ws.binaryType = 'arraybuffer'
+  const playBase64Mp3 = (b64) => {
+    setStage('speaking')
+    const src = `data:audio/mpeg;base64,${b64}`
+    if (!audioRef.current) audioRef.current = new Audio()
+    audioRef.current.src = src
+    audioRef.current.onended = () => setStage('idle')
+    audioRef.current.onerror = () => setStage('idle')
+    audioRef.current.play().catch(() => setStage('idle'))
+  }
 
-      const timeout = setTimeout(() => {
-        if (settled) return
-        settled = true
-        ws.close()
-        reject(new Error('connect_timeout'))
-      }, CONNECT_TIMEOUT_MS)
-
-      ws.onopen = () => {
-        if (settled) return
-        settled = true
-        clearTimeout(timeout)
-        wsRef.current = ws
-        resolve(ws)
-      }
-      ws.onerror = () => {
-        if (settled) return
-        settled = true
-        clearTimeout(timeout)
-        reject(new Error('connect_error'))
-      }
-      ws.onmessage = handleMessage
-      ws.onclose = () => { wsRef.current = null }
-    })
-  }, [apiBase, handleMessage])
-
-  const startRecording = useCallback(async () => {
-    if (BUSY_STAGES.includes(stage)) return
-    setErrorMsg('')
-    setTranscript('')
-    setReplyText('')
-    setStage('connecting')
-
-    let ws
+  const sendAudio = useCallback(async (blob, mimeType) => {
+    setStage('processing')
     try {
-      ws = await ensureSocket()
-    } catch {
-      showFallback()
-      return
-    }
+      const fd = new FormData()
+      fd.append('audio', blob, `audio.${mimeType.includes('ogg') ? 'ogg' : 'webm'}`)
+      fd.append('lang', langRef.current)
+      fd.append('history', JSON.stringify(history))
 
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const recorder = new MediaRecorder(stream)
-      chunksRef.current = []
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop())
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
-        const buf = await blob.arrayBuffer()
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(buf)
-        } else {
-          showFallback()
-        }
-      }
-      mediaRecorderRef.current = recorder
-      recorder.start()
-      setStage('recording')
+      const res  = await fetch(`${VERCEL_API}/api/voice`, { method: 'POST', body: fd })
+      const data = await res.json()
+
+      if (!res.ok || data.error) { showError(data.error || 'Request failed'); return }
+
+      setTranscript(data.transcript)
+      setReplyText(data.reply)
+      setHistory(h => [
+        ...h,
+        { role: 'user',      content: data.historyUser      },
+        { role: 'assistant', content: data.historyAssistant },
+      ])
+      playBase64Mp3(data.audio)
     } catch {
-      showFallback("Couldn't access your microphone — check your browser permissions.")
+      showError('Could not reach demo server — try again.')
     }
-  }, [stage, ensureSocket, showFallback])
+  }, [history])
 
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop()
-      setStage('transcribing')
+    const duration = Date.now() - startRef.current
+    if (duration < MIN_RECORD_MS) {
+      shouldSend.current = false
+      recorderRef.current?.stop()
+      showError('Hold the button longer and try again.')
+      return
     }
+    recorderRef.current?.stop()
   }, [])
 
+  const startRecording = useCallback(async () => {
+    chunksRef.current  = []
+    shouldSend.current = true
+    setTranscript('')
+    setReplyText('')
+    setErrorMsg('')
+
+    let stream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, sampleRate: 48000, channelCount: 1 },
+      })
+    } catch {
+      showError("Couldn't access microphone — check permissions.")
+      return
+    }
+    streamRef.current = stream
+
+    const mime = bestMimeType()
+    const opts = mime ? { mimeType: mime, audioBitsPerSecond: 128_000 } : {}
+    const rec  = new MediaRecorder(stream, opts)
+    const actualMime = rec.mimeType || mime || 'audio/webm'
+    recorderRef.current = rec
+
+    rec.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+    rec.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+      if (!shouldSend.current) return
+      const blob = new Blob(chunksRef.current, { type: actualMime })
+      await sendAudio(blob, actualMime)
+    }
+
+    rec.start(250)
+    startRef.current = Date.now()
+    setTimeout(() => {
+      if (recorderRef.current?.state === 'recording') setStage('recording')
+    }, ENCODER_WARMUP_MS)
+  }, [sendAudio])
+
+  const handleClick = useCallback(async () => {
+    if (stage === 'recording') { stopRecording(); return }
+    if (['processing', 'speaking'].includes(stage)) return
+    setStage('connecting')
+    await startRecording()
+  }, [stage, startRecording, stopRecording])
+
+  const isBusy  = ['connecting', 'processing', 'speaking'].includes(stage)
   const isError = stage === 'error'
   const isRecording = stage === 'recording'
-  const isBusy = BUSY_STAGES.includes(stage)
-  const label = isError ? errorMsg : STAGE_LABELS[stage]
+
+  const stageLabel = {
+    idle:       'Click to talk',
+    connecting: 'Connecting…',
+    recording:  'Listening… click to stop',
+    processing: 'Processing…',
+    speaking:   'Speaking…',
+    error:      errorMsg || 'Error',
+  }[stage] ?? stage
 
   return (
     <div className="max-w-sm mx-auto flex flex-col items-center gap-4 p-6 border border-gray-200 rounded-2xl shadow-lg bg-white">
-      <audio ref={audioRef} onEnded={() => setStage('idle')} className="hidden" />
+      <audio ref={audioRef} className="hidden" />
 
+      {/* Language selector */}
+      <div className="flex gap-1.5">
+        {LANGUAGES.map(l => (
+          <button
+            key={l.code}
+            onClick={() => handleLangChange(l.code)}
+            disabled={isBusy || isRecording}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors disabled:opacity-40 ${
+              lang === l.code
+                ? 'bg-accent border-accent text-white'
+                : 'border-gray-200 text-gray-500 hover:border-gray-400'
+            }`}
+          >
+            {l.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Mic button */}
       <button
-        onMouseDown={startRecording}
-        onMouseUp={stopRecording}
-        onMouseLeave={() => isRecording && stopRecording()}
-        onTouchStart={(e) => { e.preventDefault(); startRecording() }}
-        onTouchEnd={(e) => { e.preventDefault(); stopRecording() }}
-        disabled={isBusy}
-        className={`w-20 h-20 rounded-full flex items-center justify-center transition-colors select-none ${
-          isRecording ? 'bg-red-500 animate-pulse' : 'bg-accent hover:bg-accent-dark'
-        } text-white disabled:opacity-60`}
-        title="Hold to talk"
+        onClick={handleClick}
+        disabled={isBusy && !isRecording}
+        className={`w-20 h-20 rounded-full flex items-center justify-center transition-colors select-none shadow-md ${
+          isRecording
+            ? 'bg-red-500 hover:bg-red-600 animate-pulse'
+            : isError
+            ? 'bg-gray-400'
+            : 'bg-accent hover:opacity-90'
+        } disabled:opacity-60`}
       >
-        {['connecting', 'transcribing', 'thinking'].includes(stage) ? (
-          <Loader2 className="w-7 h-7 animate-spin" />
-        ) : stage === 'speaking' ? (
-          <Volume2 className="w-7 h-7" />
-        ) : (
-          <Mic className="w-7 h-7" />
-        )}
+        {stage === 'recording'   ? <MicOff  className="w-8 h-8 text-white" />
+        : stage === 'processing' ? <Loader2 className="w-8 h-8 text-white animate-spin" />
+        : stage === 'speaking'   ? <Volume2 className="w-8 h-8 text-white" />
+        :                          <Mic     className="w-8 h-8 text-white" />}
       </button>
 
-      <p className={`text-sm text-center ${isError ? 'text-red-500' : 'text-gray-500'}`}>
-        {label}
+      <p className={`text-sm text-center min-h-[1.25rem] ${isError ? 'text-red-500' : 'text-gray-500'}`}>
+        {stageLabel}
       </p>
 
       {transcript && !isError && (
         <p className="text-xs text-gray-400 text-center italic">"{transcript}"</p>
       )}
       {replyText && !isError && (
-        <p className="text-sm text-gray-700 text-center leading-relaxed">{replyText}</p>
+        <p className="text-sm text-gray-700 text-center leading-relaxed bg-gray-50 rounded-xl p-3 w-full">
+          {replyText}
+        </p>
+      )}
+
+      {history.length > 0 && (
+        <button
+          onClick={() => { setHistory([]); setTranscript(''); setReplyText('') }}
+          className="text-xs text-gray-400 hover:text-gray-600 underline"
+        >
+          Clear conversation
+        </button>
       )}
     </div>
   )
