@@ -13,9 +13,7 @@ from app.dependencies import get_qdrant, ensure_collection
 logger = logging.getLogger("nexadesk")
 
 from app.voice.router import router as voice_router
-from app.voice_demo.router import router as voice_demo_router
 from app.chat.router import router as chat_router
-from app.chat.demo_router import router as demo_chat_router
 from app.rag.router import router as rag_router
 from app.rag.inbound_email import router as inbound_email_router
 from app.leads.router import router as leads_router
@@ -98,9 +96,7 @@ app.include_router(public_router, tags=["public"])
 app.include_router(assistant_router, prefix="/assistant", tags=["assistant"])
 app.include_router(onboarding_router, prefix="/onboarding", tags=["onboarding"])
 app.include_router(voice_router, prefix="/voice", tags=["voice"])
-app.include_router(voice_demo_router, prefix="/voice-demo", tags=["voice-demo"])
 app.include_router(chat_router, prefix="/chat", tags=["chat"])
-app.include_router(demo_chat_router, prefix="/demo", tags=["demo"])
 app.include_router(rag_router, prefix="/rag", tags=["rag"])
 app.include_router(inbound_email_router, prefix="/rag", tags=["rag"])
 app.include_router(leads_router, prefix="/leads", tags=["leads"])
@@ -124,4 +120,4 @@ if os.path.isdir(_dashboard_dist):
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
         index = os.path.join(_dashboard_dist, "index.html")
-        return FileResponse(index)
+        return FileResponse(index, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
