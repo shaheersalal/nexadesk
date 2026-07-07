@@ -216,17 +216,18 @@ export const LANG_NAMES = {
 }
 
 // Whisper prompts written in the target script — forces Arabic/Nastaliq output
-// instead of Latin transliteration (Roman Urdu / Roman Arabic).
+// and disambiguates Urdu from Hindi (same phonetics, different script/vocabulary).
 export const WHISPER_PROMPTS = {
-  ur: 'یہ اردو زبان میں گفتگو ہے۔',
+  ur: 'یہ پاکستانی اردو میں گفتگو ہے، ہندی نہیں۔ اردو نستعلیق رسم الخط استعمال کریں۔',
   ar: 'هذه محادثة باللغة العربية.',
 }
 
 // Language instructions written IN the target language so gpt-4o-mini reliably
 // follows them even when they appear after a long English system prompt.
 export const LANG_INSTRUCTIONS = {
-  // Numbers written as Urdu words (انیس لاکھ) so TTS never stumbles on Arabic numerals
-  ur: 'آپ کو صرف اردو میں جواب دینا ہے۔ انگریزی یا رومن اردو بالکل استعمال نہ کریں۔ تمام قیمتیں اور اعداد اردو الفاظ میں لکھیں — جیسے "انیس لاکھ پچاس ہزار درہم"، "پانچ لاکھ روپے"، "دس فیصد"۔ کوئی بھی ہندسے (١٢٣ یا 123) نہ لکھیں۔',
+  // Explicitly excludes Hindi: same phonetics but different vocabulary and script.
+  // Numbers written as Urdu words so TTS never stumbles on Arabic numerals.
+  ur: 'آپ کو صرف پاکستانی اردو میں جواب دینا ہے۔ ہندی، انگریزی، یا رومن اردو بالکل استعمال نہ کریں۔ صرف اردو نستعلیق رسم الخط میں لکھیں — دیوناگری حروف (क ख ग) ہرگز نہ لکھیں۔ تمام قیمتیں اور اعداد اردو الفاظ میں لکھیں جیسے "انیس لاکھ پچاس ہزار درہم"۔ کوئی بھی ہندسے (١٢٣ یا 123) نہ لکھیں۔',
   ar: 'يجب أن تجيب باللغة العربية فقط. لا تستخدم الإنجليزية أو الحروف اللاتينية. اكتب جميع الأرقام والأسعار بالكلمات العربية.',
   fr: 'Vous devez répondre uniquement en français. N\'utilisez pas l\'anglais.',
   es: 'Debes responder únicamente en español. No uses inglés.',
