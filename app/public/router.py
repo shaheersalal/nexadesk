@@ -1,41 +1,25 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
+
 import httpx
 
-from app.agents.orchestrator import run as orchestrator_run
 from app.config import get_settings
 from app.dependencies import get_supabase_admin
-from app.shared.demo_company import resolve_demo_company
+from app.shared.demo_prompt import DEMO_KNOWLEDGE_PROMPT
+from app.shared.language import normalize_for_llm, translate_from_english
 from app.shared.llm import complete
 
 router = APIRouter()
 
-DEMO_SYSTEM_PROMPT = """You are Nexa, the AI receptionist for Palm Elite Properties — a premium real estate agency in Dubai. You handle inbound buyer and tenant inquiries with warmth and professionalism.
 
-Your goals:
-1. Understand what the client needs (buy, rent, invest, view a property)
-2. Qualify them: budget, preferred area, timeline, family size, number of bedrooms
-3. Share accurate price ranges confidently
-4. Capture their name and number so an agent can follow up, or book a viewing
-
-Property knowledge — UAE market 2025:
-DUBAI SALE: Downtown/Burj Khalifa studio AED 950K–1.4M · 1BR AED 1.5M–2.3M · 2BR AED 2.1M–3.8M | Marina studio AED 550K–950K · 1BR AED 900K–1.6M · 2BR AED 1.5M–2.8M | JBR 1BR AED 1.1M–1.8M · 2BR AED 1.7M–3M | Business Bay studio AED 600K–950K · 1BR AED 950K–1.5M | Palm Jumeirah 1BR apt AED 2M–3.5M · villa AED 12M–35M | Dubai Hills 1BR AED 900K–1.4M · 4BR villa AED 4M–7M | Arabian Ranches 4BR villa AED 3.2M–5.5M | JVC studio AED 380K–600K · 1BR AED 550K–900K (best yields 7–9%) | JLT 1BR AED 750K–1.2M
-DUBAI RENTAL (annual): Downtown 1BR AED 95K–145K · 2BR AED 145K–210K | Marina 1BR AED 75K–120K · 2BR AED 115K–175K | Business Bay 1BR AED 65K–100K | JVC 1BR AED 40K–65K (most affordable)
-ABU DHABI: Saadiyat Island 1BR AED 1.2M–2M · villa AED 7M–20M | Al Reem Island studio AED 500K–750K · 1BR AED 750K–1.3M | Yas Island 1BR AED 750K–1.2M
-SHARJAH: 2BR sale AED 420K–800K · studio rental AED 15K–28K/year
-
-Rules:
-- Keep replies to 2–3 sentences maximum. Never bullet points.
-- Ask ONE qualifying question per reply — never multiple at once.
-- Sound like a smart, human agent — not a chatbot.
-- If they want to speak to a human or book a viewing: ask for their name and phone number.
-- Reply in whatever language the client uses (English, Spanish, French, Arabic, or others)
-- Never reveal you're a demo or simulated."""
+class _ChatMessage(BaseModel):
+    role: str
+    content: str
 
 
 class DemoChatRequest(BaseModel):
-    messages: list[dict]  # [{role: "user"|"assistant", content: str}]
+    messages: list[_ChatMessage]
 
 
 class DemoRequest(BaseModel):
@@ -45,6 +29,10 @@ class DemoRequest(BaseModel):
     phone: str
     country: str = ""
     monthly_calls: str = ""
+    discount_pct: Optional[int] = None
+    original_price: Optional[float] = None
+    final_price: Optional[float] = None
+    plan_name: Optional[str] = None
 
 
 @router.post("/book-demo")
@@ -120,6 +108,17 @@ nexadesk.site"""
         <td style="padding:9px 0">{body.monthly_calls}</td></tr>
   </table>
 
+  {f'''<div style="background:#fef9ec;border:1px solid #f6c90e;border-radius:10px;padding:16px 20px;margin-bottom:24px">
+    <p style="font-size:13px;font-weight:700;color:#92400e;margin:0 0 8px">🏷️ Discount Negotiated via Pricing Chat</p>
+    <p style="font-size:14px;color:#1e293b;margin:0">
+      Plan: <strong>{body.plan_name}</strong><br>
+      Original price: <strong>${body.original_price:.2f}/mo</strong><br>
+      Discount: <strong>{body.discount_pct}% off</strong><br>
+      Final agreed price: <strong style="color:#16a34a">${body.final_price:.2f}/mo</strong>
+    </p>
+    <p style="font-size:12px;color:#92400e;margin:8px 0 0">Use this price in your Payoneer email — the client confirmed it.</p>
+  </div>''' if body.discount_pct else ''}
+
   <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px;margin-bottom:24px">
     <p style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin:0 0 12px">
       ✉️ Copy-paste email to send to client
@@ -148,28 +147,17 @@ async def demo_chat(body: DemoChatRequest):
     if not body.messages:
         raise HTTPException(status_code=400, detail="No messages")
 
-    # RAG-grounded path: real orchestrator (same pipeline as the dashboard chat
-    # and voice demo) against the seeded demo company's actual knowledge base,
-    # so this answers from real ingested content instead of a hardcoded prompt.
-    company = await resolve_demo_company()
-    if company:
-        history = body.messages[:-1][-10:]
-        user_message = body.messages[-1]["content"]
-        result = await orchestrator_run(
-            user_message=user_message,
-            company_id=company["id"],
-            history=history,
-            company=company,
-            lead_id=None,
-        )
-        return {"response": result["reply"]}
+    messages_dicts = [{"role": m.role, "content": m.content} for m in body.messages]
+    user_message = messages_dicts[-1]["content"]
 
-    # Fallback if no demo company is seeded yet — hardcoded prompt, same as before.
-    recent = body.messages[-10:]
-    response = await complete(
-        system=DEMO_SYSTEM_PROMPT,
-        messages=recent,
-        max_tokens=160,
+    english_query, detected_lang = normalize_for_llm(user_message)
+
+    # Send English to LLM; keep history as-is (client stores it)
+    messages_for_llm = messages_dicts[:-1][-9:] + [{"role": "user", "content": english_query}]
+    response_english = await complete(
+        system=DEMO_KNOWLEDGE_PROMPT,
+        messages=messages_for_llm,
+        max_tokens=200,
         temperature=0.6,
     )
-    return {"response": response}
+    return {"response": translate_from_english(response_english, detected_lang)}

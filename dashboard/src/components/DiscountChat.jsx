@@ -69,6 +69,13 @@ export default function DiscountChat({ plan, onClose }) {
 
   function handleConfirm() {
     setConfirmed(true)
+    // Persist so the sign-up form can include it in the /book-demo request
+    sessionStorage.setItem('nexadesk_confirmed_discount', JSON.stringify({
+      discount_pct:  discountPct,
+      original_price: plan.price,
+      final_price:   currentPrice,
+      plan_name:     plan.name,
+    }))
     setMessages(prev => [
       ...prev,
       {

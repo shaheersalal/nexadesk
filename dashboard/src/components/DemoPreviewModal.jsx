@@ -232,12 +232,16 @@ function DemoForm({ onSuccess, onBack }) {
     // fail, the submission isn't silently lost.
     localStorage.setItem(PENDING_LEAD_KEY, JSON.stringify({ ...form, submitted_at: new Date().toISOString() }))
 
+    // Attach any discount the user confirmed in the pricing chat
+    const discountRaw = sessionStorage.getItem('nexadesk_confirmed_discount')
+    const discount = discountRaw ? JSON.parse(discountRaw) : null
+
     let delivered = false
     try {
       const res = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/book-demo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, ...(discount || {}) }),
         signal: AbortSignal.timeout(5000),
       })
       if (res.ok) delivered = true
