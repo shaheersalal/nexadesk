@@ -1,5 +1,5 @@
 import OpenAI from 'openai'
-import { VOICE_SYSTEM, LANG_NAMES } from '@/lib/demoPrompt'
+import { VOICE_SYSTEM, WHISPER_PROMPTS, LANG_INSTRUCTIONS } from '@/lib/demoPrompt'
 
 export const maxDuration = 30
 
@@ -30,8 +30,14 @@ export async function POST(request) {
               : 'webm'
     const namedFile = new File([audioFile], `audio.${ext}`, { type: audioFile.type })
 
+    // ── STT ──────────────────────────────────────────────────────────────────
     const sttParams = { model: 'whisper-1', file: namedFile }
-    if (lang && lang !== 'auto') sttParams.language = lang
+    if (lang && lang !== 'auto') {
+      sttParams.language = lang
+      // Native-script prompt forces Whisper to output Arabic/Nastaliq instead of
+      // Latin transliteration (Roman Urdu / Roman Arabic).
+      if (WHISPER_PROMPTS[lang]) sttParams.prompt = WHISPER_PROMPTS[lang]
+    }
 
     const transcription = await openai.audio.transcriptions.create(sttParams)
     const transcript = transcription.text?.trim()
@@ -40,9 +46,12 @@ export async function POST(request) {
       return Response.json({ error: "Didn't catch that — try again." }, { status: 422, headers: CORS })
     }
 
-    const langName = LANG_NAMES[lang]
-    const userContent = langName
-      ? `[Respond in ${langName} only — do not use English]\n\n${transcript}`
+    // ── LLM ──────────────────────────────────────────────────────────────────
+    // Write the language instruction IN the target language (not in English) so
+    // gpt-4o-mini follows it even after a long English system prompt.
+    const langInstruction = LANG_INSTRUCTIONS[lang]
+    const userContent = langInstruction
+      ? `[${langInstruction}]\n\n${transcript}`
       : transcript
 
     const messages = [
@@ -62,6 +71,7 @@ export async function POST(request) {
       return Response.json({ error: 'No response — try again.' }, { status: 500, headers: CORS })
     }
 
+    // ── TTS ──────────────────────────────────────────────────────────────────
     const tts = await openai.audio.speech.create({
       model: 'tts-1',
       voice: 'alloy',

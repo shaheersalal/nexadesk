@@ -215,6 +215,22 @@ export const LANG_NAMES = {
   es: 'Spanish',
 }
 
+// Whisper prompts written in the target script — forces Arabic/Nastaliq output
+// instead of Latin transliteration (Roman Urdu / Roman Arabic).
+export const WHISPER_PROMPTS = {
+  ur: 'یہ اردو زبان میں گفتگو ہے۔',
+  ar: 'هذه محادثة باللغة العربية.',
+}
+
+// Language instructions written IN the target language so gpt-4o-mini reliably
+// follows them even when they appear after a long English system prompt.
+export const LANG_INSTRUCTIONS = {
+  ur: 'آپ کو صرف اردو میں جواب دینا ہے۔ انگریزی یا رومن اردو بالکل استعمال نہ کریں۔ صرف اردو (نستعلیق) میں لکھیں۔',
+  ar: 'يجب أن تجيب باللغة العربية فقط. لا تستخدم الإنجليزية أو الحروف اللاتينية.',
+  fr: 'Vous devez répondre uniquement en français. N\'utilisez pas l\'anglais.',
+  es: 'Debes responder únicamente en español. No uses inglés.',
+}
+
 export const VOICE_SYSTEM = DEMO_KNOWLEDGE_PROMPT +
   '\n\nIMPORTANT: This is a voice call. Reply in 1–2 short sentences only. No bullet points or lists.'
 
