@@ -212,8 +212,16 @@ const CALL_RANGES = ['Under 100', '100–300', '300–500', '500–1000', '1000+
 
 const PENDING_LEAD_KEY = 'nexadesk_pending_lead'
 
+const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY || ''
+
+async function getRecaptchaToken() {
+  if (!RECAPTCHA_SITE_KEY || !window.grecaptcha) return null
+  return window.grecaptcha.execute(RECAPTCHA_SITE_KEY, { action: 'demo_submit' })
+}
+
 function DemoForm({ onSuccess, onBack }) {
   const [form, setForm] = useState({ name: '', email: '', agency: '', phone: '', country: '', monthly_calls: '' })
+  const [hp, setHp] = useState('')  // honeypot — should always be empty for real users
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -221,6 +229,8 @@ function DemoForm({ onSuccess, onBack }) {
 
   async function submit(e) {
     e.preventDefault()
+    // Honeypot — bots fill hidden fields, humans never see it
+    if (hp) return
     if (!form.name || !form.email || !form.agency || !form.phone || !form.country || !form.monthly_calls) {
       setError('Please fill in all fields.')
       return
@@ -236,12 +246,14 @@ function DemoForm({ onSuccess, onBack }) {
     const discountRaw = sessionStorage.getItem('nexadesk_confirmed_discount')
     const discount = discountRaw ? JSON.parse(discountRaw) : null
 
+    const recaptcha_token = await getRecaptchaToken()
+
     let delivered = false
     try {
       const res = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/book-demo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, ...(discount || {}) }),
+        body: JSON.stringify({ ...form, ...(discount || {}), recaptcha_token }),
         signal: AbortSignal.timeout(5000),
       })
       if (res.ok) delivered = true
@@ -287,6 +299,10 @@ function DemoForm({ onSuccess, onBack }) {
         <p className="text-white/50 text-sm mb-6">We'll send your payment link within 1 hour and set everything up for you.</p>
 
         <form onSubmit={submit} className="flex flex-col gap-4">
+          {/* Honeypot — invisible to humans, bots fill it → silent drop */}
+          <div style={{ position: 'absolute', left: '-9999px', opacity: 0, height: 0, overflow: 'hidden' }} aria-hidden="true">
+            <input tabIndex={-1} autoComplete="off" value={hp} onChange={e => setHp(e.target.value)} />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelClass}>Your Name</label>

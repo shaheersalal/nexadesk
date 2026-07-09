@@ -1,16 +1,42 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import Optional
 
 import httpx
+import redis.asyncio as aioredis
 
 from app.config import get_settings
-from app.dependencies import get_supabase_admin
+from app.dependencies import get_supabase_admin, get_redis
 from app.shared.demo_prompt import DEMO_KNOWLEDGE_PROMPT
 from app.shared.language import normalize_for_llm, translate_from_english
 from app.shared.llm import complete
 
 router = APIRouter()
+
+
+def _get_client_ip(request: Request) -> str:
+    cf = request.headers.get("CF-Connecting-IP")
+    if cf:
+        return cf
+    xff = request.headers.get("X-Forwarded-For")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host or "unknown"
+
+
+async def _verify_recaptcha(token: str | None, settings) -> bool:
+    if not settings.RECAPTCHA_SECRET or not token:
+        return True  # skip when not configured
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.post(
+                "https://www.google.com/recaptcha/api/siteverify",
+                data={"secret": settings.RECAPTCHA_SECRET, "response": token},
+            )
+            d = r.json()
+            return bool(d.get("success")) and d.get("score", 0) >= 0.5
+    except Exception:
+        return True  # don't block on reCAPTCHA outage
 
 
 class _ChatMessage(BaseModel):
@@ -20,6 +46,7 @@ class _ChatMessage(BaseModel):
 
 class DemoChatRequest(BaseModel):
     messages: list[_ChatMessage]
+    voice_mode: bool = False   # true → short spoken-style replies, same as voice demo
 
 
 class DemoRequest(BaseModel):
@@ -33,11 +60,26 @@ class DemoRequest(BaseModel):
     original_price: Optional[float] = None
     final_price: Optional[float] = None
     plan_name: Optional[str] = None
+    recaptcha_token: Optional[str] = None
 
 
 @router.post("/book-demo")
-async def book_demo(body: DemoRequest):
+async def book_demo(
+    body: DemoRequest,
+    request: Request,
+    redis: aioredis.Redis = Depends(get_redis),
+):
     settings = get_settings()
+
+    # Redis throttle — 3-second minimum between submissions from the same IP
+    ip = _get_client_ip(request)
+    throttle_key = f"demo_throttle:{ip}"
+    if not await redis.set(throttle_key, "1", nx=True, ex=3):
+        raise HTTPException(status_code=429, detail="Too many requests — please wait a moment.")
+
+    # reCAPTCHA v3 verification
+    if not await _verify_recaptcha(body.recaptcha_token, settings):
+        raise HTTPException(status_code=403, detail="Bot check failed.")
 
     sb_id = ""
     try:
@@ -154,10 +196,21 @@ async def demo_chat(body: DemoChatRequest):
 
     # Send English to LLM; keep history as-is (client stores it)
     messages_for_llm = messages_dicts[:-1][-9:] + [{"role": "user", "content": english_query}]
+
+    if body.voice_mode:
+        system = (
+            DEMO_KNOWLEDGE_PROMPT
+            + "\n\nIMPORTANT: Simulate a voice call. Reply in 1–2 short sentences only. "
+            "No bullet points or lists. Always end with a question."
+        )
+        max_tokens, temperature = 150, 0.4
+    else:
+        system, max_tokens, temperature = DEMO_KNOWLEDGE_PROMPT, 200, 0.6
+
     response_english = await complete(
-        system=DEMO_KNOWLEDGE_PROMPT,
+        system=system,
         messages=messages_for_llm,
-        max_tokens=200,
-        temperature=0.6,
+        max_tokens=max_tokens,
+        temperature=temperature,
     )
     return {"response": translate_from_english(response_english, detected_lang)}

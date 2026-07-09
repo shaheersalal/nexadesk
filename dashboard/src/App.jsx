@@ -77,8 +77,8 @@ export default function App() {
           } />
         </Route>
 
-        {/* Admin panel — restricted to Shaheer's UID */}
-        <Route path="/admin" element={
+        {/* Admin panel — restricted to Shaheer's UID; URL obscured */}
+        <Route path="/nxd-c0ns0le" element={
           session?.user?.id === ADMIN_UID
             ? <AdminPanel />
             : <Navigate to="/" replace />

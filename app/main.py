@@ -4,8 +4,23 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
+from starlette.middleware.base import BaseHTTPMiddleware
 import os
+
+_BOT_UA_FRAGMENTS = [
+    "python-requests", "python-httpx", "python-urllib",
+    "curl/", "wget/", "scrapy/", "go-http-client",
+    "libwww-perl", "java/", "okhttp", "httpie",
+]
+
+
+class BotBlockMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        ua = request.headers.get("user-agent", "").lower()
+        if any(frag in ua for frag in _BOT_UA_FRAGMENTS):
+            return Response("Forbidden", status_code=403)
+        return await call_next(request)
 
 from app.config import get_settings
 from app.dependencies import get_qdrant, ensure_collection
@@ -13,6 +28,7 @@ from app.dependencies import get_qdrant, ensure_collection
 logger = logging.getLogger("nexadesk")
 
 from app.voice.router import router as voice_router
+from app.voice_demo.router import router as voice_demo_router
 from app.chat.router import router as chat_router
 from app.rag.router import router as rag_router
 from app.rag.inbound_email import router as inbound_email_router
@@ -85,18 +101,27 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=[
+        "https://nexadesk.site",
+        "https://www.nexadesk.site",
+        "http://localhost:5173",
+        "http://localhost:8000",
+        "http://localhost:3000",
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# BotBlockMiddleware runs first (last added = outermost in Starlette's stack)
+app.add_middleware(BotBlockMiddleware)
 
 # ── API routers ───────────────────────────────────────────────────────────────
 app.include_router(public_router, tags=["public"])
 app.include_router(assistant_router, prefix="/assistant", tags=["assistant"])
 app.include_router(onboarding_router, prefix="/onboarding", tags=["onboarding"])
-app.include_router(voice_router, prefix="/voice", tags=["voice"])
-app.include_router(chat_router, prefix="/chat", tags=["chat"])
+app.include_router(voice_router,      prefix="/voice",       tags=["voice"])
+app.include_router(voice_demo_router, prefix="/voice-demo",  tags=["voice-demo"])
+app.include_router(chat_router,       prefix="/chat",        tags=["chat"])
 app.include_router(rag_router, prefix="/rag", tags=["rag"])
 app.include_router(inbound_email_router, prefix="/rag", tags=["rag"])
 app.include_router(leads_router, prefix="/leads", tags=["leads"])

@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     # Admin one-click invite token (HF secret name: ADMINTOKEN)
     ADMINTOKEN: str = ""
 
+    # Google reCAPTCHA v3 (set both RECAPTCHA_SECRET here and VITE_RECAPTCHA_SITE_KEY in dashboard/.env)
+    RECAPTCHA_SECRET: str = ""
+
     @property
     def calendar_redirect_uri(self) -> str:
         return self.GOOGLE_CALENDAR_REDIRECT_URI or f"{self.APP_BASE_URL}/leads/calendar/callback"

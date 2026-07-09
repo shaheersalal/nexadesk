@@ -1,3 +1,12 @@
+<!--
+  NexaDesk — AI Receptionist for Real Estate Agencies
+  Stack: React + Vite (dashboard) · FastAPI + Supabase + Qdrant + Redis (API)
+         ElevenLabs TTS · Deepgram STT · OpenAI · Twilio (telephony)
+  Deployed: Vercel (dashboard) · Cloudflare Tunnel → Docker (API)
+  Built by Shaheer Salal
+    Upwork: https://www.upwork.com/freelancers/shaheersalal
+    LinkedIn: https://linkedin.com/in/shaheersalal
+-->
 <!doctype html>
 <html lang="en">
   <head>
@@ -8,6 +17,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <!-- Google reCAPTCHA v3 — set VITE_RECAPTCHA_SITE_KEY in .env to activate -->
+    <script src="https://www.google.com/recaptcha/api.js?render=%VITE_RECAPTCHA_SITE_KEY%"></script>
   </head>
   <body>
     <div id="root"></div>
