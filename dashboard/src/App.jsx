@@ -17,6 +17,7 @@ import AIAgent from './pages/AIAgent'
 import SupportInbox from './pages/SupportInbox'
 import Setup from './pages/Setup'
 import AdminPanel from './pages/AdminPanel'
+import Integrations from './pages/Integrations'
 
 const ADMIN_UID = '7227a933-56ef-45c4-8cbc-1c8331c74b21'
 
@@ -69,6 +70,7 @@ export default function App() {
           <Route path="knowledge" element={<Knowledge />} />
           <Route path="appointments" element={<Appointments />} />
           <Route path="ai-agent" element={<AIAgent />} />
+          <Route path="integrations" element={<Integrations />} />
           <Route path="settings" element={<Settings />} />
           <Route path="support" element={
             session?.user?.id === ADMIN_UID

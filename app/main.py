@@ -40,6 +40,7 @@ from app.onboarding.router import router as onboarding_router
 from app.admin.router import router as admin_router
 from app.companies.router import router as companies_router
 from app.pricing.router import router as pricing_router
+from app.integrations.router import router as integrations_router
 
 settings = get_settings()
 
@@ -81,6 +82,19 @@ async def lifespan(app: FastAPI):
 
     uploads_dir = os.path.join(os.path.dirname(__file__), "..", "uploads")
     os.makedirs(uploads_dir, exist_ok=True)
+
+    # Webhook retry loop — runs every 60s in the background
+    async def _retry_loop():
+        from app.integrations.events import retry_failed_webhooks
+        while True:
+            await asyncio.sleep(60)
+            try:
+                await retry_failed_webhooks()
+            except Exception as exc:
+                logger.warning("Webhook retry loop error: %s", exc)
+
+    import asyncio
+    asyncio.create_task(_retry_loop())
 
     yield
 
@@ -129,6 +143,7 @@ app.include_router(properties_router, prefix="/properties", tags=["properties"])
 app.include_router(admin_router, prefix="/admin", tags=["admin"])
 app.include_router(companies_router, prefix="/companies", tags=["companies"])
 app.include_router(pricing_router, prefix="/pricing", tags=["pricing"])
+app.include_router(integrations_router, prefix="/integrations", tags=["integrations"])
 
 
 @app.get("/health")

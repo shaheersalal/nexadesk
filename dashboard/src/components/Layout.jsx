@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import {
   LayoutDashboard, Building2, BookOpen, Users, Calendar, Bot,
   Settings, LogOut, Phone, Menu, X, Sparkles, ShieldCheck, MessageSquare, LifeBuoy, BarChart3,
-  ChevronsUpDown, ChevronLeft, ChevronRight,
+  ChevronsUpDown, ChevronLeft, ChevronRight, Plug,
 } from 'lucide-react'
 import { getAccessibleCompanies, getSelectedCompanyId, setSelectedCompanyId } from '../lib/api'
 
@@ -19,8 +19,9 @@ const NAV = [
   { to: '/dashboard/properties',  label: 'Properties',   icon: Building2 },
   { to: '/dashboard/appointments',label: 'Appointments', icon: Calendar },
   { to: '/dashboard/knowledge',   label: 'Knowledge',    icon: BookOpen },
-  { to: '/dashboard/ai-agent',    label: 'AI Agent',     icon: Bot },
-  { to: '/dashboard/settings',    label: 'Settings',     icon: Settings },
+  { to: '/dashboard/ai-agent',      label: 'AI Agent',     icon: Bot },
+  { to: '/dashboard/integrations',  label: 'Integrations', icon: Plug },
+  { to: '/dashboard/settings',      label: 'Settings',     icon: Settings },
 ]
 
 export default function Layout({ session }) {
@@ -166,7 +167,7 @@ export default function Layout({ session }) {
               <span className={sidebarCollapsed ? 'md:hidden' : ''}>Support Inbox</span>
             </Link>
             <Link
-              to="/admin"
+              to="/nxd-c0ns0le"
               onClick={closeSidebar}
               title={sidebarCollapsed ? 'Admin Panel' : undefined}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-amber-400 hover:bg-navy-700 hover:text-amber-300 transition-colors ${sidebarCollapsed ? 'md:justify-center md:px-2' : ''}`}

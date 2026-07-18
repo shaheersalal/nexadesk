@@ -7,6 +7,7 @@ from fastapi.responses import RedirectResponse
 
 from app.auth.middleware import CurrentUser, CompanyId, AccessibleCompanyIds
 from app.dependencies import get_supabase_admin
+from app.integrations.events import fire_event
 from app.leads.models import (
     LeadCreate, LeadUpdate, LeadStatusUpdate,
     AppointmentCreate, AppointmentUpdate,
@@ -58,7 +59,9 @@ async def create_lead(body: LeadCreate, company_id: CompanyId, current_user: Cur
     if row.get("assigned_to"):
         row["assigned_to"] = str(row["assigned_to"])
     result = _sb().table("leads").insert(row).execute()
-    return result.data[0]
+    lead = result.data[0]
+    fire_event(company_id, "lead.created", lead)
+    return lead
 
 
 @router.get("/{lead_id}")
@@ -100,7 +103,9 @@ async def update_lead_status(lead_id: UUID, body: LeadStatusUpdate, company_id: 
     )
     if not result.data:
         raise HTTPException(status_code=404, detail="Lead not found")
-    return result.data[0]
+    lead = result.data[0]
+    fire_event(company_id, "lead.status_changed", {"id": str(lead_id), "status": body.status, **lead})
+    return lead
 
 
 @router.delete("/{lead_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -154,11 +159,13 @@ async def create_appointment(body: AppointmentCreate, company_id: CompanyId, cur
         row["google_event_id"] = google_id
 
     result = sb.table("appointments").insert(row).execute()
+    appt = result.data[0]
 
     # Update lead status to 'appointment'
     sb.table("leads").update({"status": "appointment"}).eq("id", row["lead_id"]).execute()
 
-    return result.data[0]
+    fire_event(company_id, "appointment.booked", appt)
+    return appt
 
 
 @router.patch("/appointments/{appt_id}")
