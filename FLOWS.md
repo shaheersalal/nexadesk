@@ -1,3 +1,11 @@
+> **STALE as of 2026-08-13.** This inventory was generated 2026-07-03 and
+> describes the Docker-era architecture: self-hosted faster-whisper and Kokoro
+> ONNX, local Qdrant/Redis containers, and `claude-sonnet-4-6` as the LLM. None
+> of that is true any more — voice demo STT/TTS moved to OpenAI APIs, Docker was
+> removed entirely, and the app runs on Railway with Qdrant Cloud and Upstash.
+> The per-route audit results below are still historically accurate for the
+> commit they were run against. See `AUDIT.md` for the current findings.
+
 # NexaDesk — Complete Flow Inventory
 
 Every entry point in the application, with the full path a request takes from arrival to response.

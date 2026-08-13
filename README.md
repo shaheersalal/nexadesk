@@ -1,13 +1,3 @@
----
-title: NexaDesk
-emoji: 🏠
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-app_port: 8000
-pinned: false
----
-
 # NexaDesk — AI Receptionist for Real Estate
 
 > 24/7 AI receptionist that handles inbound property enquiries via voice and chat. Qualifies leads, answers FAQs, and books viewings — without a human.
@@ -25,29 +15,27 @@ pinned: false
 
 ```mermaid
 flowchart TD
-    A([📞 Inbound Call / 💬 Web Chat]) --> B[Nginx\nReverse Proxy + TLS]
-    B --> C[FastAPI Backend]
+    A([📞 Inbound Call / 💬 Web Chat]) --> B[Railway\nFastAPI + TLS]
+    B --> D{Request Type}
 
-    C --> D{Request Type}
-
-    D -->|Voice call| E[Twilio Webhook]
+    D -->|Voice call| E[Twilio Media Streams]
     E --> F[Deepgram STT\nSpeech → Text]
     F --> G[RAG Engine]
-    G --> H[Qdrant\nVector Search]
-    H --> I[Claude LLM\nAnswer Generation]
+    G --> H[Qdrant Cloud\nVector Search]
+    H --> I[gpt-4o-mini\nAnswer Generation]
     I --> J[ElevenLabs TTS\nText → Speech]
     J --> E
 
     D -->|Chat message| G
 
-    D -->|Lead captured| K[PostgreSQL\nSupabase]
+    D -->|Lead captured| K[Supabase\nPostgres + RLS]
     D -->|Viewing request| L[Google Calendar API]
 
     subgraph Data Layer
         H
         K
-        M[Redis Cache]
-        N[MinIO\nDocument Storage]
+        M[Upstash Redis\ncall + session state]
+        N[Supabase Storage\ndocuments]
     end
 
     subgraph AI Layer
@@ -59,7 +47,7 @@ flowchart TD
 
     G --> O
     O --> H
-    C --> M
+    B --> M
 ```
 
 <details>
@@ -68,7 +56,7 @@ flowchart TD
 ```
 Browser / Phone Call
         ↓
-    Nginx (reverse proxy + TLS)
+    Railway (TLS, autoscaling)
         ↓
     FastAPI (Python)
      ├── /voice      ← Twilio webhook handler, STT, TTS
@@ -79,17 +67,17 @@ Browser / Phone Call
      └── /auth       ← JWT authentication
         ↓
    ┌────────────────────────────────┐
-   │  Claude (LLM)                  │
+   │  gpt-4o-mini (LLM)             │
    │  Deepgram (Speech-to-Text)     │
    │  ElevenLabs (Text-to-Speech)   │
    │  OpenAI Embeddings             │
    └────────────────────────────────┘
         ↓
-   ┌──────────────────┐
-   │  Qdrant (vectors)│
-   │  Supabase (DB)   │
-   │  Redis (cache)   │
-   └──────────────────┘
+   ┌────────────────────────┐
+   │  Qdrant Cloud (vectors)│
+   │  Supabase (Postgres)   │
+   │  Upstash Redis (state) │
+   └────────────────────────┘
 ```
 
 </details>
@@ -98,29 +86,36 @@ Browser / Phone Call
 
 | Layer | Technology |
 |---|---|
-| Backend | FastAPI, Python |
-| LLM | Anthropic Claude |
+| Backend | FastAPI, Python 3.12 |
+| LLM | OpenAI gpt-4o-mini |
 | Voice STT | Deepgram nova-2 |
 | Voice TTS | ElevenLabs |
 | Embeddings | OpenAI text-embedding-3-small |
-| Vector DB | Qdrant |
-| Database | Supabase (PostgreSQL) |
-| Cache | Redis |
+| Vector DB | Qdrant Cloud |
+| Database | Supabase (PostgreSQL + RLS) |
+| Cache / call state | Upstash Redis |
 | Telephony | Twilio |
 | Calendar | Google Calendar API |
-| Frontend | React, Tailwind CSS, Vite |
-| Infrastructure | Docker, Nginx |
+| Frontend | React, Tailwind CSS, Vite (Vercel) |
+| Infrastructure | Railway (Nixpacks) |
 
 ## Setup
 
-```bash
+No containers required.
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
 cp .env.example .env
 # Fill in your API keys in .env
 
-docker compose up -d
+uvicorn app.main:app --reload --port 8000
 ```
 
-API docs available at `http://localhost:8000/docs`
+API docs available at `http://localhost:8000/docs`.
+Deployment details in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Environment Variables
 

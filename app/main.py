@@ -84,9 +84,6 @@ async def lifespan(app: FastAPI):
     client = await get_qdrant(settings)
     await ensure_collection(client, settings)
 
-    uploads_dir = os.path.join(os.path.dirname(__file__), "..", "uploads")
-    os.makedirs(uploads_dir, exist_ok=True)
-
     # Webhook retry loop — runs every 60s in the background
     async def _retry_loop():
         from app.integrations.events import retry_failed_webhooks

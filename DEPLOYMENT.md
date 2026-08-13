@@ -1,103 +1,130 @@
-# Self-Hosting NexaDesk (Docker)
+# Deploying NexaDesk
 
-The backend runs on your local machine via `docker-compose.prod.yml` and is
-exposed publicly at **https://api.nexadesk.site** via a named Cloudflare
-Tunnel (tunnel ID `2227df6b-94dd-478e-beb1-20688425b808`, CNAME record in
-Namecheap DNS). The URL never changes — no HuggingFace dependency.
-
-There is no managed always-on host — if the machine sleeps, reboots, or
-Docker Desktop restarts, the stack stops and must be started again manually.
-The frontend's fallback behavior keeps the public site honest in the meantime.
-
-**Prerequisites (one-time on a new machine):**
-1. Install cloudflared, run `cloudflared tunnel login`, then
-   `cloudflared tunnel create nexadesk-api` — update the tunnel UUID above
-   and in `~/.cloudflared/config.yml`.
-2. Add CNAME `api → 2227df6b-94dd-478e-beb1-20688425b808.cfargotunnel.com`
-   in Namecheap DNS for nexadesk.site.
-
-## Start it up
+NexaDesk runs as a **single Railway service** plus two managed data stores.
+Nothing is self-hosted; there is no Docker, no Cloudflare Tunnel, and no
+dependency on any machine staying awake.
 
 ```
-docker compose -f docker-compose.prod.yml -p nexadesk_prod up -d --build
+nexadesk.site          → Vercel        (dashboard SPA, React + Vite)
+api.nexadesk.site      → Railway       (FastAPI, this repo)
+                         Qdrant Cloud  (vector search)
+                         Upstash Redis (call/session state)
+                         Supabase      (Postgres + auth + file storage)
 ```
 
-Use `-p nexadesk_prod` to keep the prod containers separate from the dev
-stack (which runs via `docker-compose.yml` on port 8100).
+## One-time setup
 
-First run builds the image (a few minutes). After that, `up -d` (no
-`--build`) is enough unless backend code changed.
+### 1. Qdrant Cloud
 
-Verify it's healthy:
-
-```
-docker compose -f docker-compose.prod.yml -p nexadesk_prod ps
-curl https://api.nexadesk.site/docs
-```
-
-All three services (`app`, `qdrant`, `redis`) should show `Up`/`healthy`.
-`app` runs 4 uvicorn workers and takes a few seconds after `Started` before
-all of them report `Application startup complete`.
-
-## After a reboot / sleep / Docker Desktop restart
-
-Docker Desktop does not auto-resume containers after a full reboot unless
-it's configured to start on login *and* "Resume containers on startup" is on
-in Settings → General. Don't rely on that — just re-run:
+Create a free cluster (1 GB is ample — the knowledge base is text chunks) at
+<https://cloud.qdrant.io>. Copy the cluster URL and an API key.
 
 ```
-docker compose -f docker-compose.prod.yml up -d
+QDRANT_URL=https://xxxx.aws.cloud.qdrant.io:6333
+QDRANT_API_KEY=...
 ```
 
-This is idempotent: qdrant/redis data persists in named volumes
-(`qdrant_data`, `redis_data`), so the knowledge base and chat history survive
-restarts. No flags needed unless the image itself changed.
+`app/dependencies.py:35-48` already branches on `QDRANT_URL`, so no code change
+is needed. Leave `QDRANT_URL` empty to fall back to `QDRANT_HOST`/`QDRANT_PORT`
+for local development.
 
-## Stopping it
+The collection is created automatically on first boot by `ensure_collection()`.
+
+### 2. Upstash Redis
+
+Create a free database at <https://upstash.com>. Copy the **TLS** connection
+string — the scheme must be `rediss://`, not `redis://`:
 
 ```
-docker compose -f docker-compose.prod.yml down
+REDIS_URL=rediss://default:<password>@<endpoint>.upstash.io:6379
 ```
 
-Add `-v` only if you want to wipe the Qdrant/Redis volumes too (destroys the
-ingested knowledge base — don't do this casually).
+### 3. Railway
 
-## What happens when it's down
+```bash
+railway login
+railway init            # or: railway link   (to attach to an existing project)
+railway up
+```
 
-The dashboard, chat widget, voice demo, and login all use short (~5s)
-timeouts and fail to a generic "try again shortly" message — none of them
-reveal that the backend is offline, and none of them silently retry forever.
-The landing-page demo chat additionally has a canned scripted fallback so it
-keeps responding plausibly even with the backend down. The demo/signup form
-writes to `localStorage` immediately on submit and falls back to an
-independent Vercel serverless function (`dashboard/api/capture-lead.js`,
-calls Resend directly) if the FastAPI `/book-demo` call fails — so leads are
-still captured even during an outage.
+Set every variable from `.env.example` in the Railway dashboard
+(Variables → Raw Editor makes bulk paste easy). **`APP_ENV=production` is
+mandatory** — several security guards in `app/main.py` are gated on it and are
+inert otherwise.
 
-## Troubleshooting notes (from getting this working)
+Railway injects `$PORT`; `railway.json` already binds uvicorn to it. Do not
+hardcode 8000.
 
-These were real bugs hit while validating this compose file — already fixed
-in this repo, kept here in case something regresses:
+### 4. Custom domain
 
-- **Qdrant healthcheck**: `qdrant/qdrant:latest` ships no `curl`, so a
-  curl-based healthcheck never passes, and `app`'s
-  `depends_on: condition: service_healthy` then blocks forever. Fixed with a
-  bash `/dev/tcp` check instead.
-- **tiktoken startup crash**: `tiktoken.get_encoding()` lazy-downloads its BPE
-  file from `openaipublic.blob.core.windows.net` on first use. A transient
-  DNS blip there crashes the whole container at startup. Fixed by pre-warming
-  the tiktoken cache at image build time (see `Dockerfile`), so startup never
-  depends on that host being reachable.
-- **`QDRANT_HOST`/`REDIS_URL` pointing at `localhost`**: the shared `.env`
-  file is written for host-machine development (`localhost` + Docker
-  Desktop's host-mapped ports). Inside this compose network, `app` must
-  reach `qdrant`/`redis` by their service name on their *internal* port
-  instead. Fixed via an `environment:` override block in the `app` service
-  in `docker-compose.prod.yml` (which takes precedence over `env_file` for
-  the same keys) — `.env` itself was left untouched since it's still correct
-  for local/dev use.
-- **Qdrant collection-create race under `--workers 4`**: all four uvicorn
-  worker processes run the startup `ensure_collection` check concurrently;
-  whichever loses the create-collection race got an unhandled 409 and
-  crashed that worker. Fixed in `app/dependencies.py` by treating a 409 on
-  `create_collection` as "another worker already made it," not an error.
+Add `api.nexadesk.site` under Railway → Settings → Networking, then create the
+CNAME it gives you in Namecheap DNS. Update `APP_BASE_URL` and
+`TELEPHONY_WEBHOOK_BASE_URL` to match.
+
+## Build configuration
+
+| File | Purpose |
+|---|---|
+| `railway.json` | start command, `/health` healthcheck, restart policy |
+| `nixpacks.toml` | Python 3.12 + ffmpeg, tiktoken cache baked at build time |
+| `requirements.txt` | pinned; see the comments — loose pins previously made the tree unresolvable |
+
+Workers are set to **2** in `railway.json`, not the 4 the old compose file used.
+Railway's smaller instances have less memory, and the webhook retry loop is
+per-worker (see `AUDIT.md` H6) — fewer workers means fewer duplicate deliveries
+until that is fixed with a lock.
+
+## Local development
+
+No containers required.
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+Point `QDRANT_URL` and `REDIS_URL` at the same cloud instances as production, or
+at a separate free Qdrant cluster / Upstash database if you want isolation.
+`APP_ENV=development` locally.
+
+### Testing Twilio voice locally
+
+Twilio must be able to reach your machine, so tunnel it:
+
+```powershell
+ngrok http 8000
+```
+
+Set `TELEPHONY_WEBHOOK_BASE_URL` to the `https://` ngrok URL and point your
+Twilio number's voice webhook at `<ngrok-url>/voice/inbound`. The URL changes
+every time ngrok restarts on the free tier — update both places when it does.
+
+`TELEPHONY_AUTH_TOKEN` must be set even locally, or signature validation is
+skipped entirely (`AUDIT.md` C3).
+
+## Storage
+
+Uploaded knowledge-base documents go to **Supabase Storage**
+(`SUPABASE_STORAGE_BUCKET`, handled in `app/rag/pipeline.py`). Nothing is
+written to the container filesystem, which is ephemeral on Railway and is wiped
+on every redeploy.
+
+## Dashboard
+
+The dashboard is a separate Vercel project and does **not** deploy from here.
+Push to the GitHub `Shaheer` branch and Vercel rebuilds it. Set `VITE_API_URL`
+in Vercel to `https://api.nexadesk.site`.
+
+## What replaced what
+
+| Was | Now |
+|---|---|
+| `Dockerfile` | `nixpacks.toml` |
+| `docker-compose.prod.yml` (app) | Railway service |
+| `docker-compose.prod.yml` (qdrant) | Qdrant Cloud |
+| `docker-compose.prod.yml` (redis) | Upstash Redis |
+| Cloudflare Tunnel | Railway's own domain + TLS |
+| `render.yaml` | unused, deleted |
+| `models/kokoro/` (115 MB) | deleted — nothing imported it |

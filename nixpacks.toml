@@ -1,0 +1,28 @@
+# Railway/Nixpacks build config — replaces the deleted Dockerfile.
+#
+# ffmpeg is still required by app/voice/tts.py to convert ElevenLabs MP3
+# output into 8 kHz mulaw for Twilio. The pure-Python audioop path added in
+# the voice rewrite covers PCM sources, but ffmpeg remains the fallback for
+# MP3 decoding, so it must be present in the image.
+
+[phases.setup]
+nixPkgs = ["python312", "ffmpeg"]
+
+[phases.install]
+cmds = [
+  "python -m venv --copies /opt/venv",
+  ". /opt/venv/bin/activate && pip install --upgrade pip",
+  ". /opt/venv/bin/activate && pip install -r requirements.txt",
+]
+
+[phases.build]
+# Bake the tiktoken BPE file into the image. Without this, the first request
+# that tokenises text lazily downloads it from Azure blob storage, so a blip
+# there would crash the worker on a cold start.
+cmds = [
+  ". /opt/venv/bin/activate && python -c \"import tiktoken; tiktoken.get_encoding('cl100k_base')\"",
+]
+
+[variables]
+TIKTOKEN_CACHE_DIR = "/app/.tiktoken_cache"
+PYTHONUNBUFFERED = "1"

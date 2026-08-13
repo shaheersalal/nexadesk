@@ -1,8 +1,8 @@
 """
 Redis-backed key/value helper for state that must survive across the
-multiple uvicorn worker processes (docker-compose runs --workers 4, each
+multiple uvicorn worker processes (railway.json runs --workers 2, each
 with its own memory space — a plain module-level dict is invisible to
-the other 3 workers).
+the other worker) and across Railway replicas.
 """
 import json
 from typing import Any
