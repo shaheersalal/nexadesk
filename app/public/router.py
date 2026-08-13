@@ -1,4 +1,5 @@
 ﻿import html
+import logging
 from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -13,6 +14,7 @@ from app.shared.demo_prompt import DEMO_KNOWLEDGE_PROMPT
 from app.shared.language import anormalize_for_llm, atranslate_from_english
 from app.shared.llm import complete
 
+logger = logging.getLogger("nexadesk.public")
 router = APIRouter()
 
 
@@ -40,8 +42,21 @@ def _get_client_ip(request: Request) -> str:
 
 
 async def _verify_recaptcha(token: str | None, settings) -> bool:
-    if not settings.RECAPTCHA_SECRET or not token:
-        return True  # skip when not configured
+    """
+    Verify a reCAPTCHA v3 token.
+
+    Fails *closed* once RECAPTCHA_SECRET is configured: previously any exception
+    — or a missing token on a configured deployment — returned True, so a
+    verification outage or a malformed response silently disabled bot protection
+    on the public form (AUDIT.md M6).
+
+    When RECAPTCHA_SECRET is unset the check is skipped entirely, which keeps
+    local development working without Google credentials.
+    """
+    if not settings.RECAPTCHA_SECRET:
+        return True  # not configured — check disabled by choice
+    if not token:
+        return False  # configured but the client sent nothing
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             r = await client.post(
@@ -50,8 +65,9 @@ async def _verify_recaptcha(token: str | None, settings) -> bool:
             )
             d = r.json()
             return bool(d.get("success")) and d.get("score", 0) >= 0.5
-    except Exception:
-        return True  # don't block on reCAPTCHA outage
+    except Exception as exc:
+        logger.warning("reCAPTCHA verification failed, rejecting submission: %s", exc)
+        return False
 
 
 # Caps on the public demo endpoint. Without these, /demo/chat is an
