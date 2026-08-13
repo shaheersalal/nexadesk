@@ -1,5 +1,6 @@
 'use client'
 import { useState, useRef, useCallback } from 'react'
+import { postForm } from '@/lib/api'
 
 const LANGUAGES = [
   { code: 'en',   label: 'English'  },
@@ -54,10 +55,9 @@ export default function VoiceWidget() {
       fd.append('lang',  langRef.current)
       fd.append('history', JSON.stringify(history))
 
-      const res  = await fetch('/api/voice', { method: 'POST', body: fd })
-      const data = await res.json()
-
-      if (!res.ok || data.error) { showError(data.error || 'Request failed'); return }
+      // Real backend: Deepgram -> gpt-4o-mini -> ElevenLabs, the same chain the
+      // production phone line uses, rather than a separate OpenAI call path.
+      const data = await postForm('/demo/voice', fd)
 
       setTranscript(data.transcript)
       setReplyText(data.reply)
@@ -66,9 +66,14 @@ export default function VoiceWidget() {
         { role: 'user',      content: data.historyUser      },
         { role: 'assistant', content: data.historyAssistant },
       ])
-      playBase64Mp3(data.audio)
-    } catch {
-      showError('Network error — try again.')
+      if (data.audio) {
+        playBase64Mp3(data.audio)
+      } else {
+        // TTS unavailable — the reply text is still shown, so don't fail hard.
+        setStage('idle')
+      }
+    } catch (err) {
+      showError(err.message || 'Network error — try again.')
     }
   }, [history])
 

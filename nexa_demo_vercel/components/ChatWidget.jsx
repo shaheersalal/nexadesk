@@ -1,5 +1,6 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
+import { postJSON } from '@/lib/api'
 
 export default function ChatWidget() {
   const [messages, setMessages] = useState([
@@ -19,15 +20,13 @@ export default function ChatWidget() {
     setInput('')
     setLoading(true)
     try {
-      const res  = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: updated }),
-      })
-      const data = await res.json()
+      // Real backend — same prompt, model and rate limits as production.
+      const data = await postJSON('/demo/chat', { messages: updated })
       setMessages(m => [...m, { role: 'assistant', content: data.response || 'Sorry, something went wrong.' }])
-    } catch {
-      setMessages(m => [...m, { role: 'assistant', content: 'Network error — please try again.' }])
+    } catch (err) {
+      // Surface the server's message (rate limit, validation) rather than a
+      // blanket "network error" that hides why the demo stopped responding.
+      setMessages(m => [...m, { role: 'assistant', content: err.message || 'Network error — please try again.' }])
     } finally {
       setLoading(false)
     }

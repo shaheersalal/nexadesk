@@ -28,7 +28,6 @@ from app.dependencies import get_qdrant, ensure_collection
 logger = logging.getLogger("nexadesk")
 
 from app.voice.router import router as voice_router
-from app.voice_demo.router import router as voice_demo_router
 from app.chat.router import router as chat_router
 from app.rag.router import router as rag_router
 from app.rag.inbound_email import router as inbound_email_router
@@ -122,6 +121,9 @@ app.add_middleware(
     allow_origins=[
         "https://nexadesk.site",
         "https://www.nexadesk.site",
+        # Standalone demo app on Vercel — calls /demo/chat and /demo/voice
+        # cross-origin now that it no longer proxies through its own API routes.
+        "https://nexadesk-1j2y.vercel.app",
         "http://localhost:5173",
         "http://localhost:8000",
         "http://localhost:3000",
@@ -138,7 +140,6 @@ app.include_router(public_router, tags=["public"])
 app.include_router(assistant_router, prefix="/assistant", tags=["assistant"])
 app.include_router(onboarding_router, prefix="/onboarding", tags=["onboarding"])
 app.include_router(voice_router,      prefix="/voice",       tags=["voice"])
-app.include_router(voice_demo_router, prefix="/voice-demo",  tags=["voice-demo"])
 app.include_router(chat_router,       prefix="/chat",        tags=["chat"])
 app.include_router(rag_router, prefix="/rag", tags=["rag"])
 app.include_router(inbound_email_router, prefix="/rag", tags=["rag"])
@@ -170,9 +171,10 @@ if os.path.isdir(_dashboard_dist):
     # typo'd or removed endpoints look like successful HTML responses, breaking
     # client error handling and hiding routing regressions (AUDIT.md M14).
     _API_PREFIXES = (
-        "assistant", "onboarding", "voice", "voice-demo", "chat", "rag", "leads",
+        "assistant", "onboarding", "voice", "chat", "rag", "leads",
         "properties", "admin", "companies", "pricing", "integrations", "v1",
         "mcp", "health", "docs", "openapi.json", "redoc",
+        "demo", "book-demo",
     )
 
     @app.get("/{full_path:path}", include_in_schema=False)

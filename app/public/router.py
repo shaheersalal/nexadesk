@@ -1,6 +1,8 @@
-﻿import html
+﻿import base64
+import html
+import json
 import logging
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, File, Form, Request, UploadFile
 from pydantic import BaseModel, Field
 from typing import Optional
 
@@ -13,6 +15,8 @@ from app.dependencies import get_supabase_admin, get_redis
 from app.shared.demo_prompt import DEMO_KNOWLEDGE_PROMPT
 from app.shared.language import anormalize_for_llm, atranslate_from_english
 from app.shared.llm import complete
+from app.voice.stt_file import transcribe_file
+from app.voice.tts import synthesize
 
 logger = logging.getLogger("nexadesk.public")
 router = APIRouter()
@@ -76,6 +80,7 @@ DEMO_MAX_MESSAGES = 30
 DEMO_MAX_CHARS = 2000          # per message
 DEMO_RATE_WINDOW = 60          # seconds
 DEMO_RATE_MAX = 15             # requests per IP per window
+DEMO_MAX_AUDIO_BYTES = 8 * 1024 * 1024   # ~8 MB, well past a 30s browser clip
 
 
 class _ChatMessage(BaseModel):
@@ -247,20 +252,15 @@ nexadesk.site"""
     return {"status": "ok"}
 
 
-@router.post("/demo/chat")
-async def demo_chat(
-    body: DemoChatRequest,
-    request: Request,
-    redis: aioredis.Redis = Depends(get_redis),
-):
-    if not body.messages:
-        raise HTTPException(status_code=400, detail="No messages")
+async def _demo_rate_limit(request: Request, redis: aioredis.Redis, bucket: str) -> None:
+    """
+    Per-IP budget for the public demo endpoints.
 
-    # Sliding-ish per-IP budget. book_demo on this same router has always been
-    # throttled; this endpoint was not, despite being the one that actually
-    # spends money on every call (AUDIT.md H3).
+    book_demo on this router has always been throttled; the endpoints that
+    actually spend money on every call were not (AUDIT.md H3).
+    """
     ip = _get_client_ip(request)
-    rate_key = f"demo_chat_rate:{ip}"
+    rate_key = f"{bucket}:{ip}"
     count = await redis.incr(rate_key)
     if count == 1:
         await redis.expire(rate_key, DEMO_RATE_WINDOW)
@@ -270,6 +270,31 @@ async def demo_chat(
             detail="Too many messages — please wait a minute before continuing.",
         )
 
+
+def _demo_system_prompt(voice_mode: bool) -> tuple[str, int, float]:
+    """Single source of truth for the demo persona, shared by chat and voice."""
+    if voice_mode:
+        return (
+            DEMO_KNOWLEDGE_PROMPT
+            + "\n\nIMPORTANT: Simulate a voice call. Reply in 1–2 short sentences only. "
+            "No bullet points or lists. Always end with a question.",
+            150,
+            0.4,
+        )
+    return DEMO_KNOWLEDGE_PROMPT, 200, 0.6
+
+
+@router.post("/demo/chat")
+async def demo_chat(
+    body: DemoChatRequest,
+    request: Request,
+    redis: aioredis.Redis = Depends(get_redis),
+):
+    if not body.messages:
+        raise HTTPException(status_code=400, detail="No messages")
+
+    await _demo_rate_limit(request, redis, "demo_chat_rate")
+
     messages_dicts = [{"role": m.role, "content": m.content} for m in body.messages]
     user_message = messages_dicts[-1]["content"]
 
@@ -278,15 +303,7 @@ async def demo_chat(
     # Send English to LLM; keep history as-is (client stores it)
     messages_for_llm = messages_dicts[:-1][-9:] + [{"role": "user", "content": english_query}]
 
-    if body.voice_mode:
-        system = (
-            DEMO_KNOWLEDGE_PROMPT
-            + "\n\nIMPORTANT: Simulate a voice call. Reply in 1–2 short sentences only. "
-            "No bullet points or lists. Always end with a question."
-        )
-        max_tokens, temperature = 150, 0.4
-    else:
-        system, max_tokens, temperature = DEMO_KNOWLEDGE_PROMPT, 200, 0.6
+    system, max_tokens, temperature = _demo_system_prompt(body.voice_mode)
 
     response_english = await complete(
         system=system,
@@ -295,3 +312,81 @@ async def demo_chat(
         temperature=temperature,
     )
     return {"response": await atranslate_from_english(response_english, detected_lang)}
+
+
+@router.post("/demo/voice")
+async def demo_voice(
+    request: Request,
+    audio: UploadFile = File(...),
+    lang: str = Form("en"),
+    history: str = Form("[]"),
+    redis: aioredis.Redis = Depends(get_redis),
+):
+    """
+    Voice demo: speak -> transcribe -> reply -> speak back.
+
+    Runs on the same Deepgram, ElevenLabs and demo prompt as the production
+    call path. The previous design lived in a separate Next.js app that called
+    OpenAI directly with its own 14.8 KB copy of the prompt, which had already
+    drifted from the backend's — so the demo no longer represented the product
+    it was demonstrating (AUDIT.md L5).
+    """
+    await _demo_rate_limit(request, redis, "demo_voice_rate")
+
+    raw = await audio.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty audio upload")
+    if len(raw) > DEMO_MAX_AUDIO_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Audio exceeds {DEMO_MAX_AUDIO_BYTES // 1024 // 1024}MB limit",
+        )
+
+    try:
+        prior = json.loads(history)
+        if not isinstance(prior, list):
+            prior = []
+    except (ValueError, TypeError):
+        prior = []
+
+    # "auto" is the widget's own sentinel for language auto-detection.
+    stt_language = None if lang == "auto" else lang
+    transcript = await transcribe_file(
+        raw,
+        content_type=audio.content_type or "audio/webm",
+        language=stt_language,
+    )
+    if not transcript.strip():
+        raise HTTPException(
+            status_code=422,
+            detail="Could not hear anything — please try again.",
+        )
+
+    english_query, detected_lang = await anormalize_for_llm(transcript)
+
+    messages_for_llm = [
+        {"role": m.get("role", "user"), "content": m.get("content", "")}
+        for m in prior[-9:]
+        if isinstance(m, dict)
+    ] + [{"role": "user", "content": english_query}]
+
+    system, max_tokens, temperature = _demo_system_prompt(voice_mode=True)
+    reply_english = await complete(
+        system=system,
+        messages=messages_for_llm,
+        max_tokens=max_tokens,
+        temperature=temperature,
+    )
+    reply = await atranslate_from_english(reply_english, detected_lang)
+
+    mp3 = await synthesize(reply)
+
+    return {
+        "transcript": transcript,
+        "reply": reply,
+        # History is kept in English so the LLM sees a consistent thread even
+        # when the caller switches language mid-conversation.
+        "historyUser": english_query,
+        "historyAssistant": reply_english,
+        "audio": base64.b64encode(mp3).decode() if mp3 else "",
+    }

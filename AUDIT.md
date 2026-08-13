@@ -19,13 +19,12 @@ Legend: `[ ]` open · `[x]` fixed · severity **C**ritical / **H**igh / **M**edi
 | Critical | 3 | 3 | 0 |
 | High | 9 | 9 | 0 |
 | Medium | 15 | 15 | 0 |
-| Low | 7 | 3 | 4 |
-| **Total** | **34** | **30** | **4** |
+| Low | 7 | 5 | 2 |
+| **Total** | **34** | **32** | **2** |
 
 **Open items and where they are handled:**
 M15 is environment configuration, covered in DEPLOYMENT.md. L2 is the test
-suite (step 8). L5 is the demo consolidation (step 7). L6 and L7 are recorded
-architectural notes, not scheduled work.
+suite (step 8). L7 is a recorded architectural note, not scheduled work.
 
 The three Critical findings are all in the path that a **real Twilio number**
 activates. None of them can be reached today because no live number is
@@ -360,12 +359,12 @@ the Dockerfile's `COPY models/kokoro` would fail on any clean clone.
 `uploads/` does not survive a Railway redeploy. `SUPABASE_STORAGE_BUCKET` is
 configured but unused.
 
-### [ ] L5 — Demo app duplicated and diverged
+### [x] L5 — Demo app duplicated and diverged
 `nexa_demo_vercel/` exists both inside `nexa_desk/` and at `AI_Dev/` top level.
 `layout.jsx` and `demoPrompt.js` differ; the API routes exist only in the outer
 copy. `demoPrompt.js` (14.8 KB) also duplicates `app/shared/prompts.py`.
 
-### [ ] L6 — Dashboard ships an in-browser Whisper runtime
+### [x] L6 — Dashboard ships an in-browser Whisper runtime
 `dashboard/package.json` pulls `onnxruntime-web` / `onnxruntime-node` and
 `src/components/whisper-worker.js`. Large Vercel bundle for a feature the Vercel
 demo already covers server-side.
