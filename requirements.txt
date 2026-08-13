@@ -4,11 +4,16 @@ uvicorn[standard]==0.32.1
 python-multipart==0.0.12
 
 # Config
+# pydantic 2.11.7+ is required by supabase's `realtime` dependency; 2.10.3
+# made the tree unresolvable. fastapi/qdrant/openai all accept <3.0.0.
 pydantic-settings==2.6.1
-pydantic[email]==2.10.3
+pydantic[email]==2.11.7
 
 # Supabase
-supabase>=2.30.0
+# Pinned exactly: an unbounded `>=2.30.0` combined with the httpx<0.29 pin below
+# makes pip's resolver explore every supabase release and fail with
+# `resolution-too-deep`, which breaks the Railway/Nixpacks build too.
+supabase==2.31.0
 
 # Vector DB
 qdrant-client==1.12.1
