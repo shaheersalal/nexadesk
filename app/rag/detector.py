@@ -113,9 +113,9 @@ def assess_quality(text: str) -> QualityResult:
         flags.append("encoding_issues")
 
     # Sparsity: too many single-char lines
-    lines = [l for l in text.splitlines() if l.strip()]
+    lines = [line for line in text.splitlines() if line.strip()]
     if lines:
-        short_ratio = sum(1 for l in lines if len(l.strip()) <= 2) / len(lines)
+        short_ratio = sum(1 for line in lines if len(line.strip()) <= 2) / len(lines)
         if short_ratio > 0.4:
             score -= 0.2
             flags.append("sparse")

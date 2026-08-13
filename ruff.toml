@@ -1,0 +1,44 @@
+# Explicit lint configuration.
+#
+# CI previously ran bare `ruff check app/ --ignore E501,F401` with an unpinned
+# ruff. Ruff's default rule set has broadened over releases, so the same command
+# went from passing to reporting 262 findings without a single line of app code
+# changing — a lint gate that depends on when it happens to run is not a gate.
+#
+# Selected here: the correctness rules worth failing a build over. Style-only
+# and opinionated checks are deliberately excluded; they can be enabled later as
+# deliberate cleanups rather than as a wall of noise blocking a deploy.
+
+target-version = "py312"
+line-length = 120
+
+[lint]
+select = [
+    "E4",    # imports
+    "E7",    # statement issues
+    "E9",    # syntax / runtime errors
+    "F",     # pyflakes — undefined names, unused variables
+    "B",     # bugbear — likely bugs
+    "ASYNC", # blocking calls in async functions
+    "S102",  # exec
+    "S105", "S106",  # hardcoded passwords
+    "S324",  # insecure hash functions
+    "DTZ",   # naive datetimes
+]
+
+ignore = [
+    "E501",   # line length — enforced by formatter, not lint
+    "F401",   # unused imports — routers re-export deliberately
+    "B008",   # function call in default arg — this is how FastAPI Depends works
+    "B904",   # raise-from inside except — noisy, low value here
+    # Deferred imports inside functions are used deliberately throughout this
+    # codebase to break circular imports between routers and events//deps.
+    "E402",
+    # All current hits are false positives: constants named *_TOKEN_URL, and the
+    # APP_SECRET_KEY placeholder that main.py refuses to boot with in production.
+    "S105",
+]
+
+[lint.per-file-ignores]
+# Tests intentionally use assert and fixtures that look unused.
+"tests/*" = ["S101", "F811"]

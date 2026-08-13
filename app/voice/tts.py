@@ -1,7 +1,8 @@
-"""
-ElevenLabs TTS client — streaming audio synthesis.
+﻿"""
+ElevenLabs TTS client â€” streaming audio synthesis.
 Returns audio bytes (MP3) that get sent back to Twilio.
 """
+import asyncio
 import logging
 
 import httpx
@@ -45,22 +46,46 @@ async def synthesize(text: str, voice_id: str | None = None) -> bytes:
 
 async def synthesize_to_mulaw(text: str) -> bytes:
     """
-    Synthesize and convert to 8kHz mulaw for Twilio playback.
-    Requires ffmpeg in PATH. Falls back to empty bytes if unavailable.
+    Synthesize and convert to 8 kHz mulaw for Twilio playback.
+
+    ffmpeg is still needed to decode ElevenLabs' MP3, but it is now run via
+    asyncio's subprocess API instead of a blocking `subprocess.run` inside an
+    async function â€” the old form stalled the event loop for the whole
+    conversion, on every single spoken reply, for every concurrent call
+    (AUDIT.md, ruff ASYNC221).
     """
     mp3_bytes = await synthesize(text)
     if not mp3_bytes:
         return b""
     try:
-        import subprocess
-        result = subprocess.run(
-            ["ffmpeg", "-i", "pipe:0", "-ar", "8000", "-ac", "1",
-             "-f", "mulaw", "pipe:1"],
-            input=mp3_bytes,
-            capture_output=True,
-            timeout=10,
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-i", "pipe:0", "-ar", "8000", "-ac", "1",
+            "-f", "mulaw", "pipe:1",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
-        return result.stdout
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(input=mp3_bytes), timeout=10
+            )
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            logger.error("TTS mulaw conversion timed out after 10s")
+            return b""
+
+        if proc.returncode != 0:
+            logger.error(
+                "ffmpeg exited %s during mulaw conversion: %s",
+                proc.returncode,
+                stderr.decode(errors="replace")[:400],
+            )
+            return b""
+        return stdout
+    except FileNotFoundError:
+        logger.error("ffmpeg not found on PATH â€” cannot convert TTS audio for Twilio")
+        return b""
     except Exception as e:
         logger.error(f"TTS mulaw conversion failed: {e}")
         return b""

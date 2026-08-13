@@ -31,9 +31,20 @@ AUDIO_BUFFER_CHUNKS = 8  # ~1 second of 8kHz mulaw
 
 
 def _validate_twilio(request: Request, form: dict) -> bool:
-    """Return True if Twilio signature is valid (or Twilio is not configured)."""
+    """
+    Return True if the Twilio signature is valid.
+
+    When TELEPHONY_AUTH_TOKEN is unset this returns True so local development
+    works without Twilio credentials. That is only safe because startup now
+    refuses to boot in production without the token (see app/main.py) — without
+    that guard this is a silent open door on the voice webhooks (AUDIT.md C3).
+    """
     if not settings.TELEPHONY_AUTH_TOKEN:
-        return True  # Dev mode — no Twilio configured
+        if settings.APP_ENV == "production":
+            # Belt and braces: should be unreachable, startup already failed.
+            logger.error("Refusing to accept unsigned Twilio webhook in production")
+            return False
+        return True
     from app.voice.telephony import validate_twilio_signature
     sig = request.headers.get("X-Twilio-Signature", "")
     return validate_twilio_signature(str(request.url), dict(form), sig)
@@ -56,9 +67,9 @@ async def inbound_call(request: Request):
         )
         return Response(content=twiml, media_type="application/xml")
 
-    # Create Redis session
+    # Create Redis session (side effect: stored under call_sid for the WS to load)
     redis = await get_redis(settings)
-    session = await create_session(call_sid, company_id, redis)
+    await create_session(call_sid, company_id, redis)
 
     twiml = build_stream_twiml(call_sid)
     return Response(content=twiml, media_type="application/xml")
@@ -240,14 +251,26 @@ async def _finalize_call(session, duration: int) -> None:
 
 
 async def _resolve_company_id(phone_number: str) -> str | None:
-    """Look up company by their Twilio phone number."""
+    """
+    Look up the company that owns the dialled number.
+
+    Returns None when nothing matches — the caller then plays the fallback
+    TwiML. There is deliberately no "first company" fallback: routing an
+    unrecognised number to an arbitrary tenant would read that tenant's
+    knowledge base aloud to a stranger and write the resulting lead and full
+    transcript into their CRM (AUDIT.md C1).
+    """
+    if not phone_number:
+        return None
     sb = get_supabase_admin()
-    result = sb.table("companies").select("id").eq("phone", phone_number).execute()
+    result = sb.table("companies").select("id").eq("phone", phone_number).limit(1).execute()
     if result.data:
         return result.data[0]["id"]
-    # Fallback: return first company (for single-tenant demo)
-    result = sb.table("companies").select("id").limit(1).execute()
-    return result.data[0]["id"] if result.data else None
+    logger.warning(
+        "Inbound call to unrecognised number %s — no company owns it, playing fallback",
+        phone_number,
+    )
+    return None
 
 
 async def _get_company_name(company_id: str) -> str:

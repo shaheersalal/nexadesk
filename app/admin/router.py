@@ -1,10 +1,12 @@
-import hmac
+import html
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+import redis.asyncio as aioredis
 
 from app.config import get_settings
-from app.dependencies import get_supabase_admin, get_current_user
+from app.dependencies import get_supabase_admin, get_current_user, get_redis
+from app.admin.invite_token import consume_invite_token
 
 ADMIN_UID = "7227a933-56ef-45c4-8cbc-1c8331c74b21"
 
@@ -42,13 +44,25 @@ h2{{color:#1e3a5f;margin-bottom:8px}} p{{color:#64748b;font-size:15px}}
 
 
 @router.get("/invite-quick", include_in_schema=False)
-async def invite_quick(request_id: str, email: str, name: str, token: str):
-    settings = get_settings()
-    admin_token = settings.ADMINTOKEN.strip()
-    if not admin_token:
-        return _html("Not configured", "<p>ADMINTOKEN is not set on the server.</p>", "#f87171")
-    if not hmac.compare_digest(token.strip(), admin_token):
-        return _html("Invalid token", "<p>This link is invalid or has already been used.</p>", "#f87171")
+async def invite_quick(token: str, redis: aioredis.Redis = Depends(get_redis)):
+    """
+    One-click activation from the demo-request notification email.
+
+    Identity comes entirely from the single-use token (AUDIT.md C2) — request_id
+    and email are read from the Redis payload, never from query parameters, so
+    a link cannot be edited to invite a different address.
+    """
+    payload = await consume_invite_token(redis, token.strip())
+    if not payload:
+        return _html(
+            "Link expired",
+            "<p>This activation link is invalid, has expired, or has already been used.</p>",
+            "#f87171",
+        )
+
+    request_id = payload["request_id"]
+    email = payload["email"]
+    name = payload["name"]
 
     sb = get_supabase_admin()
     try:
@@ -68,12 +82,15 @@ async def invite_quick(request_id: str, email: str, name: str, token: str):
         )
     except Exception as e:
         err = str(e)
+        # Escape before interpolating: name/email originate from a public form
+        # and would otherwise inject markup into this admin-facing page.
+        safe_name, safe_email = html.escape(name), html.escape(email)
         if "already been invited" in err.lower() or "already registered" in err.lower():
-            return _html("Already invited", f"<p>{name} ({email}) was already sent an invite.</p>", "#fbbf24")
-        return _html("Error", f"<p>{err}</p>", "#f87171")
+            return _html("Already invited", f"<p>{safe_name} ({safe_email}) was already sent an invite.</p>", "#fbbf24")
+        return _html("Error", f"<p>{html.escape(err)}</p>", "#f87171")
 
     sb.table("demo_requests").update({"status": "invited"}).eq("id", request_id).execute()
-    return _html("Invite sent!", f"<p>An account activation email has been sent to <strong>{email}</strong>.<br><br>They'll set their password and land on the onboarding page.</p>")
+    return _html("Invite sent!", f"<p>An account activation email has been sent to <strong>{html.escape(email)}</strong>.<br><br>They'll set their password and land on the onboarding page.</p>")
 
 
 @router.post("/invite")

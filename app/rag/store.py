@@ -31,7 +31,10 @@ async def store_chunks(
     vectors = await embed_texts(texts)
 
     points = []
-    for chunk, vector in zip(chunks, vectors):
+    # strict=True: a length mismatch means the embedder returned fewer vectors
+    # than chunks, which would otherwise silently drop the tail of a document
+    # from the knowledge base with no error.
+    for chunk, vector in zip(chunks, vectors, strict=True):
         payload = {
             "text": chunk.text,
             "company_id": company_id,

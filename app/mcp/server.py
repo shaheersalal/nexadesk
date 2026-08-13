@@ -16,6 +16,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.dependencies import get_supabase_admin
+from app.v1.router import _touch_last_used
 
 logger = logging.getLogger("nexadesk.mcp")
 router = APIRouter()
@@ -79,6 +80,24 @@ TOOLS = [
 ]
 
 
+def _coerce_limit(raw: Any, default: int, cap: int) -> int:
+    """
+    JSON-RPC arguments are untyped — the advertised inputSchema is never
+    enforced on the wire. `min("20", 100)` raises TypeError, which the generic
+    handler then reported as "Internal server error", disguising a client
+    mistake as a server fault (AUDIT.md M11).
+    """
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"'limit' must be an integer, got {raw!r}")
+    if value < 1:
+        raise ValueError("'limit' must be at least 1")
+    return min(value, cap)
+
+
 def _ok(id_: Any, result: Any) -> dict:
     return {"jsonrpc": "2.0", "id": id_, "result": result}
 
@@ -88,20 +107,29 @@ def _err(id_: Any, code: int, message: str) -> dict:
 
 
 async def _auth(request: Request) -> tuple[str | None, list[str]]:
-    """Validate API key; returns (company_id, scopes) or (None, [])."""
+    """
+    Validate API key; returns (company_id, scopes) or (None, []).
+
+    Never raises: the caller invokes this outside its try block, so a raised
+    exception became an unhandled HTTP 500 rather than a clean JSON-RPC
+    unauthorized response (AUDIT.md H4).
+    """
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer nxd_"):
         return None, []
     raw_key = auth.removeprefix("Bearer ").strip()
     key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
-    sb = get_supabase_admin()
-    result = sb.table("api_keys").select("company_id,scopes,revoked_at") \
-        .eq("key_hash", key_hash).single().execute()
-    if not result.data or result.data.get("revoked_at"):
+    try:
+        sb = get_supabase_admin()
+        result = sb.table("api_keys").select("company_id,scopes,revoked_at") \
+            .eq("key_hash", key_hash).maybe_single().execute()
+        if not result or not result.data or result.data.get("revoked_at"):
+            return None, []
+        _touch_last_used(sb, key_hash)
+        return result.data["company_id"], (result.data.get("scopes") or [])
+    except Exception as exc:
+        logger.warning("MCP auth lookup failed: %s", exc)
         return None, []
-    sb.table("api_keys").update({"last_used": datetime.now(timezone.utc).isoformat()}) \
-        .eq("key_hash", key_hash).execute()
-    return result.data["company_id"], result.data["scopes"]
 
 
 async def _call(company_id: str, scopes: list[str], name: str, args: dict) -> Any:
@@ -116,11 +144,13 @@ async def _call(company_id: str, scopes: list[str], name: str, args: dict) -> An
             q = q.eq("status", args["status"])
         if args.get("source"):
             q = q.eq("source", args["source"])
-        return q.order("created_at", desc=True).limit(min(args.get("limit", 20), 100)).execute().data or []
+        return q.order("created_at", desc=True).limit(_coerce_limit(args.get("limit"), 20, 100)).execute().data or []
 
     if name == "create_lead":
         if "leads:write" not in scopes:
             raise PermissionError("Scope 'leads:write' required")
+        if not args.get("name"):
+            raise ValueError("'name' is required")
         result = sb.table("leads").insert({
             "company_id": company_id,
             "name": args["name"],
@@ -130,6 +160,8 @@ async def _call(company_id: str, scopes: list[str], name: str, args: dict) -> An
             "notes": args.get("notes"),
             "status": "new",
         }).execute()
+        if not result.data:
+            raise RuntimeError("Lead was not created")
         lead = result.data[0]
         from app.integrations.events import fire_event
         fire_event(company_id, "lead.created", lead)
@@ -142,7 +174,7 @@ async def _call(company_id: str, scopes: list[str], name: str, args: dict) -> An
             .select("id,datetime,status,notes,leads(name,phone),properties(title,address)") \
             .eq("company_id", company_id) \
             .gte("datetime", datetime.now(timezone.utc).isoformat()) \
-            .order("datetime").limit(min(args.get("limit", 10), 50)).execute().data or []
+            .order("datetime").limit(_coerce_limit(args.get("limit"), 10, 50)).execute().data or []
 
     if name == "get_properties":
         if "properties:read" not in scopes:
@@ -151,7 +183,7 @@ async def _call(company_id: str, scopes: list[str], name: str, args: dict) -> An
             .eq("company_id", company_id)
         if args.get("type"):
             q = q.eq("type", args["type"])
-        return q.order("created_at", desc=True).limit(min(args.get("limit", 20), 100)).execute().data or []
+        return q.order("created_at", desc=True).limit(_coerce_limit(args.get("limit"), 20, 100)).execute().data or []
 
     raise ValueError(f"Unknown tool: {name}")
 

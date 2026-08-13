@@ -1,19 +1,19 @@
-"""
+﻿"""
 Multi-agent orchestrator for chat turns.
 
 Architecture:
-  Router (fast, low tokens) → classify intent
+  Router (fast, low tokens) â†’ classify intent
   parallel with RAG fetch
 
   Then dispatch to:
-    knowledge_agent  — RAG-backed property Q&A
-    qualifier_agent  — lead qualification + structured capture
-    escalation_agent — warm handoff, flag needs_human
+    knowledge_agent  â€” RAG-backed property Q&A
+    qualifier_agent  â€” lead qualification + structured capture
+    escalation_agent â€” warm handoff, flag needs_human
     appointment intent is handled by qualifier_agent (captures details first)
 
 Latency budget:
-  - Router + RAG in parallel: ~400–600 ms
-  - Reply agent: ~400–600 ms
+  - Router + RAG in parallel: ~400â€“600 ms
+  - Reply agent: ~400â€“600 ms
   - Field extraction in parallel with reply: 0 extra ms
   Target: <1.5 s total before TTS/response delivery
 """
@@ -24,21 +24,21 @@ from typing import AsyncGenerator, Optional
 
 from app.config import get_settings
 from app.shared import llm
-from app.shared.language import normalize_for_llm, translate_from_english
+from app.shared.language import anormalize_for_llm, atranslate_from_english
 from app.shared.prompts import RECEPTIONIST_SYSTEM_PROMPT
 from app.rag.store import query_with_confidence
 from app.agents.tools import capture_lead_fields, flag_escalation, extract_fields_from_message
 
 settings = get_settings()
 
-# ── Query rewriter ────────────────────────────────────────────────────────────
+# â”€â”€ Query rewriter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def _rewrite_query(english_query: str, history_tail: str) -> str:
     """
     Rewrite a conversational query into a standalone, search-optimised form
     before it hits the vector store.
 
-    Runs in parallel with the router — zero extra latency on the critical path.
+    Runs in parallel with the router â€” zero extra latency on the critical path.
     Resolves pronouns ("that one", "it", "there"), injects implied location /
     property type from recent context, and expands vague terms like "cheap" or
     "near the beach" into concrete real-estate keywords.
@@ -54,7 +54,7 @@ async def _rewrite_query(english_query: str, history_tail: str) -> str:
         "Rules:\n"
         "- Resolve ALL pronouns and references using the conversation context\n"
         "- Add specific property types, city/area names, price ranges if implied\n"
-        "- Expand vague terms: 'cheap' → budget price range; 'near beach' → beach area names\n"
+        "- Expand vague terms: 'cheap' â†’ budget price range; 'near beach' â†’ beach area names\n"
         "- Remove filler words and pleasantries\n"
         "- Return ONLY the rewritten query, no explanation. Max 25 words."
     )
@@ -71,7 +71,7 @@ async def _rewrite_query(english_query: str, history_tail: str) -> str:
         return english_query
 
 
-# ── Router ────────────────────────────────────────────────────────────────────
+# â”€â”€ Router â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def _route(user_message: str, history_tail: str, company_name: str) -> str:
     prompt = (
@@ -97,10 +97,10 @@ async def _route(user_message: str, history_tail: str, company_name: str) -> str
         return "qualify"
 
 
-# ── System prompt builders ────────────────────────────────────────────────────
+# â”€â”€ System prompt builders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _knowledge_system(company: dict, rag_context: str, voice: bool = False) -> str:
-    working_hours = company.get("working_hours", {"Mon–Fri": "9:00–17:00"})
+    working_hours = company.get("working_hours", {"Monâ€“Fri": "9:00â€“17:00"})
     hours_str = (
         ", ".join(f"{k}: {v}" for k, v in working_hours.items())
         if isinstance(working_hours, dict)
@@ -124,7 +124,7 @@ def _knowledge_system(company: dict, rag_context: str, voice: bool = False) -> s
             "Do NOT invent property details. Capture the lead instead.]"
         )
     if voice:
-        system += "\n\nIMPORTANT: Voice call — reply in 1–2 short sentences only. No lists."
+        system += "\n\nIMPORTANT: Voice call â€” reply in 1â€“2 short sentences only. No lists."
     return system
 
 
@@ -134,11 +134,11 @@ def _qualifier_system(company: dict, voice: bool = False) -> str:
         f"for {company.get('name', settings.APP_NAME)}.\n"
         "Your goal: understand what the client is looking for and naturally collect their details.\n"
         "Ask ONE qualifying question per reply (budget, area, bedrooms, timeline, name, or phone).\n"
-        "Keep replies to 2–3 sentences. Sound like a warm, human agent — not a form.\n"
+        "Keep replies to 2â€“3 sentences. Sound like a warm, human agent â€” not a form.\n"
         "If they mention a specific property, confirm interest and ask for their contact details."
     )
     if voice:
-        system += "\n\nIMPORTANT: Voice call — reply in 1–2 short sentences only."
+        system += "\n\nIMPORTANT: Voice call â€” reply in 1â€“2 short sentences only."
     return system
 
 
@@ -148,14 +148,14 @@ def _escalation_system(company: dict, voice: bool = False) -> str:
         f"for {company.get('name', settings.APP_NAME)}.\n"
         "The client needs a human agent. Apologise sincerely, confirm you have flagged this for an agent "
         "who will follow up shortly, and ask for their name and best contact number if not already given. "
-        "2–3 sentences, warm and professional."
+        "2â€“3 sentences, warm and professional."
     )
     if voice:
-        system += "\n\nIMPORTANT: Voice call — reply in 1–2 short sentences only."
+        system += "\n\nIMPORTANT: Voice call â€” reply in 1â€“2 short sentences only."
     return system
 
 
-# ── Sub-agents ────────────────────────────────────────────────────────────────
+# â”€â”€ Sub-agents â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def _knowledge_agent(
     user_message: str,
@@ -193,7 +193,7 @@ async def _escalation_agent(user_message: str, company: dict, voice: bool = Fals
     )
 
 
-# ── Main entry point ──────────────────────────────────────────────────────────
+# â”€â”€ Main entry point â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def run(
     user_message: str,
@@ -215,14 +215,14 @@ async def run(
         "lead_id": str | None,     # may be updated if new lead was created
       }
     """
-    english_query, detected_lang = normalize_for_llm(user_message)
+    english_query, detected_lang = await anormalize_for_llm(user_message)
     company_name = company.get("name", settings.APP_NAME)
 
     recent_tail = " | ".join(
         f"{m['role']}: {m['content'][:60]}" for m in history[-2:]
     ) or "start of conversation"
 
-    # Router + query rewrite in parallel — both are cheap fast LLM calls.
+    # Router + query rewrite in parallel â€” both are cheap fast LLM calls.
     # The rewritten query is used only for vector search; all agent calls
     # still receive the original english_query so the conversation stays natural.
     intent_task  = asyncio.create_task(_route(english_query, recent_tail, company_name))
@@ -267,7 +267,7 @@ async def run(
     if intent == "escalate":
         await flag_escalation(new_lead_id, company_id)
 
-    reply = translate_from_english(reply_english, detected_lang)
+    reply = await atranslate_from_english(reply_english, detected_lang)
 
     return {
         "reply": reply,
@@ -279,7 +279,7 @@ async def run(
     }
 
 
-# ── Voice streaming entry point ───────────────────────────────────────────────
+# â”€â”€ Voice streaming entry point â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 # Sentence boundary: after . ! ? followed by whitespace
 _SENTENCE_END = re.compile(r'(?<=[.!?])\s+')
@@ -296,17 +296,17 @@ async def run_voice_streaming(
     Voice-optimised orchestrator that streams the reply token by token.
 
     Yields:
-      ("chunk", text)   — one LLM token / small text piece
-      ("done", dict)    — final metadata: reply, reply_english, lead_id, intent, confidence
+      ("chunk", text)   â€” one LLM token / small text piece
+      ("done", dict)    â€” final metadata: reply, reply_english, lead_id, intent, confidence
     """
-    english_query, detected_lang = normalize_for_llm(user_message)
+    english_query, detected_lang = await anormalize_for_llm(user_message)
     company_name = company.get("name", settings.APP_NAME)
 
     recent_tail = " | ".join(
         f"{m['role']}: {m['content'][:60]}" for m in history[-2:]
     ) or "start of conversation"
 
-    # Router + query rewrite in parallel — RAG waits for rewritten query.
+    # Router + query rewrite in parallel â€” RAG waits for rewritten query.
     intent_task  = asyncio.create_task(_route(english_query, recent_tail, company_name))
     rewrite_task = asyncio.create_task(_rewrite_query(english_query, recent_tail))
     intent, rag_query = await asyncio.gather(intent_task, rewrite_task)
@@ -342,7 +342,7 @@ async def run_voice_streaming(
         yield ("chunk", chunk)
 
     reply_english = "".join(reply_chunks)
-    reply = translate_from_english(reply_english, detected_lang)
+    reply = await atranslate_from_english(reply_english, detected_lang)
 
     # Persist extracted fields (we can now await it)
     extracted = await extract_task

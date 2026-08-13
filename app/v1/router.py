@@ -8,6 +8,7 @@ GET  /v1/appointments
 GET  /v1/properties
 """
 import hashlib
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -23,6 +24,26 @@ def _sb():
     return get_supabase_admin()
 
 
+# Debounce the last_used write. Previously every authenticated read triggered a
+# write to api_keys, doubling round-trips and churning rows (AUDIT.md M10).
+_LAST_USED_DEBOUNCE = 300  # seconds
+_last_used_seen: dict[str, float] = {}
+
+
+def _touch_last_used(sb, key_hash: str) -> None:
+    now = time.monotonic()
+    seen = _last_used_seen.get(key_hash)
+    if seen is not None and now - seen < _LAST_USED_DEBOUNCE:
+        return
+    _last_used_seen[key_hash] = now
+    try:
+        sb.table("api_keys").update(
+            {"last_used": datetime.now(timezone.utc).isoformat()}
+        ).eq("key_hash", key_hash).execute()
+    except Exception:
+        pass  # Telemetry only — never fail a request over it
+
+
 async def _validate_api_key(request: Request) -> dict:
     """Validate Bearer nxd_live_... key; return {company_id, scopes}."""
     auth = request.headers.get("Authorization", "")
@@ -33,18 +54,25 @@ async def _validate_api_key(request: Request) -> dict:
     key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
 
     sb = _sb()
+    # maybe_single(), not single(): supabase-py raises on no-match with single(),
+    # which turned every wrong or rotated key into an opaque HTTP 500 instead of
+    # a 401 (AUDIT.md H4).
     result = sb.table("api_keys").select("company_id,scopes,revoked_at") \
-        .eq("key_hash", key_hash).single().execute()
+        .eq("key_hash", key_hash).maybe_single().execute()
 
-    if not result.data:
+    if not result or not result.data:
         raise HTTPException(status_code=401, detail="Invalid API key")
     if result.data.get("revoked_at"):
         raise HTTPException(status_code=401, detail="API key has been revoked")
 
-    sb.table("api_keys").update({"last_used": datetime.now(timezone.utc).isoformat()}) \
-        .eq("key_hash", key_hash).execute()
+    _touch_last_used(sb, key_hash)
 
-    return {"company_id": result.data["company_id"], "scopes": result.data["scopes"]}
+    return {
+        "company_id": result.data["company_id"],
+        # A NULL scopes column would otherwise raise TypeError on the
+        # `in` checks below.
+        "scopes": result.data.get("scopes") or [],
+    }
 
 
 class LeadIn(BaseModel):
@@ -87,6 +115,10 @@ async def v1_create_lead(request: Request, body: LeadIn):
         "notes": body.notes,
         "status": "new",
     }).execute()
+    if not result.data:
+        # Insert returned no representation (RLS, trigger, or minimal return) —
+        # IndexError here used to surface as a 500 (AUDIT.md M12).
+        raise HTTPException(500, "Lead was not created")
     lead = result.data[0]
     from app.integrations.events import fire_event
     fire_event(auth["company_id"], "lead.created", lead)

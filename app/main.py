@@ -1,7 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
@@ -61,13 +61,16 @@ async def lifespan(app: FastAPI):
     if missing:
         raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
 
-    # Twilio signature validation is skipped entirely when TELEPHONY_AUTH_TOKEN is blank
-    # (see app/voice/router.py _validate_twilio) — fine for local dev, a silent webhook
-    # spoofing risk if ever blank in production.
+    # Twilio signature validation is skipped entirely when TELEPHONY_AUTH_TOKEN is
+    # blank (see app/voice/router.py _validate_twilio). That is fine for local dev
+    # but in production it means /voice/inbound and /voice/status accept unsigned
+    # requests from anyone, who can then forge calls and drive LLM/TTS spend.
+    # Logging an error and booting anyway was not enough — fail hard (AUDIT.md C3).
     if settings.APP_ENV == "production" and not settings.TELEPHONY_AUTH_TOKEN:
-        logger.error(
-            "TELEPHONY_AUTH_TOKEN is blank in production — Twilio webhook signature "
-            "validation is DISABLED, voice webhooks accept unsigned requests from anyone."
+        raise RuntimeError(
+            "TELEPHONY_AUTH_TOKEN is blank in production. Twilio webhook signature "
+            "validation would be disabled, leaving /voice/inbound and /voice/status "
+            "open to anyone. Set it in the Railway environment before deploying."
         )
 
     # Refuse to boot in production with the placeholder secret key — it's
@@ -162,7 +165,20 @@ _dashboard_dist = os.path.join(os.path.dirname(__file__), "..", "dashboard", "di
 if os.path.isdir(_dashboard_dist):
     app.mount("/assets", StaticFiles(directory=os.path.join(_dashboard_dist, "assets")), name="assets")
 
+    # Path prefixes owned by the API. A GET that misses every route under one of
+    # these is a genuine 404 — returning index.html with HTTP 200 instead made
+    # typo'd or removed endpoints look like successful HTML responses, breaking
+    # client error handling and hiding routing regressions (AUDIT.md M14).
+    _API_PREFIXES = (
+        "assistant", "onboarding", "voice", "voice-demo", "chat", "rag", "leads",
+        "properties", "admin", "companies", "pricing", "integrations", "v1",
+        "mcp", "health", "docs", "openapi.json", "redoc",
+    )
+
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
+        first_segment = full_path.split("/", 1)[0]
+        if first_segment in _API_PREFIXES:
+            raise HTTPException(status_code=404, detail="Not found")
         index = os.path.join(_dashboard_dist, "index.html")
         return FileResponse(index, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})

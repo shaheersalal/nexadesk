@@ -53,8 +53,8 @@ async def clean(text: str, quality: QualityResult) -> str:
     if quality.score >= 0.4:
         # Aggressive: also remove lines with < 3 words (likely extraction artefacts)
         lines = [
-            l for l in text.splitlines()
-            if not l.strip() or len(l.split()) >= 3
+            line for line in text.splitlines()
+            if not line.strip() or len(line.split()) >= 3
         ]
         return "\n".join(lines)
 

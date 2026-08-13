@@ -12,9 +12,17 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://localhost:8000"
     SUPPORTED_LANGUAGES: str = "en,es,ar,fr,ur"
 
+    # Only honour CF-Connecting-IP / X-Forwarded-For when the app really is
+    # behind a proxy that overwrites them. Otherwise they are client-controlled
+    # and every per-IP rate limit becomes a no-op.
+    TRUST_PROXY_HEADERS: bool = False
+
     # LLM
     LLM_API_KEY: str = ""
-    LLM_MODEL: str = "claude-sonnet-4-6"
+    # app/shared/llm.py uses the OpenAI SDK, so this must be an OpenAI model id.
+    # The previous "claude-sonnet-4-6" default broke any deploy that did not
+    # override it, failing at the first LLM call.
+    LLM_MODEL: str = "gpt-4o-mini"
 
     # STT
     STT_API_KEY: str = ""
@@ -40,6 +48,13 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = ""
     SUPABASE_ANON_KEY: str = ""
     SUPABASE_SERVICE_KEY: str = ""
+    # Project JWT secret (Supabase dashboard → Settings → API → JWT Secret).
+    # Lets us verify access tokens locally instead of paying a network round
+    # trip to Supabase Auth on every authenticated request. When blank the app
+    # falls back to the old remote verification path.
+    SUPABASE_JWT_SECRET: str = ""
+    # How long a resolved user->company mapping stays cached in Redis.
+    COMPANY_CACHE_TTL: int = 300
 
     # Qdrant (local: set HOST+PORT; cloud: set QDRANT_URL+QDRANT_API_KEY)
     QDRANT_HOST: str = "localhost"

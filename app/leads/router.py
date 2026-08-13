@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, status, Query, Request
 from fastapi.responses import RedirectResponse
 
 from app.auth.middleware import CurrentUser, CompanyId, AccessibleCompanyIds
+from app.config import get_settings
 from app.dependencies import get_supabase_admin
 from app.integrations.events import fire_event
 from app.leads.models import (
@@ -201,7 +202,10 @@ async def get_analytics(
     filter_company_id: Optional[str] = Query(None, description="Narrow to one child company id"),
 ):
     sb = _sb()
-    today = date.today().isoformat()
+    # UTC, not the server's local date: on a Railway container in a different
+    # region than the user, date.today() rolls over at the wrong moment and
+    # "today's appointments" silently shifts by a day.
+    today = datetime.now(timezone.utc).date().isoformat()
     ids = _resolve_ids(accessible_company_ids, filter_company_id)
 
     leads = sb.table("leads").select("source, status, score").in_("company_id", ids).execute()

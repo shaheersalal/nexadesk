@@ -16,15 +16,43 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
+          cache: pip
 
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install ruff
+          pip install -r requirements.txt
+          pip install ruff pytest pytest-asyncio
 
       - name: Lint with ruff
         run: ruff check app/ --ignore E501,F401
 
-      - name: Verify imports
-        run: python -c "import ast, sys, pathlib; errors = []; [errors.append(f) for f in pathlib.Path('app').rglob('*.py') if ast.parse(open(f).read()) and False]; print(f'Checked {sum(1 for _ in pathlib.Path(\"app\").rglob(\"*.py\"))} files — OK')"
+      # The previous version of this step ended in `and False`, so the error
+      # list was always empty and no file was ever parsed — it printed a count
+      # and passed unconditionally (AUDIT.md L1). This one actually compiles
+      # every module and fails on a syntax error.
+      - name: Compile all modules
+        run: python -m compileall -q app/
+
+      # Catches broken imports, bad decorators and router wiring that
+      # compileall cannot see. Uses placeholder secrets: the app validates
+      # required env vars at startup and we want that path exercised too.
+      - name: Verify app imports
+        env:
+          APP_ENV: development
+          SUPABASE_URL: https://placeholder.supabase.co
+          SUPABASE_SERVICE_KEY: placeholder
+          SUPABASE_ANON_KEY: placeholder
+          LLM_API_KEY: placeholder
+        run: python -c "import app.main; print('app.main imported OK')"
+
+      - name: Run tests
+        env:
+          APP_ENV: development
+          SUPABASE_URL: https://placeholder.supabase.co
+          SUPABASE_SERVICE_KEY: placeholder
+          SUPABASE_ANON_KEY: placeholder
+          LLM_API_KEY: placeholder
+          APP_SECRET_KEY: test-secret-not-a-real-key
+        run: pytest -q

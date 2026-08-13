@@ -1,10 +1,10 @@
-"""
+﻿"""
 CRM OAuth consumer routes.
-GET    /integrations/crm/connections        → list connected CRMs
-GET    /integrations/crm/connect/{provider} → start OAuth, returns {auth_url}
-GET    /integrations/crm/callback/{provider}→ OAuth callback (browser redirect)
-DELETE /integrations/crm/{provider}         → disconnect
-POST   /integrations/crm/sync/{provider}    → manual sync last 50 leads
+GET    /integrations/crm/connections        â†’ list connected CRMs
+GET    /integrations/crm/connect/{provider} â†’ start OAuth, returns {auth_url}
+GET    /integrations/crm/callback/{provider}â†’ OAuth callback (browser redirect)
+DELETE /integrations/crm/{provider}         â†’ disconnect
+POST   /integrations/crm/sync/{provider}    â†’ manual sync last 50 leads
 """
 import logging
 import secrets
@@ -17,6 +17,7 @@ from fastapi.responses import RedirectResponse
 from app.auth.middleware import CurrentUser, CompanyId
 from app.config import get_settings, Settings
 from app.dependencies import get_supabase_admin, get_redis
+from app.shared.crypto import decrypt, encrypt
 from app.integrations.crm import hubspot, zoho
 
 logger = logging.getLogger("nexadesk.integrations.crm")
@@ -77,7 +78,7 @@ async def crm_connect(
 
     client_id = getattr(settings, p["client_id_attr"])
     if not client_id:
-        raise HTTPException(503, f"{p['name']} not configured — add {p['client_id_attr']} to your environment")
+        raise HTTPException(503, f"{p['name']} not configured â€” add {p['client_id_attr']} to your environment")
 
     state = secrets.token_urlsafe(32)
     await redis.set(f"crm_state:{state}", company_id, ex=600)
@@ -135,8 +136,9 @@ async def crm_callback(
     _sb().table("crm_connections").upsert({
         "company_id": company_id,
         "provider": provider,
-        "access_token": tokens["access_token"],
-        "refresh_token": tokens.get("refresh_token"),
+        # Encrypted at rest â€” see app/shared/crypto.py (AUDIT.md H9).
+        "access_token": encrypt(tokens["access_token"]),
+        "refresh_token": encrypt(tokens.get("refresh_token")),
         "expires_at": expires_at,
         "scope": tokens.get("scope"),
         "account_id": account_id,
@@ -172,22 +174,23 @@ async def crm_sync(
     if not conn.data:
         raise HTTPException(404, f"No {p['name']} connection found. Connect it first.")
 
-    token = conn.data["access_token"]
+    token = decrypt(conn.data["access_token"])
+    stored_refresh = decrypt(conn.data.get("refresh_token"))
 
     # Refresh token if expiring soon
-    if conn.data.get("expires_at") and conn.data.get("refresh_token"):
+    if conn.data.get("expires_at") and stored_refresh:
         expires = datetime.fromisoformat(conn.data["expires_at"])
         if expires < datetime.now(timezone.utc) + timedelta(minutes=5):
             try:
                 new_tokens = await p["module"].refresh_access_token(
-                    conn.data["refresh_token"],
+                    stored_refresh,
                     getattr(settings, p["client_id_attr"]),
                     getattr(settings, p["client_secret_attr"]),
                 )
                 token = new_tokens["access_token"]
                 _sb().table("crm_connections").update({
-                    "access_token": token,
-                    "refresh_token": new_tokens.get("refresh_token", conn.data["refresh_token"]),
+                    "access_token": encrypt(token),
+                    "refresh_token": encrypt(new_tokens.get("refresh_token", stored_refresh)),
                     "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=new_tokens.get("expires_in", 3600))).isoformat(),
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 }).eq("id", conn.data["id"]).execute()

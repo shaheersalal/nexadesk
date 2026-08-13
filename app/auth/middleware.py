@@ -46,6 +46,23 @@ async def bootstrap_company(user_id: str, company_name: str, email: str) -> str:
     )
     company_id = company.data[0]["id"]
 
+    # insert(), not upsert(): upsert silently overwrote company_id and reset
+    # role to "owner" for a user who was already linked elsewhere, which would
+    # move them between tenants (AUDIT.md M9). A duplicate id is a real error
+    # and should surface as one.
+    existing = (
+        supabase.table("users")
+        .select("company_id")
+        .eq("id", user_id)
+        .maybe_single()
+        .execute()
+    )
+    if existing and existing.data and existing.data.get("company_id"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User is already linked to a company",
+        )
+
     supabase.table("users").upsert(
         {"id": user_id, "company_id": company_id, "role": "owner"}
     ).execute()

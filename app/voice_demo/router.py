@@ -1,22 +1,22 @@
-"""
-WS /voice-demo/stream — browser push-to-talk voice demo.
+﻿"""
+WS /voice-demo/stream â€” browser push-to-talk voice demo.
 
-Protocol (client → server):
-  JSON text  — {"type":"lang","lang":"en","mimeType":"audio/webm;codecs=opus"}
+Protocol (client â†’ server):
+  JSON text  â€” {"type":"lang","lang":"en","mimeType":"audio/webm;codecs=opus"}
                Control frame sent before every audio frame.  Does NOT count
                as a turn. Sets the language and container format for the next
                binary frame.
-  Binary     — Raw audio (WebM/Opus or whatever MediaRecorder produced).
+  Binary     â€” Raw audio (WebM/Opus or whatever MediaRecorder produced).
                Server transcribes with OpenAI whisper-1 using the lang/mime
                received in the preceding control frame.
-  JSON text  — {"type":"text_input","text":"..."} — future / testing use only.
+  JSON text  â€” {"type":"text_input","text":"..."} â€” future / testing use only.
 
-Protocol (server → client):
+Protocol (server â†’ client):
   {"type":"status",     "stage":"transcribing"|"thinking"|"speaking"|"idle"}
   {"type":"transcript", "text":"..."}
   {"type":"reply_text", "text":"..."}
   {"type":"error",      "message":"..."}
-  Binary  — MP3 audio chunk (one per sentence, streamed sentence-by-sentence)
+  Binary  â€” MP3 audio chunk (one per sentence, streamed sentence-by-sentence)
 
 Debug: set env VOICE_DEMO_DEBUG=1 to save each received WebM to
   /tmp/voice_demo_debug/<ms-timestamp>.webm and log side-by-side with transcript.
@@ -29,7 +29,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.shared import llm
 from app.shared.demo_prompt import DEMO_KNOWLEDGE_PROMPT
-from app.shared.language import normalize_for_llm
+from app.shared.language import anormalize_for_llm
 from app.voice_demo.local_stt import transcribe
 from app.voice_demo.local_tts import synthesize
 
@@ -39,19 +39,19 @@ logger = logging.getLogger("nexadesk.voice_demo")
 MAX_TURNS = 20
 
 # Approximate minimum for a ~1.5 s clip at 128 kbps Opus inside WebM.
-# 128 000 bps × 1.5 s / 8 ≈ 24 000 bytes; we use half as a loose server guard
+# 128 000 bps Ã— 1.5 s / 8 â‰ˆ 24 000 bytes; we use half as a loose server guard
 # because browsers may not hit exactly 128 kbps.  The primary guard is the
 # 1 500 ms client-side check; this catches only truly empty / corrupt frames.
 _MIN_AUDIO_BYTES = 8_000
 
 _VOICE_SYSTEM = (
     DEMO_KNOWLEDGE_PROMPT
-    + "\n\nIMPORTANT: This is a voice call. Reply in 1–2 short sentences only. No bullet points or lists."
+    + "\n\nIMPORTANT: This is a voice call. Reply in 1â€“2 short sentences only. No bullet points or lists."
 )
 
 _LANG_RESPONSE: dict[str, str] = {
-    "ur": "IMPORTANT: You MUST respond ONLY in Urdu (اردو) using Arabic Nastaliq script. Do NOT write any English words.",
-    "ar": "IMPORTANT: You MUST respond ONLY in Arabic (العربية). Do NOT write any English words.",
+    "ur": "IMPORTANT: You MUST respond ONLY in Urdu (Ø§Ø±Ø¯Ùˆ) using Arabic Nastaliq script. Do NOT write any English words.",
+    "ar": "IMPORTANT: You MUST respond ONLY in Arabic (Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©). Do NOT write any English words.",
 }
 
 _DEBUG = os.getenv("VOICE_DEMO_DEBUG") == "1"
@@ -61,7 +61,8 @@ def _maybe_save_debug(audio_bytes: bytes, label: str) -> None:
     """Save audio to /tmp/voice_demo_debug/ when VOICE_DEMO_DEBUG=1."""
     if not _DEBUG:
         return
-    import pathlib, time
+    import pathlib
+    import time
     d = pathlib.Path("/tmp/voice_demo_debug")
     d.mkdir(parents=True, exist_ok=True)
     ts   = int(time.time() * 1000)
@@ -103,7 +104,7 @@ async def voice_demo_stream(websocket: WebSocket):
             raw_bytes = msg.get("bytes")
             raw_text  = msg.get("text")
 
-            # ── Control frames (do NOT count as a turn) ───────────────────────
+            # â”€â”€ Control frames (do NOT count as a turn) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if raw_text:
                 try:
                     data = json.loads(raw_text)
@@ -127,12 +128,12 @@ async def voice_demo_stream(websocket: WebSocket):
                     continue
 
             elif raw_bytes:
-                # Audio frame — counts as a turn
+                # Audio frame â€” counts as a turn
                 turns += 1
                 if turns > MAX_TURNS:
                     await websocket.send_json({
                         "type": "error",
-                        "message": "That's the demo limit — reach out on Upwork or LinkedIn to keep going.",
+                        "message": "That's the demo limit â€” reach out on Upwork or LinkedIn to keep going.",
                     })
                     break
 
@@ -141,12 +142,12 @@ async def voice_demo_stream(websocket: WebSocket):
 
                 if n_bytes < _MIN_AUDIO_BYTES:
                     logger.warning(
-                        "audio too short: %d bytes (~%.2fs) — skipping STT",
+                        "audio too short: %d bytes (~%.2fs) â€” skipping STT",
                         n_bytes, approx_dur,
                     )
                     await websocket.send_json({
                         "type": "error",
-                        "message": "Didn't catch that — hold the button a bit longer.",
+                        "message": "Didn't catch that â€” hold the button a bit longer.",
                     })
                     continue
 
@@ -165,18 +166,18 @@ async def voice_demo_stream(websocket: WebSocket):
                     continue
 
                 logger.info(
-                    "STT turn=%d  bytes=%d  ~%.1fs  lang=%s  → %r",
+                    "STT turn=%d  bytes=%d  ~%.1fs  lang=%s  â†’ %r",
                     turns, n_bytes, approx_dur, pending_lang, transcript,
                 )
 
             else:
                 continue
 
-            # ── Common: validate transcript ───────────────────────────────────
+            # â”€â”€ Common: validate transcript â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if not transcript.strip():
                 await websocket.send_json({
                     "type": "error",
-                    "message": "Didn't catch that — try again?",
+                    "message": "Didn't catch that â€” try again?",
                 })
                 continue
 
@@ -184,19 +185,19 @@ async def voice_demo_stream(websocket: WebSocket):
             await websocket.send_json({"type": "status", "stage": "thinking"})
 
             # User's explicit language selection is ground truth.
-            # Pass the transcript directly — gpt-4o-mini understands all languages.
+            # Pass the transcript directly â€” gpt-4o-mini understands all languages.
             if pending_lang and pending_lang != "auto":
                 detected_lang = pending_lang
                 llm_query = transcript
             else:
-                llm_query, detected_lang = normalize_for_llm(transcript)
+                llm_query, detected_lang = await anormalize_for_llm(transcript)
 
             lang_note = _LANG_RESPONSE.get(detected_lang, "")
             voice_system = _VOICE_SYSTEM + (f"\n\n{lang_note}" if lang_note else "")
 
             history.append({"role": "user", "content": llm_query})
 
-            # ── LLM → collect full reply ──────────────────────────────────────
+            # â”€â”€ LLM â†’ collect full reply â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             reply_parts: list[str] = []
             try:
                 history_for_llm = history[:-1][-10:] + [{"role": "user", "content": llm_query}]
@@ -210,7 +211,7 @@ async def voice_demo_stream(websocket: WebSocket):
                 logger.error("LLM stream error: %s", e)
 
             reply = "".join(reply_parts).strip()
-            logger.info("LLM reply  lang=%s  → %r", detected_lang, reply[:120])
+            logger.info("LLM reply  lang=%s  â†’ %r", detected_lang, reply[:120])
 
             if not reply:
                 history.pop()
@@ -220,7 +221,7 @@ async def voice_demo_stream(websocket: WebSocket):
             history.append({"role": "assistant", "content": reply})
             await websocket.send_json({"type": "reply_text", "text": reply})
 
-            # ── TTS — full reply as one call ──────────────────────────────────
+            # â”€â”€ TTS â€” full reply as one call â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             # Sentence-by-sentence splitting caused broken fragments when prices
             # contained decimal points (e.g. "AED 2.5M." split into "AED 2." + "5M.").
             try:

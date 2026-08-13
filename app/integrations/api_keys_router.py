@@ -8,15 +8,20 @@ import hashlib
 import secrets
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.auth.middleware import CurrentUser, CompanyId
+from app.auth.middleware import CurrentUser, CompanyId, require_owner_or_admin
 from app.dependencies import get_supabase_admin
 
 router = APIRouter()
 
 ALL_SCOPES = ["leads:read", "leads:write", "appointments:read", "properties:read"]
+
+# An API key bypasses the dashboard's permission model entirely, so minting one
+# is an owner/admin action. Also bounded, so a compromised account cannot
+# create keys indefinitely.
+MAX_KEYS_PER_COMPANY = 20
 
 
 def _sb():
@@ -41,10 +46,31 @@ async def list_keys(company_id: CompanyId, _: CurrentUser):
 
 
 @router.post("/api-keys", status_code=status.HTTP_201_CREATED)
-async def create_key(body: KeyCreate, company_id: CompanyId, _: CurrentUser):
+async def create_key(
+    body: KeyCreate,
+    company_id: CompanyId,
+    _admin=Depends(require_owner_or_admin),
+):
+    """
+    Mint an API key. Owner/admin only.
+
+    Previously any authenticated company member could create a key with any
+    scope, then use /v1 or /mcp to read and write all company data outside the
+    dashboard's permission model (AUDIT.md H8).
+    """
     invalid = [s for s in body.scopes if s not in ALL_SCOPES]
     if invalid:
         raise HTTPException(400, f"Invalid scopes: {invalid}. Valid: {ALL_SCOPES}")
+    if not body.scopes:
+        raise HTTPException(400, "At least one scope is required")
+
+    existing = _sb().table("api_keys").select("id", count="exact") \
+        .eq("company_id", company_id).is_("revoked_at", None).execute()
+    if (existing.count or 0) >= MAX_KEYS_PER_COMPANY:
+        raise HTTPException(
+            400,
+            f"Key limit reached ({MAX_KEYS_PER_COMPANY}). Revoke an unused key first.",
+        )
 
     raw_key = "nxd_live_" + secrets.token_hex(32)
     key_prefix = raw_key[:16]  # "nxd_live_" + 7 hex chars
@@ -57,6 +83,8 @@ async def create_key(body: KeyCreate, company_id: CompanyId, _: CurrentUser):
         "scopes": body.scopes,
     }).execute()
 
+    if not result.data:
+        raise HTTPException(500, "API key was not created")
     row = result.data[0]
     return {**row, "key": raw_key, "key_hint": "Save this — it will not be shown again."}
 
