@@ -18,13 +18,15 @@ Legend: `[ ]` open · `[x]` fixed · severity **C**ritical / **H**igh / **M**edi
 |---|---|---|---|
 | Critical | 3 | 3 | 0 |
 | High | 9 | 9 | 0 |
-| Medium | 15 | 15 | 0 |
-| Low | 7 | 5 | 2 |
+| Medium | 15 | 14 | 1 |
+| Low | 7 | 6 | 1 |
 | **Total** | **34** | **32** | **2** |
 
 **Open items and where they are handled:**
-M15 is environment configuration, covered in DEPLOYMENT.md. L2 is the test
-suite (step 8). L7 is a recorded architectural note, not scheduled work.
+M15 is environment configuration and is enforced at startup by
+alidate_startup_config plus documented in DEPLOYMENT.md. L7 is a recorded
+architectural note about the service-role client bypassing RLS — a deliberate
+design property, not a scheduled fix.
 
 The three Critical findings are all in the path that a **real Twilio number**
 activates. None of them can be reached today because no live number is
@@ -345,7 +347,7 @@ The comprehension ends in `and False`, so `errors` is always empty and no file i
 ever actually parsed. The step prints a count and passes unconditionally — CI has
 never once verified that the app imports.
 
-### [ ] L2 — No test suite
+### [x] L2 — No test suite
 Only `scripts/test_login.py`, a manual script. Nothing gates a regression.
 
 ### [x] L3 — 115 MB of orphaned model weights

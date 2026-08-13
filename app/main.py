@@ -48,39 +48,54 @@ from app.mcp.server import router as mcp_router
 settings = get_settings()
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Validate required env vars on startup so we fail fast with a clear message
+def validate_startup_config(cfg) -> None:
+    """
+    Fail fast on a misconfigured environment.
+
+    Separate from `lifespan` so it can be tested directly — the alternative was
+    asserting against the source text of the lifespan, which is fragile and does
+    not actually prove the guard fires.
+
+    Raises RuntimeError on the first problem found.
+    """
     required = {
-        "SUPABASE_URL": settings.SUPABASE_URL,
-        "SUPABASE_SERVICE_KEY": settings.SUPABASE_SERVICE_KEY,
-        "LLM_API_KEY": settings.LLM_API_KEY,
+        "SUPABASE_URL": cfg.SUPABASE_URL,
+        "SUPABASE_SERVICE_KEY": cfg.SUPABASE_SERVICE_KEY,
+        "LLM_API_KEY": cfg.LLM_API_KEY,
     }
     missing = [k for k, v in required.items() if not v]
     if missing:
         raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
+
+    if cfg.APP_ENV != "production":
+        return
 
     # Twilio signature validation is skipped entirely when TELEPHONY_AUTH_TOKEN is
     # blank (see app/voice/router.py _validate_twilio). That is fine for local dev
     # but in production it means /voice/inbound and /voice/status accept unsigned
     # requests from anyone, who can then forge calls and drive LLM/TTS spend.
     # Logging an error and booting anyway was not enough — fail hard (AUDIT.md C3).
-    if settings.APP_ENV == "production" and not settings.TELEPHONY_AUTH_TOKEN:
+    if not cfg.TELEPHONY_AUTH_TOKEN:
         raise RuntimeError(
             "TELEPHONY_AUTH_TOKEN is blank in production. Twilio webhook signature "
             "validation would be disabled, leaving /voice/inbound and /voice/status "
             "open to anyone. Set it in the Railway environment before deploying."
         )
 
-    # Refuse to boot in production with the placeholder secret key — it's
-    # public in this repo's source, so leaving it set means anyone can forge
-    # signed tokens (sessions, etc.) that the app will trust.
-    if settings.APP_ENV == "production" and settings.APP_SECRET_KEY == "change-me-in-production":
+    # Refuse to boot with the placeholder secret key — it's public in this repo's
+    # source, so leaving it set means anyone can forge signed tokens (sessions,
+    # etc.) that the app will trust. It also keys CRM token encryption.
+    if cfg.APP_SECRET_KEY == "change-me-in-production":
         raise RuntimeError(
             "APP_SECRET_KEY is still the default placeholder value in production. "
             "Generate a real secret (e.g. `openssl rand -hex 32`) and set it in your "
             "production environment before starting the app."
         )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    validate_startup_config(settings)
 
     # Startup: initialise Qdrant collection
     client = await get_qdrant(settings)

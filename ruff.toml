@@ -40,5 +40,6 @@ ignore = [
 ]
 
 [lint.per-file-ignores]
-# Tests intentionally use assert and fixtures that look unused.
-"tests/*" = ["S101", "F811"]
+# Tests intentionally use assert, fixtures that look unused, and fake secrets
+# in config fixtures (S105/S106).
+"tests/*" = ["S101", "F811", "S105", "S106"]

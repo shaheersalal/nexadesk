@@ -19,14 +19,20 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      # ruff is pinned: an unpinned lint tool means the build can break on a
+      # day nobody touched the code.
       - name: Install dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          pip install ruff pytest pytest-asyncio
+          pip install "ruff==0.16.2" pytest pytest-asyncio
 
+      # Rule selection lives in ruff.toml, not in flags. CI used to run bare
+      # `ruff check --ignore E501,F401` with an unpinned ruff, whose default
+      # rule set has broadened across releases — the same command went from
+      # passing to 262 findings without a line of app code changing.
       - name: Lint with ruff
-        run: ruff check app/ --ignore E501,F401
+        run: ruff check app/ tests/
 
       # The previous version of this step ended in `and False`, so the error
       # list was always empty and no file was ever parsed — it printed a count

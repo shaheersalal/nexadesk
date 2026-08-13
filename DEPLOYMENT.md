@@ -48,9 +48,22 @@ railway up
 ```
 
 Set every variable from `.env.example` in the Railway dashboard
-(Variables → Raw Editor makes bulk paste easy). **`APP_ENV=production` is
-mandatory** — several security guards in `app/main.py` are gated on it and are
-inert otherwise.
+(Variables → Raw Editor makes bulk paste easy).
+
+**`APP_ENV=production` is mandatory.** The guards in
+`app/main.py:validate_startup_config` are gated on it and are inert otherwise.
+With it set, the app refuses to boot if `TELEPHONY_AUTH_TOKEN` is blank or
+`APP_SECRET_KEY` is still the placeholder — that is deliberate, and a failed
+deploy here means a real misconfiguration, not a bug.
+
+Variables that did not exist before the Railway migration:
+
+| Variable | Why |
+|---|---|
+| `SUPABASE_JWT_SECRET` | Supabase → Settings → API → JWT Secret. Lets the app verify access tokens locally instead of a network call to Supabase Auth per request. Leave blank to fall back to remote verification (slower, but correct). |
+| `TRUST_PROXY_HEADERS` | Leave `false` on Railway. Only set `true` behind a proxy that *overwrites* `X-Forwarded-For` / `CF-Connecting-IP`; otherwise clients can forge them and bypass every rate limit. |
+| `APP_SECRET_KEY` | Now also keys CRM OAuth token encryption at rest. **Changing it makes existing CRM connections undecryptable** and they must be reconnected. |
+| `QDRANT_URL`, `QDRANT_API_KEY` | Qdrant Cloud (see above). |
 
 Railway injects `$PORT`; `railway.json` already binds uvicorn to it. Do not
 hardcode 8000.
