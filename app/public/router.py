@@ -85,7 +85,7 @@ class _ChatMessage(BaseModel):
 
 class DemoChatRequest(BaseModel):
     messages: list[_ChatMessage] = Field(max_length=DEMO_MAX_MESSAGES)
-    voice_mode: bool = False   # true â†’ short spoken-style replies, same as voice demo
+    voice_mode: bool = False   # true → short spoken-style replies, same as voice demo
 
 
 class DemoRequest(BaseModel):
@@ -110,11 +110,11 @@ async def book_demo(
 ):
     settings = get_settings()
 
-    # Redis throttle â€” 3-second minimum between submissions from the same IP
+    # Redis throttle — 3-second minimum between submissions from the same IP
     ip = _get_client_ip(request)
     throttle_key = f"demo_throttle:{ip}"
     if not await redis.set(throttle_key, "1", nx=True, ex=3):
-        raise HTTPException(status_code=429, detail="Too many requests â€” please wait a moment.")
+        raise HTTPException(status_code=429, detail="Too many requests — please wait a moment.")
 
     # reCAPTCHA v3 verification
     if not await _verify_recaptcha(body.recaptcha_token, settings):
@@ -139,7 +139,7 @@ async def book_demo(
     if settings.RESEND_API_KEY:
         # Escape everything that came from the public form before it goes into
         # HTML. Unescaped, a crafted `name` could close the surrounding tag and
-        # inject a link â€” turning this notification into a phishing email sent
+        # inject a link — turning this notification into a phishing email sent
         # from your own domain to yourself (AUDIT.md M8).
         e_name = html.escape(body.name)
         e_email = html.escape(body.email)
@@ -148,7 +148,7 @@ async def book_demo(
         e_country = html.escape(body.country)
         e_calls = html.escape(body.monthly_calls)
 
-        # Single-use activation token â€” replaces embedding the static
+        # Single-use activation token — replaces embedding the static
         # ADMINTOKEN in the link (AUDIT.md C2).
         invite_token = await issue_invite_token(redis, sb_id, body.email, body.name)
         activate_url = f"{settings.APP_BASE_URL}/admin/invite-quick?token={invite_token}"
@@ -164,18 +164,18 @@ async def book_demo(
 
         payoneer_template = f"""Hi {body.name},
 
-Thank you for your interest in NexaDesk â€” I'm excited to get your AI receptionist set up!
+Thank you for your interest in NexaDesk — I'm excited to get your AI receptionist set up!
 
 Your account is $136/month (AED 499), which includes:
-â€¢ Dedicated AI phone number
-â€¢ Unlimited chat conversations
-â€¢ Full CRM dashboard & lead scoring
-â€¢ Property knowledge base
-â€¢ Full call transcripts
-â€¢ Complete setup â€” handled by us
+• Dedicated AI phone number
+• Unlimited chat conversations
+• Full CRM dashboard & lead scoring
+• Property knowledge base
+• Full call transcripts
+• Complete setup — handled by us
 
 Please send payment via Payoneer using this link:
-ðŸ‘‰ [PASTE YOUR PAYONEER LINK HERE]
+👉 [PASTE YOUR PAYONEER LINK HERE]
 
 Once payment is confirmed, I'll activate your account and send you a setup link within a few hours. The whole onboarding takes about 10 minutes.
 
@@ -193,10 +193,10 @@ nexadesk.site"""
                 json={
                     "from": "NexaDesk <onboarding@resend.dev>",
                     "to": ["shaheersalal@gmail.com"],
-                    "subject": f"New Access Request â€” {body.agency} ({body.country})",
+                    "subject": f"New Access Request — {body.agency} ({body.country})",
                     "html": f"""
 <div style="font-family:sans-serif;max-width:580px;color:#1a1a1a">
-  <h2 style="color:#1e3a5f;margin-bottom:4px">New Access Request ðŸŽ¯</h2>
+  <h2 style="color:#1e3a5f;margin-bottom:4px">New Access Request 🎯</h2>
   <p style="color:#888;font-size:13px;margin-top:0">Submitted from nexadesk.site</p>
 
   <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:24px">
@@ -215,29 +215,29 @@ nexadesk.site"""
   </table>
 
   {f'''<div style="background:#fef9ec;border:1px solid #f6c90e;border-radius:10px;padding:16px 20px;margin-bottom:24px">
-    <p style="font-size:13px;font-weight:700;color:#92400e;margin:0 0 8px">ðŸ·ï¸ Discount Negotiated via Pricing Chat</p>
+    <p style="font-size:13px;font-weight:700;color:#92400e;margin:0 0 8px">🏷️ Discount Negotiated via Pricing Chat</p>
     <p style="font-size:14px;color:#1e293b;margin:0">
       Plan: <strong>{html.escape(body.plan_name or "")}</strong><br>
       Original price: <strong>${body.original_price:.2f}/mo</strong><br>
       Discount: <strong>{body.discount_pct}% off</strong><br>
       Final agreed price: <strong style="color:#16a34a">${body.final_price:.2f}/mo</strong>
     </p>
-    <p style="font-size:12px;color:#92400e;margin:8px 0 0">Use this price in your Payoneer email â€” the client confirmed it.</p>
+    <p style="font-size:12px;color:#92400e;margin:8px 0 0">Use this price in your Payoneer email — the client confirmed it.</p>
   </div>''' if has_discount else ''}
 
   <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px;margin-bottom:24px">
     <p style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin:0 0 12px">
-      âœ‰ï¸ Copy-paste email to send to client
+      ✉️ Copy-paste email to send to client
     </p>
     <pre style="font-family:inherit;font-size:13px;line-height:1.7;color:#1e293b;white-space:pre-wrap;margin:0">{payoneer_template}</pre>
   </div>
 
   <a href="{activate_url}"
      style="display:inline-block;background:#1e3a5f;color:#fff;font-weight:600;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:14px">
-    Activate Account â†’
+    Activate Account →
   </a>
   <p style="font-size:12px;color:#94a3b8;margin-top:12px">
-    Click once payment is confirmed â€” sends the invite email directly, no login needed.
+    Click once payment is confirmed — sends the invite email directly, no login needed.
     Single-use link, expires in 7 days.
   </p>
 </div>""",
@@ -267,7 +267,7 @@ async def demo_chat(
     if count > DEMO_RATE_MAX:
         raise HTTPException(
             status_code=429,
-            detail="Too many messages â€” please wait a minute before continuing.",
+            detail="Too many messages — please wait a minute before continuing.",
         )
 
     messages_dicts = [{"role": m.role, "content": m.content} for m in body.messages]
@@ -281,7 +281,7 @@ async def demo_chat(
     if body.voice_mode:
         system = (
             DEMO_KNOWLEDGE_PROMPT
-            + "\n\nIMPORTANT: Simulate a voice call. Reply in 1â€“2 short sentences only. "
+            + "\n\nIMPORTANT: Simulate a voice call. Reply in 1–2 short sentences only. "
             "No bullet points or lists. Always end with a question."
         )
         max_tokens, temperature = 150, 0.4

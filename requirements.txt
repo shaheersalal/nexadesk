@@ -27,6 +27,11 @@ openai==1.57.4
 # HTTP client
 httpx>=0.26,<0.29
 
+# WebSocket client — Deepgram streaming STT (app/voice/stt_stream.py).
+# Previously only present transitively via uvicorn[standard]; pinned here
+# because we import it directly and rely on the >=14 `additional_headers` API.
+websockets>=14,<16
+
 # Text processing
 tiktoken==0.8.0
 python-pptx==1.0.2

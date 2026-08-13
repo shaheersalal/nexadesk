@@ -5,6 +5,7 @@ Voice routes:
   WS   /voice/stream/{call_sid} — Twilio Media Streams WebSocket
 """
 import asyncio
+import base64
 import json
 import logging
 from datetime import datetime, timezone
@@ -16,18 +17,16 @@ from app.config import get_settings
 from app.dependencies import get_redis, get_supabase_admin
 from app.voice.telephony import build_stream_twiml, build_fallback_twiml, twilio_client
 from app.voice.call_session import create_session, load_session, save_session, delete_session
-from app.voice.stt import transcribe_mulaw_b64
+from app.voice.stt_stream import DeepgramStream
 from app.voice.tts import synthesize_to_mulaw
-from app.voice.conversation import process_voice_turn
+from app.voice.tts_stream import stream_speech
+from app.voice.conversation import stream_voice_turn
 from app.shared.llm import complete as llm_complete
 from app.shared.prompts import CALL_GREETING, LEAD_SUMMARY_PROMPT
 
 router = APIRouter()
 settings = get_settings()
 logger = logging.getLogger("nexadesk.voice")
-
-# Buffer to accumulate audio before transcribing (avoid transcribing tiny chunks)
-AUDIO_BUFFER_CHUNKS = 8  # ~1 second of 8kHz mulaw
 
 
 def _validate_twilio(request: Request, form: dict) -> bool:
@@ -99,8 +98,18 @@ async def call_status(request: Request):
 @router.websocket("/stream/{call_sid}")
 async def media_stream(websocket: WebSocket, call_sid: str):
     """
-    Twilio Media Streams WebSocket.
-    Receives audio events, accumulates chunks, transcribes, gets LLM reply, sends TTS back.
+    Twilio Media Streams WebSocket — fully streamed pipeline.
+
+    Audio flows continuously into Deepgram's streaming API, which does the voice
+    activity detection and tells us when the caller has finished an utterance.
+    That utterance drives a streamed LLM response, whose tokens are cut into
+    clauses and synthesised as they arrive, so the caller hears the first
+    sentence while the model is still writing the rest.
+
+    The previous implementation buffered 8 Twilio frames (160 ms, despite a
+    comment claiming ~1 s), POSTed each slice to Deepgram's batch endpoint, then
+    waited for the full LLM reply and the full TTS render before sending
+    anything (AUDIT.md H2, M1, M2).
     """
     await websocket.accept()
     redis = await get_redis(settings)
@@ -110,62 +119,99 @@ async def media_stream(websocket: WebSocket, call_sid: str):
         await websocket.close()
         return
 
-    # Send greeting immediately
-    company_name = await _get_company_name(session.company_id)
-    greeting = CALL_GREETING.format(company_name=company_name, ai_name=settings.APP_NAME)
-    await _send_tts(websocket, greeting, call_sid)
+    # Twilio requires the streamSid from the `start` event on every outbound
+    # media frame. Sending call_sid instead meant Twilio silently discarded all
+    # our audio and the caller heard nothing (AUDIT.md H2).
+    stream_sid: str | None = None
+    speaking = asyncio.Lock()
 
-    audio_buffer: list[str] = []  # base64 encoded mulaw chunks
+    stt_language = session.language if session.language_confirmed else None
 
     try:
-        while True:
-            raw = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
-            msg = json.loads(raw)
-            event_type = msg.get("event")
+        async with DeepgramStream(language=stt_language) as stt:
 
-            if event_type == "media":
-                audio_b64 = msg["media"]["payload"]
-                audio_buffer.append(audio_b64)
+            async def _pump_turns() -> None:
+                """Run a full turn for each finalised caller utterance."""
+                async for utterance in stt.utterances():
+                    if not utterance.strip():
+                        continue
+                    logger.info("Caller (%s): %s", call_sid, utterance)
+                    # Serialise turns: overlapping replies would interleave audio.
+                    async with speaking:
+                        await _speak_stream(
+                            websocket,
+                            stream_sid,
+                            stream_voice_turn(utterance, session),
+                        )
+                    await save_session(session, redis)
 
-                # Transcribe when buffer is large enough
-                if len(audio_buffer) >= AUDIO_BUFFER_CHUNKS:
-                    combined_b64 = _combine_audio_chunks(audio_buffer)
-                    audio_buffer = []
+            turn_task = asyncio.create_task(_pump_turns())
 
-                    stt_language = session.language if session.language_confirmed else None
-                    transcript = await transcribe_mulaw_b64(combined_b64, stt_language)
-                    if transcript.strip():
-                        reply, _ = await process_voice_turn(transcript, session)
-                        await save_session(session, redis)
-                        await _send_tts(websocket, reply, call_sid)
+            try:
+                while True:
+                    raw = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+                    msg = json.loads(raw)
+                    event_type = msg.get("event")
 
-            elif event_type == "stop":
-                break
+                    if event_type == "start":
+                        stream_sid = msg.get("start", {}).get("streamSid") or msg.get("streamSid")
+                        logger.info("Media stream started: call=%s stream=%s", call_sid, stream_sid)
+                        # Greet only once we know where to send audio.
+                        company_name = await _get_company_name(session.company_id)
+                        greeting = CALL_GREETING.format(
+                            company_name=company_name, ai_name=settings.APP_NAME
+                        )
+                        async with speaking:
+                            await _send_tts(websocket, greeting, call_sid, stream_sid)
+
+                    elif event_type == "media":
+                        await stt.send(base64.b64decode(msg["media"]["payload"]))
+
+                    elif event_type == "stop":
+                        break
+
+            finally:
+                await stt.close()
+                # Let any in-flight turn finish writing to the session.
+                try:
+                    await asyncio.wait_for(turn_task, timeout=10.0)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    turn_task.cancel()
 
     except (WebSocketDisconnect, asyncio.TimeoutError):
         pass
+    except Exception as exc:
+        logger.error("Media stream error for %s: %s", call_sid, exc, exc_info=True)
     finally:
-        # Transcribe any remaining buffer
-        if audio_buffer:
-            combined = _combine_audio_chunks(audio_buffer)
-            stt_language = session.language if session.language_confirmed else None
-            leftover = await transcribe_mulaw_b64(combined, stt_language)
-            if leftover.strip():
-                await process_voice_turn(leftover, session)
         await save_session(session, redis)
 
 
-async def _send_tts(websocket: WebSocket, text: str, call_sid: str) -> None:
+async def _speak_stream(websocket: WebSocket, stream_sid: str | None, token_iter) -> None:
+    """Synthesise a streaming reply clause by clause and send each to Twilio."""
+    if not stream_sid:
+        logger.error("No streamSid yet — dropping reply audio")
+        return
+    async for text, audio in stream_speech(token_iter):
+        logger.debug("AI: %s", text)
+        await _send_media(websocket, stream_sid, audio)
+
+
+async def _send_media(websocket: WebSocket, stream_sid: str, audio: bytes) -> None:
+    """Send one mulaw payload to Twilio on the active stream."""
+    await websocket.send_text(json.dumps({
+        "event": "media",
+        "streamSid": stream_sid,
+        "media": {"payload": base64.b64encode(audio).decode()},
+    }))
+
+
+async def _send_tts(
+    websocket: WebSocket, text: str, call_sid: str, stream_sid: str | None
+) -> None:
     """Synthesize text and send back to Twilio over the media stream."""
-    import base64
     audio_bytes = await synthesize_to_mulaw(text)
-    if audio_bytes:
-        msg = {
-            "event": "media",
-            "streamSid": call_sid,
-            "media": {"payload": base64.b64encode(audio_bytes).decode()},
-        }
-        await websocket.send_text(json.dumps(msg))
+    if audio_bytes and stream_sid:
+        await _send_media(websocket, stream_sid, audio_bytes)
     else:
         # TTS synthesis failed (no API key, ElevenLabs error, or ffmpeg conversion
         # failure) — the Media Stream WS protocol can't inject <Say> mid-stream,
@@ -279,8 +325,3 @@ async def _get_company_name(company_id: str) -> str:
     return (result.data or {}).get("name", settings.APP_NAME)
 
 
-def _combine_audio_chunks(chunks: list[str]) -> str:
-    """Concatenate base64 encoded mulaw chunks into one."""
-    import base64
-    combined = b"".join(base64.b64decode(c) for c in chunks)
-    return base64.b64encode(combined).decode()

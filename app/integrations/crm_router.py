@@ -1,10 +1,10 @@
 ﻿"""
 CRM OAuth consumer routes.
-GET    /integrations/crm/connections        â†’ list connected CRMs
-GET    /integrations/crm/connect/{provider} â†’ start OAuth, returns {auth_url}
-GET    /integrations/crm/callback/{provider}â†’ OAuth callback (browser redirect)
-DELETE /integrations/crm/{provider}         â†’ disconnect
-POST   /integrations/crm/sync/{provider}    â†’ manual sync last 50 leads
+GET    /integrations/crm/connections        → list connected CRMs
+GET    /integrations/crm/connect/{provider} → start OAuth, returns {auth_url}
+GET    /integrations/crm/callback/{provider}→ OAuth callback (browser redirect)
+DELETE /integrations/crm/{provider}         → disconnect
+POST   /integrations/crm/sync/{provider}    → manual sync last 50 leads
 """
 import logging
 import secrets
@@ -78,7 +78,7 @@ async def crm_connect(
 
     client_id = getattr(settings, p["client_id_attr"])
     if not client_id:
-        raise HTTPException(503, f"{p['name']} not configured â€” add {p['client_id_attr']} to your environment")
+        raise HTTPException(503, f"{p['name']} not configured — add {p['client_id_attr']} to your environment")
 
     state = secrets.token_urlsafe(32)
     await redis.set(f"crm_state:{state}", company_id, ex=600)
@@ -136,7 +136,7 @@ async def crm_callback(
     _sb().table("crm_connections").upsert({
         "company_id": company_id,
         "provider": provider,
-        # Encrypted at rest â€” see app/shared/crypto.py (AUDIT.md H9).
+        # Encrypted at rest — see app/shared/crypto.py (AUDIT.md H9).
         "access_token": encrypt(tokens["access_token"]),
         "refresh_token": encrypt(tokens.get("refresh_token")),
         "expires_at": expires_at,

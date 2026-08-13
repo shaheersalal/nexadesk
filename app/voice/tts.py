@@ -1,5 +1,5 @@
 ﻿"""
-ElevenLabs TTS client â€” streaming audio synthesis.
+ElevenLabs TTS client — streaming audio synthesis.
 Returns audio bytes (MP3) that get sent back to Twilio.
 """
 import asyncio
@@ -50,7 +50,7 @@ async def synthesize_to_mulaw(text: str) -> bytes:
 
     ffmpeg is still needed to decode ElevenLabs' MP3, but it is now run via
     asyncio's subprocess API instead of a blocking `subprocess.run` inside an
-    async function â€” the old form stalled the event loop for the whole
+    async function — the old form stalled the event loop for the whole
     conversion, on every single spoken reply, for every concurrent call
     (AUDIT.md, ruff ASYNC221).
     """
@@ -84,7 +84,7 @@ async def synthesize_to_mulaw(text: str) -> bytes:
             return b""
         return stdout
     except FileNotFoundError:
-        logger.error("ffmpeg not found on PATH â€” cannot convert TTS audio for Twilio")
+        logger.error("ffmpeg not found on PATH — cannot convert TTS audio for Twilio")
         return b""
     except Exception as e:
         logger.error(f"TTS mulaw conversion failed: {e}")
