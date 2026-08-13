@@ -228,7 +228,8 @@ async def _run_ingest_voice(job_id, audio_bytes, filename, company_id, category,
     try:
         import openai as _openai
         s = get_settings()
-        client = _openai.AsyncOpenAI(api_key=s.LLM_API_KEY)
+        # Whisper-1 is an OpenAI model — must use EMBED_API_KEY (OpenAI), not LLM_API_KEY (Anthropic/LLM proxy)
+        client = _openai.AsyncOpenAI(api_key=s.EMBED_API_KEY)
 
         # Transcribe with Whisper
         response = await client.audio.transcriptions.create(

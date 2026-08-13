@@ -13,4 +13,12 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    // @huggingface/transformers uses dynamic imports internally — exclude from
+    // Vite's pre-bundling so it loads correctly in the WebWorker at runtime.
+    exclude: ['@huggingface/transformers'],
+  },
+  worker: {
+    format: 'es',
+  },
 })

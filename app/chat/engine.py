@@ -13,10 +13,13 @@ settings = get_settings()
 
 
 async def get_company_context(company_id: str) -> dict:
-    """Load company record for system prompt injection."""
+    """Load company record for system prompt injection. Returns {} if not found."""
     sb = get_supabase_admin()
-    result = sb.table("companies").select("*").eq("id", company_id).single().execute()
-    return result.data or {}
+    try:
+        result = sb.table("companies").select("*").eq("id", company_id).single().execute()
+        return result.data or {}
+    except Exception:
+        return {}
 
 
 async def chat_turn(

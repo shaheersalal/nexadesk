@@ -75,6 +75,15 @@ class Settings(BaseSettings):
     # Google reCAPTCHA v3 (set both RECAPTCHA_SECRET here and VITE_RECAPTCHA_SITE_KEY in dashboard/.env)
     RECAPTCHA_SECRET: str = ""
 
+    # CRM OAuth consumer credentials
+    HUBSPOT_CLIENT_ID: str = ""
+    HUBSPOT_CLIENT_SECRET: str = ""
+    ZOHO_CLIENT_ID: str = ""
+    ZOHO_CLIENT_SECRET: str = ""
+
+    # Dashboard URL (for OAuth callback redirects)
+    DASHBOARD_URL: str = "https://nexadesk.site"
+
     @property
     def calendar_redirect_uri(self) -> str:
         return self.GOOGLE_CALENDAR_REDIRECT_URI or f"{self.APP_BASE_URL}/leads/calendar/callback"

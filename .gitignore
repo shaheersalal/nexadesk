@@ -47,3 +47,10 @@ cloudflared-creds/
 *.pem
 *.key
 *.cert
+
+# Tooling state — generated locally, contains project/org identifiers
+.vercel/
+supabase/.temp/
+
+# tiktoken BPE cache — regenerated on demand
+.tiktoken_cache/

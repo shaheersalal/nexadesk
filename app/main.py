@@ -41,6 +41,10 @@ from app.admin.router import router as admin_router
 from app.companies.router import router as companies_router
 from app.pricing.router import router as pricing_router
 from app.integrations.router import router as integrations_router
+from app.integrations.crm_router import router as crm_router
+from app.integrations.api_keys_router import router as api_keys_router
+from app.v1.router import router as v1_router
+from app.mcp.server import router as mcp_router
 
 settings = get_settings()
 
@@ -144,6 +148,10 @@ app.include_router(admin_router, prefix="/admin", tags=["admin"])
 app.include_router(companies_router, prefix="/companies", tags=["companies"])
 app.include_router(pricing_router, prefix="/pricing", tags=["pricing"])
 app.include_router(integrations_router, prefix="/integrations", tags=["integrations"])
+app.include_router(crm_router,          prefix="/integrations", tags=["integrations-crm"])
+app.include_router(api_keys_router,     prefix="/integrations", tags=["integrations-api-keys"])
+app.include_router(v1_router,           prefix="/v1",           tags=["v1"])
+app.include_router(mcp_router,          prefix="/mcp",          tags=["mcp"])
 
 
 @app.get("/health")

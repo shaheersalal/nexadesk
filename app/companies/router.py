@@ -14,6 +14,8 @@ async def update_my_company(body: CompanyUpdate, company_id: CompanyId, current_
     payload = body.model_dump(exclude_unset=True)
     sb = get_supabase_admin()
     result = sb.table("companies").update(payload).eq("id", company_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Company not found")
     return result.data[0]
 
 

@@ -83,6 +83,47 @@ async def _deliver(endpoint: dict, event: str, payload: dict, log_id: str, attem
                        next_attempt, event, endpoint["url"], status_code, error)
 
 
+async def _sync_to_crms(company_id: str, event: str, payload: dict):
+    """Push lead events to any connected CRMs (HubSpot, Zoho, etc.)."""
+    from app.config import get_settings
+    from app.integrations.crm import hubspot, zoho
+    settings = get_settings()
+
+    sb = get_supabase_admin()
+    conns = sb.table("crm_connections").select("*").eq("company_id", company_id).execute()
+    for conn in (conns.data or []):
+        provider = conn["provider"]
+        token = conn["access_token"]
+        # Refresh if expiring
+        if conn.get("expires_at") and conn.get("refresh_token"):
+            expires = datetime.fromisoformat(conn["expires_at"])
+            if expires < datetime.now(timezone.utc) + timedelta(minutes=5):
+                try:
+                    if provider == "hubspot":
+                        t = await hubspot.refresh_access_token(conn["refresh_token"], settings.HUBSPOT_CLIENT_ID, settings.HUBSPOT_CLIENT_SECRET)
+                    elif provider == "zoho":
+                        t = await zoho.refresh_access_token(conn["refresh_token"], settings.ZOHO_CLIENT_ID, settings.ZOHO_CLIENT_SECRET)
+                    else:
+                        continue
+                    token = t["access_token"]
+                    sb.table("crm_connections").update({
+                        "access_token": token,
+                        "refresh_token": t.get("refresh_token", conn["refresh_token"]),
+                        "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=t.get("expires_in", 3600))).isoformat(),
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }).eq("id", conn["id"]).execute()
+                except Exception as exc:
+                    logger.warning("CRM token refresh failed for %s/%s: %s", company_id, provider, exc)
+                    continue
+        try:
+            if provider == "hubspot":
+                await hubspot.sync_lead(payload, token)
+            elif provider == "zoho":
+                await zoho.sync_lead(payload, token)
+        except Exception as exc:
+            logger.warning("CRM sync error for %s/%s: %s", company_id, provider, exc)
+
+
 async def _dispatch(company_id: str, event: str, payload: dict):
     """Fetch active endpoints subscribed to this event and fire them all."""
     sb = get_supabase_admin()
@@ -100,6 +141,10 @@ async def _dispatch(company_id: str, event: str, payload: dict):
         }).execute()
         log_id = log.data[0]["id"]
         await _deliver(endpoint, event, payload, log_id, attempt=0)
+
+    # CRM sync for lead events (best-effort, non-blocking)
+    if event in ("lead.created", "lead.status_changed"):
+        asyncio.create_task(_sync_to_crms(company_id, event, payload))
 
 
 def fire_event(company_id: str, event: str, payload: dict):

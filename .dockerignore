@@ -1,0 +1,14 @@
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.git
+.env
+.env.*
+.models/
+dashboard/node_modules/
+dashboard/dist/
+uploads/
+cloudflared-creds/
+*.pem
+*.key
+*.cert

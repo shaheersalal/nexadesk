@@ -194,23 +194,26 @@ async def _finalize_call(session, duration: int) -> None:
     # Merge extracted data with what session already captured
     lead_data = {**extracted, **{k: v for k, v in session.lead_data.items() if v}}
 
-    # Upsert lead
+    # Upsert lead — when updating an existing lead, omit "status" so we don't
+    # clobber a status that was already set (e.g. "contacted" after escalation).
     lead_payload = {
         "company_id": session.company_id,
-        "source": "voice",
-        "status": "new",
         "score": session.score,
         "language": session.language,
-        "notes": lead_data.get("notes", ""),
     }
     for field in ("name", "phone", "email"):
         if lead_data.get(field):
             lead_payload[field] = lead_data[field]
+    if lead_data.get("notes"):
+        lead_payload["notes"] = lead_data["notes"]
 
     if session.lead_id:
         sb.table("leads").update(lead_payload).eq("id", session.lead_id).execute()
         lead_id = session.lead_id
     else:
+        # New lead — set source and initial status
+        lead_payload["source"] = "voice"
+        lead_payload["status"] = "new"
         lead_result = sb.table("leads").insert(lead_payload).execute()
         lead_id = lead_result.data[0]["id"] if lead_result.data else None
 

@@ -89,17 +89,14 @@ async def get_history(session_id: str, current_user: CurrentUser):
     if not result.data:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Verify the conversation belongs to the authenticated user's company
-    from app.dependencies import get_company_id as _resolve
+    # Verify the conversation belongs to the authenticated user's company — fail closed on any error
     try:
         user_company = sb.table("users").select("company_id").eq("id", current_user["id"]).single().execute()
         user_cid = (user_company.data or {}).get("company_id")
-        if user_cid and result.data.get("company_id") != user_cid:
-            raise HTTPException(status_code=403, detail="Access denied")
-    except HTTPException:
-        raise
     except Exception:
-        pass  # If lookup fails, still return data (non-fatal)
+        raise HTTPException(status_code=403, detail="Access denied")
+    if user_cid and result.data.get("company_id") != user_cid:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     return {
         "transcript": result.data.get("transcript"),

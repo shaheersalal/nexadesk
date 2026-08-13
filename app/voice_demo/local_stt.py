@@ -1,73 +1,92 @@
 """
-Self-hosted STT via faster-whisper (CTranslate2, int8, CPU).
-Model: base.en (~150 MB) — good English accuracy, ~1-3 s on CPU.
-Lazy-loads on first request; subsequent calls reuse the in-process singleton.
+Server-side STT via OpenAI whisper-1 (EMBED_API_KEY — same key as embeddings).
+Accepts WebM/Opus or MP4/AAC bytes directly — no ffmpeg conversion needed.
+
+language: ISO-639-1 code ('en', 'ur', 'ar', …) or 'auto' for whisper auto-detect.
+  Pinning the language is the single biggest fix for short-clip hallucinations:
+  whisper auto-detect mis-classifies accented English as the wrong language and
+  then transcribes nonsense in that language's phonemes.
+
+mime_type: container MIME string — used to set the correct file extension so
+  OpenAI's API recognises the container format.
 """
-import asyncio
+import io
 import logging
-import os
-import tempfile
 
 logger = logging.getLogger("nexadesk.voice_demo")
 
-_whisper = None
-_lock = asyncio.Lock()
-
-_MODEL_NAME = "base.en"
-_CACHE_DIR = os.environ.get("WHISPER_CACHE_DIR", "/app/.models/whisper")
-
-
-async def _load():
-    global _whisper
-    if _whisper is not None:
-        return _whisper
-    async with _lock:
-        if _whisper is not None:
-            return _whisper
-        logger.info("Loading Whisper %s (CPU/int8)…", _MODEL_NAME)
-        from faster_whisper import WhisperModel
-        _whisper = WhisperModel(
-            _MODEL_NAME,
-            device="cpu",
-            compute_type="int8",
-            download_root=_CACHE_DIR,
-        )
-        logger.info("Whisper ready.")
-    return _whisper
+_DOMAIN_PROMPT = (
+    "Real estate inquiry. Properties in Dubai, Abu Dhabi, London, Manchester, "
+    "Houston, Miami, Austin, Nashville. Keywords: apartment, villa, bedroom, "
+    "bathroom, buy, rent, invest, AED, GBP, USD, studio, penthouse, Golden Visa."
+)
 
 
-def _run_sync(model, webm_path: str) -> str:
-    import subprocess
-    wav_path = webm_path.replace(".webm", ".wav")
+def _ext_from_mime(mime_type: str) -> str:
+    """Map a recorder MIME type to an OpenAI-accepted file extension."""
+    m = mime_type.lower()
+    if "mp4" in m or "m4a" in m or "aac" in m:
+        return "m4a"
+    if "ogg" in m:
+        return "ogg"
+    return "webm"   # default — covers audio/webm and audio/webm;codecs=opus
+
+
+async def transcribe(
+    audio_bytes: bytes,
+    language: str = "en",
+    mime_type: str = "audio/webm",
+) -> str:
+    """
+    Transcribe audio bytes using OpenAI whisper-1.
+
+    Parameters
+    ----------
+    audio_bytes : bytes   Raw WebM/Opus (or other container) audio.
+    language    : str     ISO-639-1 code to pin ('en', 'ur', 'ar', …) or 'auto'.
+    mime_type   : str     MIME string from the browser MediaRecorder.
+    """
+    from openai import AsyncOpenAI
+    from app.config import get_settings
+
+    n_bytes = len(audio_bytes)
+    ext = _ext_from_mime(mime_type)
+
+    s = get_settings()
+    client = AsyncOpenAI(api_key=s.EMBED_API_KEY)
+
+    audio_file = io.BytesIO(audio_bytes)
+    audio_file.name = f"audio.{ext}"
+
+    kwargs: dict = {
+        "model": "whisper-1",
+        "file":  audio_file,
+    }
+    if language and language != "auto":
+        kwargs["language"] = language
+    # English prompt biases whisper to output Latin/Roman script even for
+    # non-Latin languages (Urdu → Roman Urdu, Arabic → transliteration).
+    # Only attach the domain prompt for English audio.
+    if not language or language in ("en", "auto"):
+        kwargs["prompt"] = _DOMAIN_PROMPT
+
     try:
-        result = subprocess.run(
-            ["ffmpeg", "-y", "-i", webm_path, "-ar", "16000", "-ac", "1", "-f", "wav", wav_path],
-            capture_output=True,
-            timeout=30,
+        result = await client.audio.transcriptions.create(**kwargs)
+        text = result.text.strip()
+        logger.info(
+            "whisper-1 OK  lang=%s  ext=%s  bytes=%d  → %r",
+            language, ext, n_bytes, text,
         )
-        if result.returncode != 0:
-            logger.warning("ffmpeg webm→wav failed: %s", result.stderr.decode(errors="replace"))
-            return ""
-        segments, _ = model.transcribe(wav_path, beam_size=5, vad_filter=True)
-        return " ".join(s.text for s in segments).strip()
-    finally:
-        try:
-            os.unlink(wav_path)
-        except OSError:
-            pass
+        return text
+    except Exception as e:
+        # Log the full exception including any API response body
+        logger.error(
+            "whisper-1 FAIL  lang=%s  ext=%s  bytes=%d  error=%s",
+            language, ext, n_bytes, e,
+        )
+        return ""
 
 
-async def transcribe(audio_bytes: bytes) -> str:
-    model = await _load()
-    tmp = tempfile.NamedTemporaryFile(suffix=".webm", delete=False)
-    try:
-        tmp.write(audio_bytes)
-        tmp.flush()
-        tmp.close()
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, _run_sync, model, tmp.name)
-    finally:
-        try:
-            os.unlink(tmp.name)
-        except OSError:
-            pass
+async def warmup() -> None:
+    """No warmup needed — cloud API, no local model to load."""
+    pass

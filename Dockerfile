@@ -27,12 +27,12 @@ RUN pip install --no-cache-dir python-pptx==1.0.2
 RUN pip install --no-cache-dir faster-whisper==1.1.1
 RUN pip install --no-cache-dir kokoro-onnx soundfile
 
-# Pre-warm Whisper base.en (~150 MB) — baked into the image so the first
-# voice demo request never blocks on a model download.
+# Pre-warm Whisper tiny.en (~75 MB) — ~2× faster than base.en, baked into
+# the image so the first voice demo request never blocks on a download.
 ENV WHISPER_CACHE_DIR=/app/.models/whisper
 RUN python -c "\
 from faster_whisper import WhisperModel; \
-WhisperModel('base.en', device='cpu', compute_type='int8', download_root='/app/.models/whisper')"
+WhisperModel('tiny.en', device='cpu', compute_type='int8', download_root='/app/.models/whisper')"
 
 # Kokoro v1.0 int8 model + voices — pre-downloaded on the host into
 # models/kokoro/ and COPYed in so the build never depends on GitHub uptime.
