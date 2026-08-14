@@ -24,7 +24,7 @@ Legend: `[ ]` open · `[x]` fixed · severity **C**ritical / **H**igh / **M**edi
 
 **Open items and where they are handled:**
 M15 is environment configuration and is enforced at startup by
-alidate_startup_config plus documented in DEPLOYMENT.md. L7 is a recorded
+`validate_startup_config` plus documented in DEPLOYMENT.md. L7 is a recorded
 architectural note about the service-role client bypassing RLS — a deliberate
 design property, not a scheduled fix.
 

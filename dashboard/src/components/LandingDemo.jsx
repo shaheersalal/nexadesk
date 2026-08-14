@@ -1,7 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { Send } from 'lucide-react'
 
-const VERCEL_API = 'https://nexadesk-1j2y.vercel.app'
+// The standalone Vercel demo app no longer hosts its own /api routes — it and
+// this widget both call the real NexaDesk backend now, so there is one prompt
+// and one model config instead of two that drift apart.
+const API_BASE = import.meta.env.VITE_API_URL || 'https://api.nexadesk.site'
 
 const OPENING_MSG = "Good day! I'm Nexa, your AI receptionist. Are you looking to buy, rent, or would you like to schedule a viewing today?"
 
@@ -66,7 +69,7 @@ export default function LandingDemo() {
     }))
 
     try {
-      const res = await fetch(`${VERCEL_API}/api/chat`, {
+      const res = await fetch(`${API_BASE}/demo/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: history }),
