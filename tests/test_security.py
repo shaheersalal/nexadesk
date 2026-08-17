@@ -64,44 +64,71 @@ def test_twilio_validation_allows_in_development(monkeypatch):
     assert voice_router._validate_twilio(None, {}) is True
 
 
-def _cfg(**overrides):
-    base = {
-        "SUPABASE_URL": "https://x.supabase.co",
-        "SUPABASE_SERVICE_KEY": "k",
-        "LLM_API_KEY": "k",
-        "APP_ENV": "production",
-        "TELEPHONY_AUTH_TOKEN": "twilio-token",
-        "APP_SECRET_KEY": "a-real-secret",
-    }
-    base.update(overrides)
-    return type("Cfg", (), base)()
+class _Cfg:
+    """Config double exposing the same telephony properties as Settings."""
+
+    def __init__(self, **kw):
+        defaults = {
+            "SUPABASE_URL": "https://x.supabase.co",
+            "SUPABASE_SERVICE_KEY": "k",
+            "LLM_API_KEY": "k",
+            "APP_ENV": "production",
+            "TELEPHONY_ACCOUNT_SID": "AC123",
+            "TELEPHONY_AUTH_TOKEN": "twilio-token",
+            "APP_SECRET_KEY": "a-real-secret",
+        }
+        defaults.update(kw)
+        for k, v in defaults.items():
+            setattr(self, k, v)
+
+    @property
+    def voice_enabled(self):
+        return bool(self.TELEPHONY_ACCOUNT_SID and self.TELEPHONY_AUTH_TOKEN)
+
+    @property
+    def telephony_partially_configured(self):
+        return bool(self.TELEPHONY_ACCOUNT_SID) != bool(self.TELEPHONY_AUTH_TOKEN)
 
 
-def test_startup_refuses_production_without_twilio_token():
+def test_startup_refuses_half_configured_telephony():
     """
-    The startup guard must raise, not log-and-continue.
-
-    Logging an error and booting anyway left the voice webhooks open to anyone
-    who found the URL.
+    Exactly one telephony credential is the dangerous state: the voice routes
+    would mount while signature validation cannot work.
     """
     from app.main import validate_startup_config
 
-    with pytest.raises(RuntimeError, match="TELEPHONY_AUTH_TOKEN"):
-        validate_startup_config(_cfg(TELEPHONY_AUTH_TOKEN=""))
+    with pytest.raises(RuntimeError, match="half-configured"):
+        validate_startup_config(_Cfg(TELEPHONY_AUTH_TOKEN=""))
+    with pytest.raises(RuntimeError, match="half-configured"):
+        validate_startup_config(_Cfg(TELEPHONY_ACCOUNT_SID=""))
+
+
+def test_startup_allows_production_with_no_telephony_at_all():
+    """
+    Telephony is optional. With neither credential set the voice routes are
+    never mounted, so there is no unsigned-webhook surface and the rest of the
+    app must still boot — being unable to register with Twilio should not
+    block deploying chat, RAG and the dashboard.
+    """
+    from app.main import validate_startup_config
+
+    cfg = _Cfg(TELEPHONY_ACCOUNT_SID="", TELEPHONY_AUTH_TOKEN="")
+    validate_startup_config(cfg)
+    assert cfg.voice_enabled is False
 
 
 def test_startup_refuses_placeholder_secret_key():
     from app.main import validate_startup_config
 
     with pytest.raises(RuntimeError, match="APP_SECRET_KEY"):
-        validate_startup_config(_cfg(APP_SECRET_KEY="change-me-in-production"))
+        validate_startup_config(_Cfg(APP_SECRET_KEY="change-me-in-production"))
 
 
 def test_startup_refuses_missing_required_vars():
     from app.main import validate_startup_config
 
     with pytest.raises(RuntimeError, match="SUPABASE_URL"):
-        validate_startup_config(_cfg(SUPABASE_URL=""))
+        validate_startup_config(_Cfg(SUPABASE_URL=""))
 
 
 def test_startup_allows_development_without_twilio_token():
@@ -109,14 +136,14 @@ def test_startup_allows_development_without_twilio_token():
     from app.main import validate_startup_config
 
     validate_startup_config(
-        _cfg(APP_ENV="development", TELEPHONY_AUTH_TOKEN="",
+        _Cfg(APP_ENV="development", TELEPHONY_AUTH_TOKEN="",
              APP_SECRET_KEY="change-me-in-production")
     )
 
 
 def test_startup_passes_on_valid_production_config():
     from app.main import validate_startup_config
-    validate_startup_config(_cfg())
+    validate_startup_config(_Cfg())
 
 
 # ── C2: activation tokens must be single-use ─────────────────────────────────

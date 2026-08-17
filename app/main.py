@@ -70,16 +70,21 @@ def validate_startup_config(cfg) -> None:
     if cfg.APP_ENV != "production":
         return
 
-    # Twilio signature validation is skipped entirely when TELEPHONY_AUTH_TOKEN is
-    # blank (see app/voice/router.py _validate_twilio). That is fine for local dev
-    # but in production it means /voice/inbound and /voice/status accept unsigned
-    # requests from anyone, who can then forge calls and drive LLM/TTS spend.
-    # Logging an error and booting anyway was not enough — fail hard (AUDIT.md C3).
-    if not cfg.TELEPHONY_AUTH_TOKEN:
+    # Telephony is optional, but half-configured telephony is not. With only one
+    # of SID/token present the voice routes would mount while signature
+    # validation silently could not work, leaving /voice/inbound and
+    # /voice/status open to forged requests (AUDIT.md C3).
+    #
+    # With *neither* set, voice is simply off: the routes are never mounted, so
+    # there is no exposed surface and the app boots normally.
+    if cfg.telephony_partially_configured:
+        missing = "TELEPHONY_AUTH_TOKEN" if not cfg.TELEPHONY_AUTH_TOKEN else "TELEPHONY_ACCOUNT_SID"
         raise RuntimeError(
-            "TELEPHONY_AUTH_TOKEN is blank in production. Twilio webhook signature "
-            "validation would be disabled, leaving /voice/inbound and /voice/status "
-            "open to anyone. Set it in the Railway environment before deploying."
+            f"Telephony is half-configured in production: {missing} is blank. "
+            "Twilio webhook signature validation cannot work, which would leave "
+            "/voice/inbound and /voice/status open to anyone. Either set both "
+            "TELEPHONY_ACCOUNT_SID and TELEPHONY_AUTH_TOKEN, or clear both to "
+            "run without the voice feature."
         )
 
     # Refuse to boot with the placeholder secret key — it's public in this repo's
@@ -154,7 +159,18 @@ app.add_middleware(BotBlockMiddleware)
 app.include_router(public_router, tags=["public"])
 app.include_router(assistant_router, prefix="/assistant", tags=["assistant"])
 app.include_router(onboarding_router, prefix="/onboarding", tags=["onboarding"])
-app.include_router(voice_router,      prefix="/voice",       tags=["voice"])
+# Voice is mounted only when telephony is configured. Not mounting it is the
+# security control: with no Twilio credentials there is no way to validate a
+# webhook signature, so the safe state is for the endpoints not to exist at all
+# rather than to exist and accept unsigned requests.
+if settings.voice_enabled:
+    app.include_router(voice_router,  prefix="/voice",       tags=["voice"])
+else:
+    logger.warning(
+        "Telephony not configured (TELEPHONY_ACCOUNT_SID / TELEPHONY_AUTH_TOKEN) — "
+        "voice routes are disabled. Chat, RAG, dashboard and the public API are unaffected."
+    )
+
 app.include_router(chat_router,       prefix="/chat",        tags=["chat"])
 app.include_router(rag_router, prefix="/rag", tags=["rag"])
 app.include_router(inbound_email_router, prefix="/rag", tags=["rag"])

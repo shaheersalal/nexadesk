@@ -14,6 +14,7 @@ from supabase import create_client, Client
 import openai
 
 from app.config import Settings, get_settings
+from app.shared.jwks import get_signing_key
 
 logger = logging.getLogger("nexadesk.deps")
 _bearer = HTTPBearer(auto_error=False)
@@ -108,31 +109,60 @@ _UNAUTHORIZED = HTTPException(
 )
 
 
-def _verify_jwt_locally(token: str, settings: Settings) -> dict | None:
+async def _verify_jwt_locally(token: str, settings: Settings) -> dict | None:
     """
-    Verify a Supabase access token offline using the project JWT secret.
+    Verify a Supabase access token offline.
 
-    Returns the claims, or None if SUPABASE_JWT_SECRET is not configured (the
-    caller then falls back to remote verification). Raises on an actually
-    invalid token.
+    Handles both signing schemes, because a project mid-migration issues both:
+      * ES256/RS256 — verified against the public JWKS (current Supabase).
+      * HS256       — verified against the legacy shared secret.
 
-    This exists because the previous implementation built a fresh synchronous
+    Returns the claims, or None if no local mechanism is configured for this
+    token's algorithm, in which case the caller falls back to asking Supabase.
+    Raises 401 for a token that is genuinely invalid.
+
+    This exists because the original implementation built a fresh synchronous
     Supabase client and made a blocking network call to Supabase Auth on *every
     authenticated request*, stalling the event loop for every other in-flight
     request on the worker (AUDIT.md H1).
     """
-    if not settings.SUPABASE_JWT_SECRET:
-        return None
     try:
-        return jwt.decode(
-            token,
-            settings.SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            audience="authenticated",
-            options={"verify_aud": True},
-        )
+        header = jwt.get_unverified_header(token)
     except JWTError:
         raise _UNAUTHORIZED
+
+    # Never trust the token's own `alg` beyond routing: each branch below pins
+    # the algorithms it will accept, so a forged `alg: none` or an HS256 token
+    # substituted for an ES256 one cannot slip through.
+    alg = header.get("alg", "")
+
+    if alg.startswith(("ES", "RS")):
+        kid = header.get("kid")
+        if not kid or not settings.SUPABASE_JWKS_URL:
+            return None
+        key = await get_signing_key(kid, settings.SUPABASE_JWKS_URL, settings.JWKS_CACHE_TTL)
+        if not key:
+            return None
+        try:
+            return jwt.decode(
+                token, key, algorithms=[alg],
+                audience="authenticated", options={"verify_aud": True},
+            )
+        except JWTError:
+            raise _UNAUTHORIZED
+
+    if alg == "HS256":
+        if not settings.SUPABASE_JWT_SECRET:
+            return None
+        try:
+            return jwt.decode(
+                token, settings.SUPABASE_JWT_SECRET, algorithms=["HS256"],
+                audience="authenticated", options={"verify_aud": True},
+            )
+        except JWTError:
+            raise _UNAUTHORIZED
+
+    return None
 
 
 async def get_current_user(
@@ -144,7 +174,7 @@ async def get_current_user(
 
     token = credentials.credentials
 
-    claims = _verify_jwt_locally(token, settings)
+    claims = await _verify_jwt_locally(token, settings)
     if claims is not None:
         user_id = claims.get("sub")
         if not user_id:

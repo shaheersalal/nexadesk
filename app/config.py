@@ -48,11 +48,16 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = ""
     SUPABASE_ANON_KEY: str = ""
     SUPABASE_SERVICE_KEY: str = ""
-    # Project JWT secret (Supabase dashboard → Settings → API → JWT Secret).
-    # Lets us verify access tokens locally instead of paying a network round
-    # trip to Supabase Auth on every authenticated request. When blank the app
-    # falls back to the old remote verification path.
+    # Local access-token verification, so an authenticated request costs no
+    # network round trip. Two mechanisms, tried in this order:
+    #   1. SUPABASE_JWKS_URL — asymmetric (ES256/RS256). What current Supabase
+    #      projects issue. Public keys, fetched once and cached.
+    #   2. SUPABASE_JWT_SECRET — the legacy shared HS256 secret.
+    # If neither is set, or the token matches neither, we fall back to asking
+    # Supabase Auth directly.
+    SUPABASE_JWKS_URL: str = ""
     SUPABASE_JWT_SECRET: str = ""
+    JWKS_CACHE_TTL: int = 3600
     # How long a resolved user->company mapping stays cached in Redis.
     COMPANY_CACHE_TTL: int = 300
 
@@ -114,6 +119,31 @@ class Settings(BaseSettings):
     @property
     def is_dev(self) -> bool:
         return self.APP_ENV == "development"
+
+    @property
+    def voice_enabled(self) -> bool:
+        """
+        Whether the telephony (phone call) feature is switched on.
+
+        Voice needs both a Twilio account SID and its auth token. With neither
+        set the feature is simply off: the /voice routes are not mounted, so
+        there is no unsigned-webhook surface to protect and the app boots
+        normally. That matters when Twilio is unavailable — being unable to
+        register for telephony should not block deploying chat, RAG and the
+        dashboard.
+        """
+        return bool(self.TELEPHONY_ACCOUNT_SID and self.TELEPHONY_AUTH_TOKEN)
+
+    @property
+    def telephony_partially_configured(self) -> bool:
+        """
+        Exactly one of the two telephony credentials is present.
+
+        This is the dangerous middle state — it looks configured but signature
+        validation cannot work, so it is treated as an error rather than
+        silently degrading (AUDIT.md C3).
+        """
+        return bool(self.TELEPHONY_ACCOUNT_SID) != bool(self.TELEPHONY_AUTH_TOKEN)
 
 
 @lru_cache
