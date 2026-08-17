@@ -675,7 +675,7 @@ async def seed():
                     "filename": f"property_{prop_id[:8]}.txt",
                 },
             )
-            print(f"            -> ingested into Qdrant")
+            print("            -> ingested into Qdrant")
 
     # 3. FAQ — always re-ingest (ingest_text is idempotent per content hash)
     print("\n[faq] Ingesting company FAQ...")

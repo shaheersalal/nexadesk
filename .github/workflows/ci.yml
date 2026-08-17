@@ -32,7 +32,7 @@ jobs:
       # rule set has broadened across releases — the same command went from
       # passing to 262 findings without a line of app code changing.
       - name: Lint with ruff
-        run: ruff check app/ tests/
+        run: ruff check app/ tests/ scripts/
 
       # The previous version of this step ended in `and False`, so the error
       # list was always empty and no file was ever parsed — it printed a count
