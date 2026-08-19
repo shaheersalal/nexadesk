@@ -29,8 +29,16 @@ class Settings(BaseSettings):
     STT_MODEL: str = "nova-2"
 
     # TTS
+    # "auto" prefers ElevenLabs when TTS_API_KEY is set, else falls back to
+    # Deepgram Aura (which reuses STT_API_KEY). Set explicitly to "deepgram" or
+    # "elevenlabs" to pin one. Aura has no Arabic or Urdu voice, so ar/ur
+    # require ElevenLabs.
+    TTS_PROVIDER: str = "auto"
     TTS_API_KEY: str = ""
     TTS_MODEL: str = "eleven_turbo_v2_5"  # multilingual (32 languages) + low latency; v2 is English-only
+    # ElevenLabs: an opaque voice id. Deepgram: an Aura model name such as
+    # aura-2-apollo-en. app/voice/tts.py ignores non-Aura values on the
+    # Deepgram path so one field can serve both providers.
     TTS_VOICE_ID: str = ""
 
     # Embeddings
