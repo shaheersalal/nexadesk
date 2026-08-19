@@ -50,13 +50,21 @@ def main() -> int:
     reply = d.get("reply") or ""
     audio_b64 = d.get("audio") or ""
 
-    print(f"\n  STT  (Deepgram)   {'OK' if transcript else 'EMPTY'}")
-    print(f"       heard: {transcript[:150]!r}")
-    print(f"\n  LLM  (gpt-4o-mini) {'OK' if reply else 'EMPTY'}")
-    print(f"       said:  {reply[:150]!r}")
-    print(f"\n  TTS  (ElevenLabs)  {'OK — ' + str(len(audio_b64)) + ' b64 chars' if audio_b64 else 'EMPTY — no audio returned'}")
+    print(f"\n  STT   {'OK' if transcript else 'EMPTY'}")
+    print(f"        heard: {transcript[:150]!r}")
+    print(f"\n  LLM   {'OK' if reply else 'EMPTY'}")
+    print(f"        said:  {reply[:150]!r}")
 
-    if transcript and reply and not audio_b64:
+    if audio_b64:
+        import base64
+        raw = base64.b64decode(audio_b64)
+        kind = "MP3" if raw[:3] in (b"ID3", b"\xff\xfb", b"\xff\xf3") else "audio"
+        print(f"\n  TTS   OK — {len(raw)/1024:.0f} KB of {kind}")
+        out = pathlib.Path("demo_voice_reply.mp3")
+        out.write_bytes(raw)
+        print(f"        saved: {out.resolve()}  (play it to hear the demo's voice)")
+    else:
+        print("\n  TTS   EMPTY — no audio returned")
         print("\n  => speech-in and reasoning work; speech-out is not configured.")
     return 0
 
