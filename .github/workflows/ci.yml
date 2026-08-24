@@ -68,6 +68,7 @@ jobs:
           set +e
           pytest -rA --tb=long > pytest-output.txt 2>&1
           code=$?
+          cat pytest-output.txt
           {
             echo "### pytest (exit $code)"
             echo ''
@@ -75,5 +76,11 @@ jobs:
             tail -c 60000 pytest-output.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          cat pytest-output.txt
+          if [ $code -ne 0 ]; then
+            # Emitted as an annotation as well: annotations are readable from
+            # the public API, while workflow logs need repository admin.
+            msg=$(tail -c 3000 pytest-output.txt | sed ':a;N;$!ba;s/%/%25/g;s//%0D/g;s/
+/%0A/g')
+            echo "::error title=pytest exit $code::$msg"
+          fi
           exit $code
