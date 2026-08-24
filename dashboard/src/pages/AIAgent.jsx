@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { Send, Phone, Mic, PhoneCall, Bot, MessageSquare, Info } from 'lucide-react'
 
-const BASE = import.meta.env.VITE_API_URL || '/api'
+import { API_BASE as BASE } from '../lib/apiBase'
 
 async function authHeaders() {
   const { data } = await supabase.auth.getSession()

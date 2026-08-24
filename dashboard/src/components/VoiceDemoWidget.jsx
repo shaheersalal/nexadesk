@@ -4,7 +4,7 @@ import { Mic, Square, Loader2, Volume2 } from 'lucide-react'
 // Calls the real backend (Deepgram -> gpt-4o-mini -> ElevenLabs), the same
 // chain the production phone line uses. The previous version posted to the
 // standalone Vercel demo app's /api/voice route, which no longer exists.
-const API_BASE = import.meta.env.VITE_API_URL || 'https://api.nexadesk.site'
+import { API_BASE } from '../lib/apiBase'
 
 const LANGUAGES = [
   { code: 'en', label: 'English' },

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Send, Tag, CheckCircle } from 'lucide-react'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { API_BASE as API } from '../lib/apiBase'
 
 const GREETING = "Hi! I'm Nexa. I see you're checking out the pricing — is there something specific holding you back, or would you like to tell me a bit more about your agency?"
 

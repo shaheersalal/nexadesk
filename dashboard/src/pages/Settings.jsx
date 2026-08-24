@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { API_BASE } from '../lib/apiBase'
 import { supabase } from '../lib/supabase'
 import { api, getAccessibleCompanies } from '../lib/api'
 import { Save, Link as LinkIcon, Mail, Copy, Check, Building2, Plus, Send } from 'lucide-react'
@@ -79,7 +80,7 @@ export default function Settings() {
     }
   }
 
-  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+  const apiBase = API_BASE
   const widgetCode = company ? `<script>
   window.NexaDeskConfig = {
     companyId: "${company.id}",

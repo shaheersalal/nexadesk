@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { API_BASE } from '../lib/apiBase'
 import { X, ChevronLeft, ChevronRight, Pause, Play, ArrowRight, CheckCircle, TrendingUp, Phone, MessageSquare, Calendar, Globe } from 'lucide-react'
 
 const SLIDE_DURATION = 4000
@@ -250,7 +251,7 @@ function DemoForm({ onSuccess, onBack }) {
 
     let delivered = false
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/book-demo`, {
+      const res = await fetch(`${API_BASE}/book-demo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, ...(discount || {}), recaptcha_token }),

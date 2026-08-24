@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Sparkles } from 'lucide-react'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+import { API_BASE as API } from '../lib/apiBase'
 
 // Local mirror of the backend formula (app/pricing/router.py) — used only for
 // instant slider/card feedback. The real price for any "Offer" action always

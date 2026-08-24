@@ -4,7 +4,7 @@ import {
   Loader2, Copy, Plug, Link2, Link2Off, RefreshCw, Key, Terminal, Zap,
 } from 'lucide-react'
 
-const BASE = import.meta.env.VITE_API_URL || '/api'
+import { API_BASE as BASE } from '../lib/apiBase'
 
 const ALL_EVENTS = [
   { id: 'lead.created',        label: 'New Lead',            desc: 'Fired when a lead is captured via chat, voice, or manually' },
@@ -540,7 +540,10 @@ function ApiKeysSection() {
 // ── ── SECTION 4: MCP SERVER ── ──
 
 function McpSection() {
-  const endpoint = 'https://api.nexadesk.site/mcp/'
+  // Derived, not hardcoded: this string is copy-pasted by customers straight
+  // into their MCP client config, so a stale literal here hands every one of
+  // them a broken endpoint.
+  const endpoint = `${BASE.replace(/\/$/, '')}/mcp/`
 
   const cliSnippet = `claude mcp add --transport http nexadesk "${endpoint}" --header "Authorization: Bearer YOUR_API_KEY"`
 

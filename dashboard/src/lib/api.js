@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 
-const BASE = import.meta.env.VITE_API_URL || '/api'
+import { API_BASE as BASE } from './apiBase'
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 

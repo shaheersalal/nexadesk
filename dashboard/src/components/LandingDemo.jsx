@@ -4,7 +4,7 @@ import { Send } from 'lucide-react'
 // The standalone Vercel demo app no longer hosts its own /api routes — it and
 // this widget both call the real NexaDesk backend now, so there is one prompt
 // and one model config instead of two that drift apart.
-const API_BASE = import.meta.env.VITE_API_URL || 'https://api.nexadesk.site'
+import { API_BASE } from '../lib/apiBase'
 
 const OPENING_MSG = "Good day! I'm Nexa, your AI receptionist. Are you looking to buy, rent, or would you like to schedule a viewing today?"
 
