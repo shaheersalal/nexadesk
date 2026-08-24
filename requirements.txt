@@ -44,3 +44,9 @@ deep-translator==1.11.4
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 aiofiles==24.1.0
+
+# Telephony — Twilio TwiML generation, webhook signature validation, REST client.
+# app/voice/telephony.py imports this in four places. The imports are
+# function-local so the app still boots without it, which is exactly why its
+# absence went unnoticed: the failure only surfaces on the first real call.
+twilio==9.11.0
