@@ -325,8 +325,10 @@ async def demo_voice(
     """
     Voice demo: speak -> transcribe -> reply -> speak back.
 
-    Runs on the same Deepgram, ElevenLabs and demo prompt as the production
-    call path. The previous design lived in a separate Next.js app that called
+    Runs on the same Deepgram STT, TTS provider and demo prompt as the
+    production call path. TTS is whatever TTS_PROVIDER resolves to — currently
+    Deepgram Aura-2, which returns MP3 on this browser path (the telephony path
+    asks for 8 kHz linear16 instead). The previous design lived in a separate Next.js app that called
     OpenAI directly with its own 14.8 KB copy of the prompt, which had already
     drifted from the backend's — so the demo no longer represented the product
     it was demonstrating (AUDIT.md L5).

@@ -10,7 +10,10 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     APP_SECRET_KEY: str = "change-me-in-production"
     APP_BASE_URL: str = "http://localhost:8000"
-    SUPPORTED_LANGUAGES: str = "en,es,ar,fr,ur"
+    # English-only for now. Deepgram Aura has no Arabic or Urdu voice at all, so
+    # advertising ar/ur while TTS_PROVIDER=deepgram promises a spoken reply that
+    # can never be produced. Widen this again together with an ElevenLabs key.
+    SUPPORTED_LANGUAGES: str = "en"
 
     # Only honour CF-Connecting-IP / X-Forwarded-For when the app really is
     # behind a proxy that overwrites them. Otherwise they are client-controlled

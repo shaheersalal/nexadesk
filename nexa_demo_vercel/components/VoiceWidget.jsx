@@ -2,11 +2,12 @@
 import { useState, useRef, useCallback } from 'react'
 import { postForm } from '@/lib/api'
 
+// English-only for now. Aura has no Arabic or Urdu voice, so offering them
+// meant the reply came back as text with silence where the speech should be —
+// worse than not offering them. Add the entries back alongside an ElevenLabs
+// key; the selector below re-appears on its own once this list has >1 entry.
 const LANGUAGES = [
   { code: 'en',   label: 'English'  },
-  { code: 'ur',   label: 'اردو'     },
-  { code: 'ar',   label: 'العربية'  },
-  { code: 'auto', label: 'Auto'     },
 ]
 
 const MIN_RECORD_MS    = 1500
@@ -55,8 +56,9 @@ export default function VoiceWidget() {
       fd.append('lang',  langRef.current)
       fd.append('history', JSON.stringify(history))
 
-      // Real backend: Deepgram -> gpt-4o-mini -> ElevenLabs, the same chain the
-      // production phone line uses, rather than a separate OpenAI call path.
+      // Real backend: Deepgram STT -> gpt-4o-mini -> Deepgram Aura TTS, the same
+      // chain the production phone line uses, rather than a separate OpenAI
+      // call path. The reply comes back as base64 MP3 regardless of provider.
       const data = await postForm('/demo/voice', fd)
 
       setTranscript(data.transcript)
@@ -155,8 +157,8 @@ export default function VoiceWidget() {
 
   return (
     <div className="flex flex-col items-center gap-4 w-full">
-      {/* Language selector */}
-      <div className="flex gap-1.5 flex-wrap justify-center">
+      {/* Language selector — hidden while only one language is offered */}
+      <div className={`gap-1.5 flex-wrap justify-center ${LANGUAGES.length > 1 ? 'flex' : 'hidden'}`}>
         {LANGUAGES.map(l => (
           <button
             key={l.code}
