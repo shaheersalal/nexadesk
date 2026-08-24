@@ -76,4 +76,12 @@ jobs:
             tail -c 60000 pytest-output.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          if [ $code -ne 0 ]; then
+            # One annotation per line: annotations are readable from the public
+            # API, while workflow logs require repository admin rights. Per-line
+            # avoids escaping newlines, which broke this file once already.
+            tail -n 40 pytest-output.txt | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+          fi
           exit $code
