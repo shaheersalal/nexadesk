@@ -62,7 +62,11 @@ export default function Layout({ session }) {
   async function handleSignOut() {
     if (!window.confirm('Sign out of NexaDesk?')) return
     await supabase.auth.signOut()
-    navigate('/login')
+    // Land on the public site, not the login form. Sending a user who just
+    // signed out straight back to /login reads as "you are signed out, now sign
+    // in again" — and `replace` keeps the dashboard out of history, so Back
+    // cannot bounce them into a view their session no longer authorises.
+    navigate('/', { replace: true })
   }
 
   const appName = import.meta.env.VITE_APP_NAME || 'NexaDesk'
