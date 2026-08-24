@@ -11,10 +11,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -25,7 +25,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          pip install "ruff==0.16.2" pytest pytest-asyncio
+          pip install "ruff==0.16.2" "pytest==9.1.1" "pytest-asyncio==1.4.0"
 
       # Rule selection lives in ruff.toml, not in flags. CI used to run bare
       # `ruff check --ignore E501,F401` with an unpinned ruff, whose default
@@ -53,6 +53,9 @@ jobs:
           LLM_API_KEY: placeholder
         run: python -c "import app.main; print('app.main imported OK')"
 
+      # Output is teed into the job summary because workflow *logs* need admin
+      # rights to read, while the summary is public — so a failure here is
+      # diagnosable from the API without repo admin.
       - name: Run tests
         env:
           APP_ENV: development
@@ -61,4 +64,16 @@ jobs:
           SUPABASE_ANON_KEY: placeholder
           LLM_API_KEY: placeholder
           APP_SECRET_KEY: test-secret-not-a-real-key
-        run: pytest -q
+        run: |
+          set +e
+          pytest -rA --tb=long > pytest-output.txt 2>&1
+          code=$?
+          {
+            echo "### pytest (exit $code)"
+            echo ''
+            echo '```'
+            tail -c 60000 pytest-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat pytest-output.txt
+          exit $code
