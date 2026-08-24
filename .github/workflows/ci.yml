@@ -80,7 +80,9 @@ jobs:
             # One annotation per line: annotations are readable from the public
             # API, while workflow logs require repository admin rights. Per-line
             # avoids escaping newlines, which broke this file once already.
-            tail -n 40 pytest-output.txt | while IFS= read -r line; do
+            # GitHub keeps only ~10 annotations per step, so emit the error
+            # lines rather than a tail that pushes them out.
+            grep -E '^E |ModuleNotFoundError|ImportError|No module named' pytest-output.txt | tail -n 8 | while IFS= read -r line; do
               echo "::error::$line"
             done
           fi
