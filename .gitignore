@@ -54,3 +54,9 @@ supabase/.temp/
 
 # tiktoken BPE cache — regenerated on demand
 .tiktoken_cache/
+
+# Claude Code local overrides
+.claude/settings.local.json
+
+# Timestamped .env backups — contain live secrets, never commit
+.env.bak-*
