@@ -60,3 +60,9 @@ supabase/.temp/
 
 # Timestamped .env backups — contain live secrets, never commit
 .env.bak-*
+
+# Stray media at repo root — demo captures and scratch images
+13916401882880262973.jpg
+demo.mp4
+demo_voice_reply.mp3
+tts_samples/
