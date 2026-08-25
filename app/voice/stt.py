@@ -9,6 +9,8 @@ from typing import AsyncGenerator
 
 import httpx
 
+from app.shared.http import client as http_client
+
 from app.config import get_settings
 
 settings = get_settings()
@@ -40,16 +42,16 @@ async def transcribe_audio_chunk(audio_bytes: bytes, language: str | None = "en"
         "Content-Type": "audio/mulaw",
     }
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.post(
-            DEEPGRAM_URL,
-            content=audio_bytes,
-            params=params,
-            headers=headers,
-        )
-        if response.status_code != 200:
-            return ""
-        data = response.json()
+    response = await http_client().post(
+        DEEPGRAM_URL,
+        timeout=10.0,
+        content=audio_bytes,
+        params=params,
+        headers=headers,
+    )
+    if response.status_code != 200:
+        return ""
+    data = response.json()
 
     try:
         return data["results"]["channels"][0]["alternatives"][0]["transcript"]

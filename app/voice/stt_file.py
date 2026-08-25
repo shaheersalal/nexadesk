@@ -11,6 +11,8 @@ import logging
 
 import httpx
 
+from app.shared.http import client as http_client
+
 from app.config import get_settings
 
 settings = get_settings()
@@ -45,16 +47,16 @@ async def transcribe_file(
         params["detect_language"] = "true"
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                DEEPGRAM_URL,
-                content=audio,
-                params=params,
-                headers={
-                    "Authorization": f"Token {settings.STT_API_KEY}",
-                    "Content-Type": content_type,
-                },
-            )
+        response = await http_client().post(
+            DEEPGRAM_URL,
+            timeout=30.0,
+            content=audio,
+            params=params,
+            headers={
+                "Authorization": f"Token {settings.STT_API_KEY}",
+                "Content-Type": content_type,
+            },
+        )
         if response.status_code != 200:
             logger.error(
                 "Deepgram transcription failed: %s %s",
