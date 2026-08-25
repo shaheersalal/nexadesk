@@ -103,7 +103,13 @@ async def process_voice_turn(
     ) + VOICE_SYSTEM_SUFFIX
 
     if confidence in ("PARTIAL", "NO_MATCH"):
-        system += "\n[Retrieval confidence LOW — do NOT invent details. Capture name and phone instead.]"
+        system += (
+            "\n[Retrieval confidence LOW. Do not state any specific price, size, "
+            "address or availability - nothing matched well enough. You may still "
+            "answer general market questions and questions about this service from "
+            "what you know. Do not stall: answer what you can, then offer to take a "
+            "name and number for the specifics.]"
+        )
 
     messages = session.conversation_history[-8:] + [
         {"role": "user", "content": english_query}
@@ -113,7 +119,7 @@ async def process_voice_turn(
         system=system,
         messages=messages,
         max_tokens=150,  # short for voice
-        temperature=0.4,
+        temperature=0.5,
     )
 
     reply = await atranslate_from_english(reply_english, detected_lang)
@@ -167,7 +173,13 @@ async def _build_turn_context(user_text: str, session: CallSession) -> tuple[str
     ) + VOICE_SYSTEM_SUFFIX
 
     if rag_result["confidence"] in ("PARTIAL", "NO_MATCH"):
-        system += "\n[Retrieval confidence LOW — do NOT invent details. Capture name and phone instead.]"
+        system += (
+            "\n[Retrieval confidence LOW. Do not state any specific price, size, "
+            "address or availability - nothing matched well enough. You may still "
+            "answer general market questions and questions about this service from "
+            "what you know. Do not stall: answer what you can, then offer to take a "
+            "name and number for the specifics.]"
+        )
 
     return system, english_query, detected_lang
 

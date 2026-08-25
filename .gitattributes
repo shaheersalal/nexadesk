@@ -1,0 +1,15 @@
+# Normalize line endings.
+#
+# Editing files from a Windows Python process rewrote whole files from LF to
+# CRLF, so several commits showed every line changed for a handful of real
+# edits. This pins the repository to LF regardless of the platform doing the
+# writing, and keeps diffs reviewable.
+* text=auto eol=lf
+
+# Binary — never touch these.
+*.png binary
+*.jpg binary
+*.mp3 binary
+*.mp4 binary
+*.pdf binary
+*.ico binary
