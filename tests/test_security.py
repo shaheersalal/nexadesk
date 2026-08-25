@@ -386,21 +386,36 @@ def test_callback_url_falls_back_when_base_unset(monkeypatch):
 
 # ── RAG confidence must be judged on the scale the scores are actually on ────
 
-def test_cosine_and_reranked_thresholds_are_separate():
+def test_confidence_thresholds_are_calibrated_per_scale():
     """
-    Without a JINA_API_KEY the reranker is skipped and scores are raw cosine,
-    which occupies a much lower band than Jina's calibrated relevance score.
-    Judging cosine scores against the Jina thresholds marked correct retrievals
-    NO_MATCH — the receptionist would find the right listing and then refuse to
-    quote it, indistinguishable from having no knowledge base at all.
+    The two scoring paths are on different, independently calibrated scales, and
+    neither may be judged by the other's bar.
+
+    An earlier version of this test assumed cosine thresholds must sit below
+    reranked ones. That is not a property of the system — it was an artefact of
+    both sets being guesses. Measured against this corpus, cosine relevance runs
+    0.41-0.74 while Jina relevance runs 0.26-0.82 with ordinary caller phrasing
+    at the bottom of that range, so the reranked bar is legitimately the lower
+    of the two. What must hold is that each threshold admits the matches its own
+    scale actually produces.
     """
     from app.rag import store
-    assert store.SCORE_CONFIDENT_COSINE < store.SCORE_CONFIDENT_RERANKED
-    assert store.SCORE_PARTIAL_COSINE < store.SCORE_PARTIAL_RERANKED
-    # A measured good cosine match must not be judged by the Jina bar.
-    good_cosine_match = 0.64
-    assert good_cosine_match >= store.SCORE_CONFIDENT_COSINE
-    assert good_cosine_match < store.SCORE_CONFIDENT_RERANKED
+
+    # Every threshold sits above the pre-filter and below a perfect score.
+    for name in ("SCORE_CONFIDENT_COSINE", "SCORE_PARTIAL_COSINE",
+                 "SCORE_CONFIDENT_RERANKED", "SCORE_PARTIAL_RERANKED"):
+        value = getattr(store, name)
+        assert 0.0 < value < 1.0, name
+        assert store.SCORE_PARTIAL_COSINE >= 0.0
+
+    assert store.SCORE_PARTIAL_COSINE < store.SCORE_CONFIDENT_COSINE
+    assert store.SCORE_PARTIAL_RERANKED < store.SCORE_CONFIDENT_RERANKED
+
+    # Measured relevant matches must not be discarded by their own scale.
+    measured_cosine = [0.413, 0.493, 0.641, 0.689, 0.742]
+    measured_reranked = [0.261, 0.330, 0.398, 0.702, 0.779, 0.818]
+    assert all(s >= store.SCORE_PARTIAL_COSINE for s in measured_cosine),         "a real cosine match would be labelled NO_MATCH"
+    assert all(s >= store.SCORE_PARTIAL_RERANKED for s in measured_reranked),         "a real reranked match would be labelled NO_MATCH"
 
 
 async def test_rerank_reports_whether_it_actually_reranked(monkeypatch):
