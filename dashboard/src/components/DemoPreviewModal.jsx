@@ -128,27 +128,39 @@ function Slide3Transcript() {
   )
 }
 
-function Slide4Multilingual() {
-  const langs = [
-    { flag: '🇺🇸', lang: 'English', q: 'I need a 3-bed villa in Jumeirah.', a: "Great choice! Jumeirah villas start from AED 5M. What's your timeline?" },
-    { flag: '🇪🇸', lang: 'Español', q: 'Busco un apartamento en Dubai Marina.', a: '¡Perfecto! Tenemos opciones desde AED 900K en Marina. ¿Cuándo planea mudarse?' },
-    { flag: '🇫🇷', lang: 'Français', q: "Je cherche un investissement à Dubai.", a: 'Excellent choix! Le rendement moyen est de 7%. Quel est votre budget?' },
-    { flag: '🇸🇦', lang: 'العربية', q: 'أبحث عن شقة في داون تاون دبي.', a: 'ممتاز! لدينا شقق في داون تاون من مليون و٢٠٠ ألف درهم. متى تريد الانتقال؟' },
+function Slide4Grounded() {
+  const turns = [
+    {
+      q: 'What is the service charge on the Canary Wharf flat?',
+      a: 'It is listed at that figure in the brochure I have on file — let me read it back to you exactly.',
+      tag: 'IN THE KNOWLEDGE BASE',
+      ok: true,
+    },
+    {
+      q: 'And what about the one in Shoreditch?',
+      a: "I don't have the full details on that one yet. Can I take your name and number so the team comes back to you with specifics?",
+      tag: 'NOT IN THE KNOWLEDGE BASE',
+      ok: false,
+    },
   ]
   return (
-    <div className="h-full flex flex-col p-6 md:p-10" style={{ background: 'linear-gradient(135deg, #1a0533 0%, #2d1b69 100%)' }}>
-      <p className="text-xs font-semibold text-violet-300 uppercase tracking-widest mb-2">Multilingual AI</p>
-      <h2 className="text-2xl md:text-4xl font-bold text-white mb-2">Speaks Your Clients' Language</h2>
-      <p className="text-violet-200/70 text-sm md:text-base mb-6">Nexa auto-detects your client's language and replies in kind — from Arabic to Spanish to Urdu, no setup needed.</p>
-      <div className="grid grid-cols-2 gap-3 flex-1">
-        {langs.map(l => (
-          <div key={l.lang} style={{ background: 'rgba(255,255,255,0.07)', borderRadius: 12, padding: 14, border: '1px solid rgba(255,255,255,0.1)' }}>
-            <p className="text-lg mb-1">{l.flag} <span className="text-xs font-semibold text-violet-300 ml-1">{l.lang}</span></p>
+    <div className="h-full flex flex-col p-6 md:p-10" style={{ background: 'linear-gradient(135deg, #06231c 0%, #0d3d2f 100%)' }}>
+      <p className="text-xs font-semibold text-emerald-300 uppercase tracking-widest mb-2">Grounded Answers</p>
+      <h2 className="text-2xl md:text-4xl font-bold text-white mb-2">It Will Not Invent a Price</h2>
+      <p className="text-emerald-200/70 text-sm md:text-base mb-6">
+        Every figure comes from your own listings or it does not get said. When the answer
+        is not there, Nexa says so and captures the lead — which is a good call, not a failed one.
+      </p>
+      <div className="flex flex-col gap-3 flex-1">
+        {turns.map(t => (
+          <div key={t.tag} style={{ background: 'rgba(255,255,255,0.07)', borderRadius: 12, padding: 14, border: '1px solid rgba(255,255,255,0.1)' }}>
+            <p className="text-[10px] font-semibold uppercase tracking-widest mb-2"
+               style={{ color: t.ok ? '#6ee7b7' : '#fca5a5' }}>{t.tag}</p>
             <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 8, padding: '6px 10px', marginBottom: 6 }}>
-              <p className="text-xs text-white/60" style={{ direction: l.lang === 'العربية' ? 'rtl' : 'ltr' }}>{l.q}</p>
+              <p className="text-xs text-white/60">{t.q}</p>
             </div>
-            <div style={{ background: 'rgba(139,92,246,0.2)', borderRadius: 8, padding: '6px 10px' }}>
-              <p className="text-xs text-violet-100" style={{ direction: l.lang === 'العربية' ? 'rtl' : 'ltr' }}>{l.a}</p>
+            <div style={{ background: t.ok ? 'rgba(16,185,129,0.18)' : 'rgba(148,163,184,0.18)', borderRadius: 8, padding: '6px 10px' }}>
+              <p className="text-xs text-emerald-50">{t.a}</p>
             </div>
           </div>
         ))}
@@ -202,7 +214,7 @@ const SLIDES = [
   { component: Slide1Dashboard, title: 'Live Dashboard', desc: 'Real-time metrics and AI activity at a glance' },
   { component: Slide2Leads, title: 'Lead Pipeline', desc: 'Every enquiry scored, ranked, and ready to act on' },
   { component: Slide3Transcript, title: 'Full Transcripts', desc: 'Every conversation logged automatically' },
-  { component: Slide4Multilingual, title: 'Multilingual AI', desc: "Speaks your client's language — automatically" },
+  { component: Slide4Grounded, title: 'Grounded Answers', desc: 'Never invents a price — captures the lead instead' },
   { component: Slide5Appointments, title: 'Auto Appointments', desc: 'Viewings booked without you lifting a finger' },
 ]
 

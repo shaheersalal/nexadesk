@@ -6,11 +6,11 @@ import { Mic, Square, Loader2, Volume2 } from 'lucide-react'
 // standalone Vercel demo app's /api/voice route, which no longer exists.
 import { API_BASE } from '../lib/apiBase'
 
+// English-only for now. Aura has no Arabic or Urdu voice, so offering those
+// returned text with silence where the speech should be. Add the entries back
+// alongside an ElevenLabs key; the selector re-appears once this list has >1.
 const LANGUAGES = [
   { code: 'en', label: 'English' },
-  { code: 'ur', label: 'اردو' },
-  { code: 'ar', label: 'العربية' },
-  { code: 'auto', label: 'Auto' },
 ]
 
 const MIN_RECORD_MS = 1000
@@ -141,7 +141,7 @@ export default function VoiceDemoWidget() {
         </div>
 
         <div className="p-6 flex flex-col items-center gap-4 bg-white">
-          <div className="flex gap-1.5 flex-wrap justify-center">
+          <div className={`gap-1.5 flex-wrap justify-center ${LANGUAGES.length > 1 ? 'flex' : 'hidden'}`}>
             {LANGUAGES.map(l => (
               <button
                 key={l.code}

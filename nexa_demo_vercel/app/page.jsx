@@ -20,8 +20,8 @@ export default function Page() {
         <p className="text-sm text-accent font-semibold uppercase tracking-widest mb-2">Powered by AI</p>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Talk to Nexa — your 24/7 property advisor</h2>
         <p className="text-gray-500 text-sm max-w-lg mx-auto">
-          Ask about any property, prices, Golden Visa, mortgages, or investment returns.
-          Nexa speaks English, Urdu, Arabic — and converts currencies on the spot.
+          Ask about any property, prices, the market in the US, UK or UAE, or how the
+          system itself works. Nexa answers in English.
         </p>
       </section>
 
@@ -46,7 +46,7 @@ export default function Page() {
               <span className="text-2xl">💬</span>
               <div>
                 <h3 className="font-semibold text-gray-900">Chat Demo</h3>
-                <p className="text-xs text-gray-400">Type in any language</p>
+                <p className="text-xs text-gray-400">Type a question</p>
               </div>
             </div>
             <div className="flex-1">
@@ -59,7 +59,7 @@ export default function Page() {
         <div className="flex flex-wrap justify-center gap-2 mt-8">
           {[
             '🇦🇪 UAE Properties', '🇬🇧 UK Properties', '🇺🇸 US Properties',
-            '🌐 Multilingual', '💰 Live Price Data', '🏆 Golden Visa Info',
+            '💬 Grounded Answers', '📞 Real Phone Line', '🔎 RAG Retrieval',
           ].map(f => (
             <span key={f} className="text-xs bg-white border border-gray-200 text-gray-600 px-3 py-1.5 rounded-full shadow-sm">
               {f}

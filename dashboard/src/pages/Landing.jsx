@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Phone, MessageSquare, TrendingUp, Building2, CheckCircle, ArrowRight, Clock, Globe,
+  Phone, MessageSquare, TrendingUp, Building2, CheckCircle, ArrowRight, Clock, ShieldCheck,
   Linkedin, Briefcase, Wrench, RefreshCw, ShoppingBag, ChevronDown, Lock, Tag,
   Database, Puzzle, Code2,
 } from 'lucide-react'
-import LandingDemo from '../components/LandingDemo'
 import VoiceDemoWidget from '../components/VoiceDemoWidget'
 import DemoPreviewModal from '../components/DemoPreviewModal'
 import PricingCalculator from '../components/PricingCalculator'
@@ -44,6 +43,10 @@ const FEATURES = [
     desc: 'Upload listings, brochures, or paste descriptions. The AI knows your inventory and answers specific questions about each property.',
   },
 ]
+
+// The live demo line. E.164 for the tel: href, formatted for display.
+const DEMO_PHONE_E164 = '+17813655768'
+const DEMO_PHONE_DISPLAY = '+1 (781) 365-5768'
 
 const STEPS = [
   { n: '01', title: 'See it in action', desc: 'Tour the live dashboard, lead pipeline, and AI conversations, no sign-up needed. Then request access in 60 seconds.' },
@@ -85,7 +88,7 @@ const FAQS = [
   },
   {
     q: 'What languages does the AI support?',
-    a: 'Speaks your client\'s language, automatically. From Arabic to Spanish to Urdu and everything in between, NexaDesk detects and replies in whatever language your client uses, on both voice and chat.',
+    a: 'English, on both voice and chat. Additional languages are on the roadmap - the speech layer is already provider-agnostic, so adding one is a configuration change rather than a rebuild. We would rather list one language we handle well than several we handle badly.',
   },
   {
     q: 'Can I change my plan later?',
@@ -136,7 +139,6 @@ function FaqItem({ item, open, onToggle }) {
 
 export default function Landing() {
   const [demoOpen, setDemoOpen] = useState(false)
-  const [demoMode, setDemoMode] = useState('chat')
   const [offerPlan, setOfferPlan] = useState(null)
   const [openFaq, setOpenFaq] = useState(0)
   const [activeSection, setActiveSection] = useState('hero')
@@ -269,7 +271,7 @@ export default function Landing() {
         <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-center gap-8 text-white text-sm font-medium">
           {[
             [Clock, '24/7 AI Coverage'],
-            [Globe, "Speaks your client's language — automatically"],
+            [ShieldCheck, 'Never Invents a Price'],
             [CheckCircle, 'Full Setup Included'],
           ].map(([Icon, label]) => (
             <div key={label} className="flex items-center gap-2">
@@ -284,25 +286,26 @@ export default function Landing() {
         <Reveal>
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-10">
-              <h2 className="text-3xl font-bold text-gray-900">See It in Action</h2>
-              <p className="text-gray-500 mt-3">This is exactly what your clients experience when they contact your agency.</p>
+              <h2 className="text-3xl font-bold text-gray-900">Call it and hear it for yourself</h2>
+              <p className="text-gray-500 mt-3">
+                Pick up your phone and dial the number below. No sign-up, no form —
+                the same receptionist your clients would reach.
+              </p>
+              <a
+                href={`tel:${DEMO_PHONE_E164}`}
+                className="inline-flex items-center gap-3 mt-6 px-6 py-3.5 rounded-full bg-accent text-white text-xl md:text-2xl font-semibold tracking-wide hover:bg-accent-light transition-colors shadow-sm"
+              >
+                <Phone className="w-5 h-5 shrink-0" />
+                {DEMO_PHONE_DISPLAY}
+              </a>
+              <p className="text-xs text-gray-400 mt-3">
+                US number, callable from anywhere. Your usual international rates apply.
+              </p>
             </div>
-            <div className="flex justify-center gap-2 mb-6">
-              {[['chat', 'Chat'], ['voice', 'Voice']].map(([mode, label]) => (
-                <button
-                  key={mode}
-                  onClick={() => setDemoMode(mode)}
-                  className={`px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${
-                    demoMode === mode
-                      ? 'bg-accent text-white'
-                      : 'bg-white text-gray-500 border border-gray-200 hover:text-gray-700'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="text-center text-sm text-gray-400 mb-6">
+              Not somewhere you can talk? Try the voice demo in your browser instead.
             </div>
-            {demoMode === 'chat' ? <LandingDemo /> : <VoiceDemoWidget />}
+            <VoiceDemoWidget />
           </div>
         </Reveal>
       </section>
