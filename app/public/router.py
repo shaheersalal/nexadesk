@@ -17,7 +17,7 @@ from app.shared.demo_prompt import DEMO_KNOWLEDGE_PROMPT
 from app.shared.language import anormalize_for_llm, atranslate_from_english
 from app.shared.llm import complete
 from app.voice.stt_file import transcribe_file
-from app.voice.tts import synthesize
+from app.voice.tts import synthesize_browser
 
 logger = logging.getLogger("nexadesk.public")
 router = APIRouter()
@@ -387,7 +387,7 @@ async def demo_voice(
     _t_llm = time.perf_counter() - _t1
 
     _t2 = time.perf_counter()
-    mp3 = await synthesize(reply)
+    audio_bytes, audio_mime = await synthesize_browser(reply)
     _t_tts = time.perf_counter() - _t2
 
     logger.info(
@@ -402,6 +402,7 @@ async def demo_voice(
         # when the caller switches language mid-conversation.
         "historyUser": english_query,
         "historyAssistant": reply_english,
-        "audio": base64.b64encode(mp3).decode() if mp3 else "",
+        "audio": base64.b64encode(audio_bytes).decode() if audio_bytes else "",
+        "audioMime": audio_mime,
         "timings": {"stt": round(_t_stt, 3), "llm": round(_t_llm, 3), "tts": round(_t_tts, 3)},
     }

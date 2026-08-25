@@ -38,9 +38,11 @@ export default function VoiceWidget() {
 
   const showError = (msg) => { setStage('error'); setErrorMsg(msg) }
 
-  const playBase64Mp3 = (b64) => {
+  const playBase64Audio = (b64, mime) => {
     setStage('speaking')
-    const src = `data:audio/mpeg;base64,${b64}`
+    // The server picks the container: parallel clause synthesis returns WAV,
+    // the single-shot path returns MP3. Assuming one breaks the other.
+    const src = `data:${mime || 'audio/mpeg'};base64,${b64}`
     if (!audioRef.current) audioRef.current = new Audio()
     audioRef.current.src = src
     audioRef.current.onended = () => setStage('idle')
@@ -69,7 +71,7 @@ export default function VoiceWidget() {
         { role: 'assistant', content: data.historyAssistant },
       ])
       if (data.audio) {
-        playBase64Mp3(data.audio)
+        playBase64Audio(data.audio, data.audioMime)
       } else {
         // TTS unavailable — the reply text is still shown, so don't fail hard.
         setStage('idle')

@@ -37,10 +37,12 @@ export default function VoiceDemoWidget() {
 
   const showError = (msg) => { setStage('error'); setErrorMsg(msg) }
 
-  const play = (b64) => {
+  const play = (b64, audioMime) => {
     setStage('speaking')
     if (!audioRef.current) audioRef.current = new Audio()
-    audioRef.current.src = `data:audio/mpeg;base64,${b64}`
+    // The server picks the container: parallel clause synthesis returns WAV,
+    // the single-shot path returns MP3. Assuming one breaks the other.
+    audioRef.current.src = `data:${audioMime || 'audio/mpeg'};base64,${b64}`
     audioRef.current.onended = () => setStage('idle')
     audioRef.current.onerror = () => setStage('idle')
     audioRef.current.play().catch(() => setStage('idle'))
@@ -65,7 +67,7 @@ export default function VoiceDemoWidget() {
         { role: 'user', content: data.historyUser },
         { role: 'assistant', content: data.historyAssistant },
       ])
-      if (data.audio) play(data.audio)
+      if (data.audio) play(data.audio, data.audioMime)
       else setStage('idle')   // reply text still shown if TTS is unavailable
     } catch {
       showError('Network error — please try again.')

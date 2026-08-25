@@ -18,6 +18,7 @@ compressed formats, so that path still shells out to ffmpeg to decode.
 import asyncio
 import audioop
 import logging
+import re
 
 import httpx
 
@@ -217,3 +218,98 @@ async def synthesize_to_mulaw(text: str) -> bytes:
     except Exception as exc:
         logger.error("TTS mulaw conversion failed: %s", exc)
         return b""
+
+
+# ── Parallel clause synthesis (browser paths) ─────────────────────────────────
+
+_CLAUSE_SPLIT = re.compile(r"(?<=[.!?,;:])\s+")
+
+
+def _clauses(text: str, target: int = 3) -> list[str]:
+    """
+    Split a reply into roughly `target` clause groups on punctuation.
+
+    Groups are merged up to a minimum length so synthesis is not fragmented into
+    two-word requests, which sound clipped when the pieces are joined.
+    """
+    parts = [p for p in _CLAUSE_SPLIT.split(text.strip()) if p.strip()]
+    if len(parts) <= 1:
+        return parts or [text]
+    floor = max(28, len(text) // target)
+    out: list[str] = []
+    for p in parts:
+        if out and len(out[-1]) + len(p) < floor:
+            out[-1] += " " + p
+        else:
+            out.append(p)
+    return out
+
+
+def _wav(pcm: bytes, rate: int = 16000) -> bytes:
+    """Wrap 16-bit mono PCM in a WAV header."""
+    import struct
+    hdr = b"RIFF" + struct.pack("<I", 36 + len(pcm)) + b"WAVEfmt " + struct.pack(
+        "<IHHIIHH", 16, 1, 1, rate, rate * 2, 2, 16
+    ) + b"data" + struct.pack("<I", len(pcm))
+    return hdr + pcm
+
+
+async def synthesize_browser(text: str, voice_id: str | None = None) -> tuple[bytes, str]:
+    """
+    Synthesize for browser playback. Returns (audio_bytes, mime_type).
+
+    Aura-2 generation time scales with the length of the text, and it is slow:
+    measured at ~5.3s for a 22-word reply, which was ~70% of the demo's entire
+    turn while transcription and the model together took under two seconds.
+
+    Splitting the reply on clause boundaries and synthesizing the pieces
+    CONCURRENTLY cuts that roughly in half without touching voice quality —
+    Aura-1 voices are ~3.5x faster still, but noticeably more synthetic, and the
+    web demo is the one surface where quality is not up for trade.
+
+    Falls back to the single-shot path for ElevenLabs (which returns compressed
+    audio that cannot be concatenated without re-encoding) and for any failure.
+    """
+    if not text.strip():
+        return b"", "audio/mpeg"
+
+    if _provider() != "deepgram":
+        return await synthesize(text, voice_id), "audio/mpeg"
+
+    pieces = _clauses(text)
+    if len(pieces) < 2:
+        return await synthesize(text, voice_id), "audio/mpeg"
+
+    try:
+        pcm_parts = await asyncio.gather(
+            *(_deepgram_pcm(p, voice_id) for p in pieces)
+        )
+    except Exception as exc:
+        logger.warning("Parallel synthesis failed (%s) — falling back", exc)
+        return await synthesize(text, voice_id), "audio/mpeg"
+
+    if not all(pcm_parts):
+        return await synthesize(text, voice_id), "audio/mpeg"
+
+    return _wav(b"".join(pcm_parts)), "audio/wav"
+
+
+async def _deepgram_pcm(text: str, voice_id: str | None) -> bytes:
+    """One clause as headerless 16 kHz PCM, so the pieces concatenate cleanly."""
+    response = await http_client().post(
+        DEEPGRAM_SPEAK,
+        timeout=20.0,
+        params={
+            "model": _deepgram_voice(voice_id),
+            "encoding": "linear16",
+            "sample_rate": "16000",
+            "container": "none",
+        },
+        json={"text": text},
+        headers={"Authorization": f"Token {settings.STT_API_KEY}",
+                 "Content-Type": "application/json"},
+    )
+    if response.status_code != 200:
+        logger.error("Deepgram TTS %s: %s", response.status_code, response.text[:200])
+        return b""
+    return response.content
