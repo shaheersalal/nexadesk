@@ -9,7 +9,7 @@ from starlette.concurrency import run_in_threadpool
 from jose import jwt, JWTError
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.exceptions import UnexpectedResponse
-from qdrant_client.models import Distance, VectorParams
+from qdrant_client.models import Distance, VectorParams, PayloadSchemaType
 from supabase import create_client, Client
 import openai
 
@@ -72,6 +72,27 @@ async def ensure_collection(client: AsyncQdrantClient, settings: Settings) -> No
             # though the collection now exists, which is not a real failure.
             if e.status_code != 409:
                 raise
+
+    # Payload index on company_id.
+    #
+    # Every retrieval filters by company_id for tenant isolation, and Qdrant
+    # refuses to filter on an unindexed payload key: the search comes back
+    # HTTP 400 "Index required but not found". Creating the collection without
+    # this index therefore yields a knowledge base that accepts writes and fails
+    # every read, which is silent because the RAG layer treats a failed lookup
+    # as "no context" and the assistant simply falls back to lead capture.
+    try:
+        await client.create_payload_index(
+            collection_name=settings.QDRANT_COLLECTION,
+            field_name="company_id",
+            field_schema=PayloadSchemaType.KEYWORD,
+        )
+    except UnexpectedResponse as e:
+        if e.status_code not in (409, 400):
+            raise
+    except Exception:
+        # Index already present, or a concurrent worker won the race.
+        pass
 
 
 # ── Redis ─────────────────────────────────────────────────────────────────────

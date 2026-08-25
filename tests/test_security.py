@@ -382,3 +382,40 @@ def test_callback_url_falls_back_when_base_unset(monkeypatch):
 
     monkeypatch.setattr(voice_router.settings, "TELEPHONY_WEBHOOK_BASE_URL", "", raising=False)
     assert voice_router._callback_url(_Req()) == "http://localhost:8000/voice/inbound"
+
+
+# ── RAG confidence must be judged on the scale the scores are actually on ────
+
+def test_cosine_and_reranked_thresholds_are_separate():
+    """
+    Without a JINA_API_KEY the reranker is skipped and scores are raw cosine,
+    which occupies a much lower band than Jina's calibrated relevance score.
+    Judging cosine scores against the Jina thresholds marked correct retrievals
+    NO_MATCH — the receptionist would find the right listing and then refuse to
+    quote it, indistinguishable from having no knowledge base at all.
+    """
+    from app.rag import store
+    assert store.SCORE_CONFIDENT_COSINE < store.SCORE_CONFIDENT_RERANKED
+    assert store.SCORE_PARTIAL_COSINE < store.SCORE_PARTIAL_RERANKED
+    # A measured good cosine match must not be judged by the Jina bar.
+    good_cosine_match = 0.64
+    assert good_cosine_match >= store.SCORE_CONFIDENT_COSINE
+    assert good_cosine_match < store.SCORE_CONFIDENT_RERANKED
+
+
+async def test_rerank_reports_whether_it_actually_reranked(monkeypatch):
+    """The caller cannot pick a threshold without knowing which scale it got."""
+    from app.rag import store
+    monkeypatch.setattr(store.settings, "JINA_API_KEY", "", raising=False)
+    chunks = [{"text": "a", "score": 0.5}, {"text": "b", "score": 0.4}]
+    out, reranked = await store._rerank_with_jina("q", chunks, top_n=2)
+    assert reranked is False, "no key means cosine scores, and the flag must say so"
+    assert out == chunks
+
+
+async def test_rerank_empty_input_is_not_marked_reranked(monkeypatch):
+    from app.rag import store
+    monkeypatch.setattr(store.settings, "JINA_API_KEY", "key", raising=False)
+    out, reranked = await store._rerank_with_jina("q", [], top_n=3)
+    assert out == []
+    assert reranked is False

@@ -11,8 +11,24 @@ from app.rag.chunker import Chunk
 
 settings = get_settings()
 
-SCORE_CONFIDENT = 0.78
-SCORE_PARTIAL = 0.50
+# Confidence thresholds, in two sets, because the two scoring paths are not on
+# the same scale.
+#
+# Jina returns a calibrated 0-1 relevance score. Without a JINA_API_KEY the
+# reranker is skipped and the score is raw cosine similarity from the embedding
+# model, which is compressed into a much narrower band: measured against this
+# corpus, clearly relevant queries land at 0.41-0.74 while irrelevant ones are
+# filtered out entirely by SCORE_MIN and score 0.
+#
+# Applying the Jina thresholds to cosine scores marked correct retrievals
+# NO_MATCH — the receptionist would retrieve the right listing and then refuse
+# to quote its price, which looks identical to having no knowledge base at all.
+SCORE_CONFIDENT_RERANKED = 0.78
+SCORE_PARTIAL_RERANKED = 0.50
+
+SCORE_CONFIDENT_COSINE = 0.62
+SCORE_PARTIAL_COSINE = 0.38
+
 SCORE_MIN = 0.30  # below this, don't even return
 
 
@@ -50,10 +66,15 @@ async def store_chunks(
     return len(points)
 
 
-async def _rerank_with_jina(query: str, chunks: list[dict], top_n: int) -> list[dict]:
-    """Re-rank chunks using Jina reranker. Falls back to original order on any error."""
+async def _rerank_with_jina(query: str, chunks: list[dict], top_n: int) -> tuple[list[dict], bool]:
+    """
+    Re-rank chunks using Jina. Falls back to the original order on any error.
+
+    Returns (chunks, reranked). The flag matters: the caller must know which
+    scale the scores are on before comparing them to a threshold.
+    """
     if not settings.JINA_API_KEY or not chunks:
-        return chunks[:top_n]
+        return chunks[:top_n], False
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             res = await client.post(
@@ -70,15 +91,15 @@ async def _rerank_with_jina(query: str, chunks: list[dict], top_n: int) -> list[
                 },
             )
         if res.status_code != 200:
-            return chunks[:top_n]
+            return chunks[:top_n], False
         reranked = []
         for r in res.json().get("results", []):
             c = dict(chunks[r["index"]])
             c["score"] = round(r["relevance_score"], 3)
             reranked.append(c)
-        return reranked
+        return reranked, True
     except Exception:
-        return chunks[:top_n]
+        return chunks[:top_n], False
 
 
 async def query_with_confidence(
@@ -134,13 +155,16 @@ async def query_with_confidence(
     ]
 
     # Jina re-rank — narrows candidates to top_k, best match first
-    chunks = await _rerank_with_jina(query, candidates, top_n=top_k)
+    chunks, reranked = await _rerank_with_jina(query, candidates, top_n=top_k)
 
     max_score = max(c["score"] for c in chunks) if chunks else 0.0
 
-    if max_score >= SCORE_CONFIDENT:
+    confident_at = SCORE_CONFIDENT_RERANKED if reranked else SCORE_CONFIDENT_COSINE
+    partial_at = SCORE_PARTIAL_RERANKED if reranked else SCORE_PARTIAL_COSINE
+
+    if max_score >= confident_at:
         confidence = "CONFIDENT"
-    elif max_score >= SCORE_PARTIAL:
+    elif max_score >= partial_at:
         confidence = "PARTIAL"
     else:
         confidence = "NO_MATCH"
