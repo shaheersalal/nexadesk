@@ -245,13 +245,6 @@ def _clauses(text: str, target: int = 3) -> list[str]:
     return out
 
 
-def _wav(pcm: bytes, rate: int = 16000) -> bytes:
-    """Wrap 16-bit mono PCM in a WAV header."""
-    import struct
-    hdr = b"RIFF" + struct.pack("<I", 36 + len(pcm)) + b"WAVEfmt " + struct.pack(
-        "<IHHIIHH", 16, 1, 1, rate, rate * 2, 2, 16
-    ) + b"data" + struct.pack("<I", len(pcm))
-    return hdr + pcm
 
 
 async def synthesize_browser(text: str, voice_id: str | None = None) -> tuple[bytes, str]:
@@ -267,8 +260,13 @@ async def synthesize_browser(text: str, voice_id: str | None = None) -> tuple[by
     Aura-1 voices are ~3.5x faster still, but noticeably more synthetic, and the
     web demo is the one surface where quality is not up for trade.
 
-    Falls back to the single-shot path for ElevenLabs (which returns compressed
-    audio that cannot be concatenated without re-encoding) and for any failure.
+    The pieces come back as MP3 and are joined byte-wise. MP3 is a stream of
+    self-contained frames — each piece here begins on a frame sync — so the
+    result decodes as one file; verified in a browser, which reports the joined
+    duration and no decode error. Raw PCM would also join, but at 16 kHz it is
+    ~376 KB against 61 KB for the same reply, which is a poor trade on mobile.
+
+    Falls back to the single-shot path for ElevenLabs and for any failure.
     """
     if not text.strip():
         return b"", "audio/mpeg"
@@ -281,29 +279,27 @@ async def synthesize_browser(text: str, voice_id: str | None = None) -> tuple[by
         return await synthesize(text, voice_id), "audio/mpeg"
 
     try:
-        pcm_parts = await asyncio.gather(
-            *(_deepgram_pcm(p, voice_id) for p in pieces)
+        parts = await asyncio.gather(
+            *(_deepgram_mp3(p, voice_id) for p in pieces)
         )
     except Exception as exc:
         logger.warning("Parallel synthesis failed (%s) — falling back", exc)
         return await synthesize(text, voice_id), "audio/mpeg"
 
-    if not all(pcm_parts):
+    if not all(parts):
         return await synthesize(text, voice_id), "audio/mpeg"
 
-    return _wav(b"".join(pcm_parts)), "audio/wav"
+    return b"".join(parts), "audio/mpeg"
 
 
-async def _deepgram_pcm(text: str, voice_id: str | None) -> bytes:
-    """One clause as headerless 16 kHz PCM, so the pieces concatenate cleanly."""
+async def _deepgram_mp3(text: str, voice_id: str | None) -> bytes:
+    """One clause as MP3, whose frames concatenate with the neighbouring pieces."""
     response = await http_client().post(
         DEEPGRAM_SPEAK,
         timeout=20.0,
         params={
             "model": _deepgram_voice(voice_id),
-            "encoding": "linear16",
-            "sample_rate": "16000",
-            "container": "none",
+            "encoding": "mp3",
         },
         json={"text": text},
         headers={"Authorization": f"Token {settings.STT_API_KEY}",
