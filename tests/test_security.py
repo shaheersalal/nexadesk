@@ -434,3 +434,58 @@ async def test_rerank_empty_input_is_not_marked_reranked(monkeypatch):
     out, reranked = await store._rerank_with_jina("q", [], top_n=3)
     assert out == []
     assert reranked is False
+
+
+# ── Latency regressions: these cost a network round trip each ────────────────
+
+def test_llm_client_is_reused_not_rebuilt_per_call():
+    """
+    A fresh AsyncOpenAI per call builds its own connection pool, so every
+    completion paid a TCP+TLS handshake. A chat turn makes three or four calls.
+    """
+    from app.shared import llm
+    llm._CLIENT = None
+    first = llm._client()
+    second = llm._client()
+    assert first is second
+
+
+def test_shared_http_client_is_reused():
+    from app.shared import http as shared_http
+    shared_http._CLIENT = None
+    assert shared_http.client() is shared_http.client()
+
+
+def test_single_language_skips_detection_entirely(monkeypatch):
+    """
+    langdetect misreads short strings ("2 bed London" -> Afrikaans), and a wrong
+    answer makes translate_to_english issue a BLOCKING request to translate
+    English into English. With one supported language there is nothing to detect.
+    """
+    from app.shared import language
+    monkeypatch.setattr(language.settings, "SUPPORTED_LANGUAGES", "en", raising=False)
+
+    def _boom(_text):
+        raise AssertionError("detection ran despite a single supported language")
+
+    monkeypatch.setattr(language, "detect", _boom, raising=False)
+    assert language.detect_language("2 bed London") == "en"
+
+
+async def test_normalize_skips_the_threadpool_when_single_language(monkeypatch):
+    from app.shared import language
+    monkeypatch.setattr(language.settings, "SUPPORTED_LANGUAGES", "en", raising=False)
+
+    async def _boom(*_a, **_k):
+        raise AssertionError("threadpool hop taken on the critical path")
+
+    monkeypatch.setattr(language, "run_in_threadpool", _boom, raising=False)
+    text, lang = await language.anormalize_for_llm("Do you have anything in London?")
+    assert (text, lang) == ("Do you have anything in London?", "en")
+
+
+def test_detection_still_runs_when_several_languages_configured(monkeypatch):
+    """The short-circuit must not become a permanent English-only lock-in."""
+    from app.shared import language
+    monkeypatch.setattr(language.settings, "SUPPORTED_LANGUAGES", "en,es,fr", raising=False)
+    assert language._single_language() is None

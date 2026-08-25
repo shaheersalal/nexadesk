@@ -2,6 +2,8 @@ from typing import Optional
 from uuid import uuid4
 
 import httpx
+
+from app.shared.http import client as http_client
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import PointStruct, Filter, FieldCondition, MatchValue
 
@@ -84,20 +86,20 @@ async def _rerank_with_jina(query: str, chunks: list[dict], top_n: int) -> tuple
     if not settings.JINA_API_KEY or not chunks:
         return chunks[:top_n], False
     try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            res = await client.post(
-                "https://api.jina.ai/v1/rerank",
-                headers={
-                    "Authorization": f"Bearer {settings.JINA_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": settings.JINA_RERANKER_MODEL,
-                    "query": query,
-                    "documents": [c["text"] for c in chunks],
-                    "top_n": min(top_n, len(chunks)),
-                },
-            )
+        res = await http_client().post(
+            "https://api.jina.ai/v1/rerank",
+            timeout=5,
+            headers={
+                "Authorization": f"Bearer {settings.JINA_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": settings.JINA_RERANKER_MODEL,
+                "query": query,
+                "documents": [c["text"] for c in chunks],
+                "top_n": min(top_n, len(chunks)),
+            },
+        )
         if res.status_code != 200:
             return chunks[:top_n], False
         reranked = []

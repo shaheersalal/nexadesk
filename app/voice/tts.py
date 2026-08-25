@@ -21,6 +21,8 @@ import logging
 
 import httpx
 
+from app.shared.http import client as http_client
+
 from app.config import get_settings
 
 settings = get_settings()
@@ -73,17 +75,17 @@ async def _elevenlabs(text: str, voice_id: str | None) -> bytes:
         return b""
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                f"{ELEVENLABS_BASE}/text-to-speech/{vid}",
-                json={
-                    "text": text,
-                    "model_id": settings.TTS_MODEL,
-                    "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
-                },
-                headers={"xi-api-key": settings.TTS_API_KEY,
-                         "Content-Type": "application/json"},
-            )
+        response = await http_client().post(
+            f"{ELEVENLABS_BASE}/text-to-speech/{vid}",
+            timeout=15.0,
+            json={
+                "text": text,
+                "model_id": settings.TTS_MODEL,
+                "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
+            },
+            headers={"xi-api-key": settings.TTS_API_KEY,
+                     "Content-Type": "application/json"},
+        )
     except Exception as exc:
         logger.error("ElevenLabs TTS request failed: %s", exc)
         return b""
@@ -111,14 +113,14 @@ async def _deepgram(text: str, voice_id: str | None, *, telephony: bool = False)
         params |= {"encoding": "mp3"}
 
     try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.post(
-                DEEPGRAM_SPEAK,
-                params=params,
-                json={"text": text},
-                headers={"Authorization": f"Token {settings.STT_API_KEY}",
-                         "Content-Type": "application/json"},
-            )
+        response = await http_client().post(
+            DEEPGRAM_SPEAK,
+            timeout=20.0,
+            params=params,
+            json={"text": text},
+            headers={"Authorization": f"Token {settings.STT_API_KEY}",
+                     "Content-Type": "application/json"},
+        )
     except Exception as exc:
         logger.error("Deepgram TTS request failed: %s", exc)
         return b""

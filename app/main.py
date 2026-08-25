@@ -123,10 +123,12 @@ async def lifespan(app: FastAPI):
 
     # Shutdown: close persistent connections
     from app.dependencies import _qdrant_client, _redis_pool
+    from app.shared import http as shared_http
     if _qdrant_client:
         await _qdrant_client.close()
     if _redis_pool:
         await _redis_pool.aclose()
+    await shared_http.aclose()
 
 
 app = FastAPI(

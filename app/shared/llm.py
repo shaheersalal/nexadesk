@@ -6,8 +6,26 @@ from app.config import get_settings
 settings = get_settings()
 
 
+_CLIENT: openai.AsyncOpenAI | None = None
+
+
 def _client() -> openai.AsyncOpenAI:
-    return openai.AsyncOpenAI(api_key=settings.LLM_API_KEY)
+    """
+    One client per worker, reused for every call.
+
+    This used to construct a fresh AsyncOpenAI per request. Each one builds its
+    own httpx connection pool, so every completion paid a full TCP and TLS
+    handshake to the API instead of reusing a warm connection — and a chat turn
+    makes three or four calls (route, rewrite, generate, extract), so the
+    handshakes alone cost close to a second before a single token was produced.
+
+    Safe as a module global: uvicorn runs one event loop per worker, and the
+    client is created on first use inside that loop rather than at import.
+    """
+    global _CLIENT
+    if _CLIENT is None:
+        _CLIENT = openai.AsyncOpenAI(api_key=settings.LLM_API_KEY, max_retries=2)
+    return _CLIENT
 
 
 async def complete(
