@@ -48,19 +48,24 @@ async def _rewrite_query(english_query: str, history_tail: str) -> str:
     prompt = (
         f"Recent conversation context: {history_tail}\n"
         f'User query: "{english_query}"\n\n'
-        "Rewrite the user query as a standalone, specific real-estate search query "
-        "that will retrieve the most relevant property listings and market data from "
-        "a vector database.\n"
+        "Rewrite the user query as a standalone search query that will retrieve the "
+        "most relevant passages from a vector database of property listings, market "
+        "overviews, and documentation about the AI receptionist service itself.\n"
         "Rules:\n"
         "- Resolve ALL pronouns and references using the conversation context\n"
-        "- Add specific property types, city/area names, price ranges if implied\n"
-        "- Expand vague terms: 'cheap' → budget price range; 'near beach' → beach area names\n"
+        "- If the query is about a PROPERTY, add property types, city/area names and "
+        "price ranges where implied; expand vague terms (cheap -> budget price range)\n"
+        "- If the query is about the MARKET, or about the assistant/service itself "
+        "(how it works, what model, latency, security, limitations, languages), keep "
+        "it as-is apart from resolving pronouns. Do NOT bend it into a property "
+        "search - that retrieves listings for a question that was never about "
+        "listings, and the caller gets asked for their budget instead of an answer.\n"
         "- Remove filler words and pleasantries\n"
         "- Return ONLY the rewritten query, no explanation. Max 25 words."
     )
     try:
         rewritten = await llm.complete(
-            system="You rewrite conversational queries into specific property search queries. Return only the rewritten query text, nothing else.",
+            system="You rewrite conversational queries into standalone search queries. Return only the rewritten query text, nothing else.",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=50,
             temperature=0.0,
@@ -79,10 +84,18 @@ async def _route(user_message: str, history_tail: str, company_name: str) -> str
         f"Recent context: {history_tail}\n"
         f'Message: "{user_message}"\n\n'
         "Return JSON only: {\"intent\": \"<one of: knowledge|qualify|appointment|escalate>\"}\n"
-        "knowledge   = specific property question (price, availability, features, location)\n"
-        "qualify     = general interest, hasn't shared requirements yet, or contact capture\n"
+        "knowledge   = ANY question seeking information rather than offering it: a\n"
+        "              specific property (price, availability, features, location), the\n"
+        "              wider market, how buying or renting works, or this AI service\n"
+        "              itself - how it works, what model it uses, latency, security,\n"
+        "              limitations. A question about the assistant is a knowledge\n"
+        "              question, never a qualification opportunity.\n"
+        "qualify     = the client is expressing interest or sharing requirements and\n"
+        "              has not asked anything. Only when there is no question.\n"
         "appointment = explicitly wants to book/schedule a viewing or meeting\n"
-        "escalate    = angry, wants to speak to a human, or complex complaint"
+        "escalate    = angry, wants to speak to a human, or complex complaint\n\n"
+        "If the message contains a question it is almost never qualify. Answering a\n"
+        "question by asking for the caller budget is the worst possible outcome."
     )
     raw = await llm.complete(
         system="You are a routing classifier. Return only valid JSON.",
