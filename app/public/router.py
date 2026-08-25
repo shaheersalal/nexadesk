@@ -1,6 +1,7 @@
 ﻿import base64
 import html
 import json
+import time
 import logging
 from fastapi import APIRouter, HTTPException, Depends, File, Form, Request, UploadFile
 from pydantic import BaseModel, Field
@@ -353,11 +354,13 @@ async def demo_voice(
 
     # "auto" is the widget's own sentinel for language auto-detection.
     stt_language = None if lang == "auto" else lang
+    _t0 = time.perf_counter()
     transcript = await transcribe_file(
         raw,
         content_type=audio.content_type or "audio/webm",
         language=stt_language,
     )
+    _t_stt = time.perf_counter() - _t0
     if not transcript.strip():
         raise HTTPException(
             status_code=422,
@@ -373,6 +376,7 @@ async def demo_voice(
     ] + [{"role": "user", "content": english_query}]
 
     system, max_tokens, temperature = _demo_system_prompt(voice_mode=True)
+    _t1 = time.perf_counter()
     reply_english = await complete(
         system=system,
         messages=messages_for_llm,
@@ -380,8 +384,16 @@ async def demo_voice(
         temperature=temperature,
     )
     reply = await atranslate_from_english(reply_english, detected_lang)
+    _t_llm = time.perf_counter() - _t1
 
+    _t2 = time.perf_counter()
     mp3 = await synthesize(reply)
+    _t_tts = time.perf_counter() - _t2
+
+    logger.info(
+        "demo/voice timings: stt=%.2fs llm=%.2fs tts=%.2fs audio_in=%dKB",
+        _t_stt, _t_llm, _t_tts, len(raw) // 1024,
+    )
 
     return {
         "transcript": transcript,
@@ -391,4 +403,5 @@ async def demo_voice(
         "historyUser": english_query,
         "historyAssistant": reply_english,
         "audio": base64.b64encode(mp3).decode() if mp3 else "",
+        "timings": {"stt": round(_t_stt, 3), "llm": round(_t_llm, 3), "tts": round(_t_tts, 3)},
     }
