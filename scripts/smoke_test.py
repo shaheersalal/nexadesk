@@ -23,7 +23,7 @@ CHECKS = [
     ("GET", "/openapi.json", None, "schema"),
     ("GET", "/v1/leads", None, "API key required -> expect 401"),
     ("GET", "/mcp/", None, "MCP discovery"),
-    ("GET", "/voice/inbound", None, "voice disabled -> expect 404"),
+    ("POST", "/voice/inbound", None, "voice mounted, unsigned -> expect 403"),
     ("GET", "/leads/", None, "auth required -> expect 401"),
 ]
 

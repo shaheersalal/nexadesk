@@ -275,11 +275,18 @@ async def _demo_rate_limit(request: Request, redis: aioredis.Redis, bucket: str)
 def _demo_system_prompt(voice_mode: bool) -> tuple[str, int, float]:
     """Single source of truth for the demo persona, shared by chat and voice."""
     if voice_mode:
+        # Spoken replies are capped hard because synthesis time is close to
+        # linear in the number of words: measured at ~0.22s per word, so a
+        # 40-word answer costs 8.8s to speak against 2.9s for a 9-word one.
+        # A real receptionist does not read a paragraph down the phone either,
+        # so the cap improves the call as much as the latency.
         return (
             DEMO_KNOWLEDGE_PROMPT
-            + "\n\nIMPORTANT: Simulate a voice call. Reply in 1–2 short sentences only. "
-            "No bullet points or lists. Always end with a question.",
-            150,
+            + "\n\nIMPORTANT: This is a phone call. Answer in ONE short sentence, "
+            "then ask ONE short question. Never exceed 25 words in total. "
+            "No lists, no bullet points, no pleasantries, and do not repeat the "
+            "caller's question back to them.",
+            60,
             0.4,
         )
     return DEMO_KNOWLEDGE_PROMPT, 200, 0.6
