@@ -81,18 +81,24 @@ async def ensure_collection(client: AsyncQdrantClient, settings: Settings) -> No
     # this index therefore yields a knowledge base that accepts writes and fails
     # every read, which is silent because the RAG layer treats a failed lookup
     # as "no context" and the assistant simply falls back to lead capture.
-    try:
-        await client.create_payload_index(
-            collection_name=settings.QDRANT_COLLECTION,
-            field_name="company_id",
-            field_schema=PayloadSchemaType.KEYWORD,
-        )
-    except UnexpectedResponse as e:
-        if e.status_code not in (409, 400):
-            raise
-    except Exception:
-        # Index already present, or a concurrent worker won the race.
-        pass
+    # doc_id is indexed for the same reason: delete_doc_chunks filters on it when
+    # a document is removed or re-ingested. Without the index that delete comes
+    # back HTTP 400 and is swallowed, so deleting a document from the dashboard
+    # leaves its vectors in place and the assistant keeps quoting content the
+    # user believes they removed — and re-ingesting duplicates every chunk.
+    for field in ("company_id", "doc_id"):
+        try:
+            await client.create_payload_index(
+                collection_name=settings.QDRANT_COLLECTION,
+                field_name=field,
+                field_schema=PayloadSchemaType.KEYWORD,
+            )
+        except UnexpectedResponse as e:
+            if e.status_code not in (409, 400):
+                raise
+        except Exception:
+            # Index already present, or a concurrent worker won the race.
+            pass
 
 
 # ── Redis ─────────────────────────────────────────────────────────────────────

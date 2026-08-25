@@ -23,8 +23,16 @@ settings = get_settings()
 # Applying the Jina thresholds to cosine scores marked correct retrievals
 # NO_MATCH — the receptionist would retrieve the right listing and then refuse
 # to quote its price, which looks identical to having no knowledge base at all.
-SCORE_CONFIDENT_RERANKED = 0.78
-SCORE_PARTIAL_RERANKED = 0.50
+# Reranked thresholds are low on purpose. Anything reaching the reranker has
+# already cleared the SCORE_MIN cosine pre-filter, so irrelevant queries return
+# no chunks at all and score 0.000 — the reranker is not being asked to separate
+# relevant from irrelevant, only to order what survived. Measured here, valid
+# queries span 0.26-0.82: short or vague ones ("do you have anything in
+# London?") score far lower than precise ones ("Canary Wharf apartment") despite
+# matching real inventory, so a high bar silently discards ordinary caller
+# phrasing.
+SCORE_CONFIDENT_RERANKED = 0.60
+SCORE_PARTIAL_RERANKED = 0.15
 
 SCORE_CONFIDENT_COSINE = 0.62
 SCORE_PARTIAL_COSINE = 0.38
