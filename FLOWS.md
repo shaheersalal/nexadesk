@@ -1,5 +1,5 @@
 > **STALE as of 2026-08-13.** This inventory was generated 2026-07-03 and
-> describes the Docker-era architecture: self-hosted faster-whisper and Kokoro
+> describes the Docker-era architecture: self-hosted Deepgram nova-2 and Deepgram Aura-2
 > ONNX, local Qdrant/Redis containers, and `claude-sonnet-4-6` as the LLM. None
 > of that is true any more — voice demo STT/TTS moved to OpenAI APIs, Docker was
 > removed entirely, and the app runs on Railway with Qdrant Cloud and Upstash.
@@ -24,8 +24,6 @@ Audited 2026-07-03. Each flow walked as a real user: happy path + failure modes 
 | ✅ PASS | POST /voice/inbound | — | — |
 | ✅ FIXED | POST /voice/status | `_finalize_call` always writes `"status":"new"`, clobbering any prior status set on the lead (e.g. `"contacted"` if an agent manually updated it between call start and end) | `voice/router.py:204` |
 | ✅ PASS | WS /voice/stream/{call_sid} | — | — |
-| ✅ PASS | GET /voice-demo/diag | — | — |
-| ✅ PASS | WS /voice-demo/stream | — | — |
 | ✅ FIXED | POST /chat/message | `company_id` caller-supplied, not owned-validated; non-existent company returns 500 via Supabase `.single()` raised exception in `get_company_context` | `chat/engine.py:17` |
 | ✅ FIXED | GET /chat/history/{session_id} | Auth ownership check swallowed in bare `except Exception: pass` — any DB error silently grants read access to any user's transcript | `chat/router.py:102` |
 | ✅ PASS | GET /chat/greeting | — | — |
@@ -74,6 +72,12 @@ Audited 2026-07-03. Each flow walked as a real user: happy path + failure modes 
 
 ---
 
+> **Accuracy note.** The route inventory below was checked against the live
+> OpenAPI schema. Provider names were corrected from an earlier local stack
+> (Kokoro, faster-whisper, ffmpeg) to the Deepgram services actually in use, and
+> a documented `/voice-demo` prefix was removed — those routes do not exist.
+> `AUDIT.md` remains the record of findings; this file is the request map.
+
 ## Legend
 
 - **Auth codes**: `NONE` · `TWILIO-SIG` · `SVIX-SIG` · `ADMIN-TOKEN` · `JWT` · `JWT+COMPANY` · `JWT+ADMIN`
@@ -88,7 +92,7 @@ Audited 2026-07-03. Each flow walked as a real user: happy path + failure modes 
 - [ ] Warn if `TELEPHONY_AUTH_TOKEN` blank in production (webhook validation disabled)
 - [ ] Raise `RuntimeError` if `APP_SECRET_KEY` is the default placeholder in production
 - [ ] Connect to Qdrant → `ensure_collection`: create `nexadesk_kb` (1536-dim cosine) if absent
-- [ ] Background task `_preload_models()`: load faster-whisper `tiny.en` + Kokoro v1.0 ONNX into memory (non-blocking)
+- [ ] Background task `_preload_models()`: load Deepgram nova-2 + Deepgram Aura-2 v1.0 ONNX into memory (non-blocking)
 - [ ] **Shutdown**: close Qdrant `AsyncQdrantClient` and Redis pool
 
 ---
@@ -161,7 +165,7 @@ Audited 2026-07-03. Each flow walked as a real user: happy path + failure modes 
 - [ ] `Redis GET call_session:{call_sid}` → `CallSession`; if none → close WS
 - [ ] `SELECT name FROM companies WHERE id=company_id`
 - [ ] **Greeting**: `synthesize_to_mulaw(CALL_GREETING)`:
-  - [ ] **Ext**: POST ElevenLabs `/v1/text-to-speech/{TTS_VOICE_ID}` (`eleven_turbo_v2_5`) → MP3
+  - [ ] **Ext**: POST Deepgram Aura-2 `/v1/text-to-speech/{TTS_VOICE_ID}` (`eleven_turbo_v2_5`) → MP3
   - [ ] **Ext**: ffmpeg subprocess: MP3 → 8 kHz mulaw
   - [ ] Send mulaw frame to Twilio
 - [ ] **Audio loop** (8-chunk buffer ≈ 1 s of audio per turn):
@@ -183,72 +187,13 @@ Audited 2026-07-03. Each flow walked as a real user: happy path + failure modes 
     - [ ] Append turns to `session.transcript_parts`, update `session.lead_data` (regex extract name/phone/email)
     - [ ] `Redis SETEX call_session:{call_sid}` TTL 3600 s
     - [ ] `_send_tts(websocket, reply, call_sid)`:
-      - [ ] **Ext**: ElevenLabs TTS → mulaw; on failure → **Ext**: Twilio REST `calls(call_sid).update(twiml=…)`
+      - [ ] **Ext**: Deepgram Aura-2 TTS → mulaw; on failure → **Ext**: Twilio REST `calls(call_sid).update(twiml=…)`
   - [ ] `{"event":"stop"}` → break loop
 - [ ] **Finally**: flush remaining buffer → one last `process_voice_turn`; `Redis SETEX` updated session
 - **DB reads**: Redis `call_session:{call_sid}`, `companies` (name, full record), Qdrant `nexadesk_kb`
 - **DB writes**: Redis `call_session:{call_sid}` (after each turn)
-- **Ext**: ElevenLabs TTS, Deepgram STT, OpenAI Embeddings, Jina Reranker, LLM ×3 per turn, Google Translate, ffmpeg, Twilio REST (TTS fallback only)
+- **Ext**: Deepgram Aura-2 TTS, Deepgram STT, OpenAI Embeddings, Jina Reranker, LLM ×3 per turn, Google Translate, ffmpeg, Twilio REST (TTS fallback only)
 - **Response**: bidirectional WebSocket text/binary frames (Twilio Media Streams protocol)
-
----
-
-## VOICE DEMO ROUTES  `prefix /voice-demo`
-
-### GET /voice-demo/diag  _(pipeline smoke-test)_
-
-- [ ] **Auth**: NONE
-- [ ] `resolve_demo_company()` (module-level 5-min cache → Supabase fallback)
-- [ ] `synthesize("Hello…")` → Kokoro ONNX local → MP3
-- [ ] ffmpeg: MP3 → WebM/Opus
-- [ ] `transcribe(webm)` → faster-whisper `tiny.en` local
-- [ ] `orchestrator.run(transcript, …)` → full RAG + LLM chain
-- **DB reads**: `companies` (cached), Qdrant `nexadesk_kb`
-- **Ext**: Kokoro ONNX (local), ffmpeg, faster-whisper (local), OpenAI Embeddings, Jina, LLM ×3
-- **Response**: JSON `{company, tts_bytes, webm_bytes, transcript, reply, orchestrator_ok, error?}`
-
----
-
-### WS /voice-demo/stream  _(browser push-to-talk demo)_
-
-- [ ] **Auth**: NONE (max 20 turns enforced)
-- [ ] `WebSocket.accept()`
-- [ ] `resolve_demo_company()` (5-min module cache → `SELECT * FROM companies WHERE name="Pinnacle Property Management"` → fallback `LIMIT 1`)
-- [ ] If no company → send `{"type":"error","message":"Demo setup incomplete…"}` → close WS
-- [ ] **Loop** (per turn):
-  - [ ] `receive()` — accept binary OR text frame:
-    - **Binary path** (WebM/Opus audio):
-      - [ ] Send `{"type":"status","stage":"transcribing"}`
-      - [ ] `transcribe(bytes)`: write to tmp `.webm` → ffmpeg → `.wav` 16 kHz → faster-whisper `tiny.en`
-    - **Text path** (`{"type":"text_input","text":"…"}`):
-      - [ ] Parse JSON, extract `text` (browser Whisper pre-transcribed; skip server STT)
-  - [ ] If empty transcript → send error, continue
-  - [ ] Send `{"type":"transcript","text":…}`, `{"type":"status","stage":"thinking"}`
-  - [ ] Append user turn to history
-  - [ ] **asyncio.gather(producer, consumer)**:
-    - **Producer** — `run_voice_streaming(…)`:
-      - [ ] `normalize_for_llm()`: `langdetect` → `GoogleTranslator` → English
-      - [ ] **asyncio.gather**:
-        - [ ] `_route()`: LLM (30 tok, temp 0.0) → intent (`knowledge|qualify|appointment|escalate`)
-        - [ ] `query_with_confidence()`: OpenAI embed → Qdrant search (limit 24, threshold 0.30) → Jina rerank top 8
-      - [ ] Fire `extract_fields_from_message` task (LLM 100 tok, temp 0.0)
-      - [ ] `llm.stream()` → yield `("chunk", token)` per token; sentence-split at `.!?`; push sentences to queue
-      - [ ] After stream: `await extract_task` → `capture_lead_fields` if any non-null:
-        - [ ] `INSERT INTO leads` or `UPDATE leads SET name/phone/email/budget/…`
-      - [ ] If intent=`escalate`: `UPDATE leads SET needs_human=True, status="contacted"`
-      - [ ] `GoogleTranslator` → reply in user's language
-      - [ ] Yield `("done", {reply, reply_english, lead_id, intent, confidence})`
-    - **Consumer** — sentence TTS:
-      - [ ] Send `{"type":"status","stage":"speaking"}`
-      - [ ] For each sentence from queue:
-        - [ ] `synthesize(sentence)`: Kokoro ONNX `af_heart` → WAV → ffmpeg → MP3
-        - [ ] `WebSocket.send_bytes(mp3)`
-  - [ ] Send `{"type":"reply_text","text":reply}`, `{"type":"status","stage":"idle"}`
-- [ ] `WebSocketDisconnect` → exit cleanly
-- **DB reads**: `companies` (cached), Qdrant `nexadesk_kb`, `leads` (if updating existing)
-- **DB writes**: `leads` (upsert via `capture_lead_fields`)
-- **Ext**: faster-whisper `tiny.en` (local), Kokoro ONNX (local), ffmpeg, OpenAI Embeddings, Jina, LLM ×3 per turn (`claude-sonnet-4-6`), Google Translate
-- **Response**: binary MP3 frames + JSON status/transcript/reply_text/error messages
 
 ---
 
@@ -328,6 +273,26 @@ Audited 2026-07-03. Each flow walked as a real user: happy path + failure modes 
 - **DB writes**: `demo_requests` (INSERT)
 - **Ext**: Resend API
 - **Response**: `{"status":"ok"}`
+
+---
+
+### POST /demo/voice  _(the browser voice demo)_
+
+- [ ] **Auth**: NONE. Per-IP budget via `_demo_rate_limit()` in Redis — these
+      endpoints spend money on every call, so an unthrottled one is a bill
+      (AUDIT.md H3).
+- [ ] Body: multipart — `audio` (webm/opus from the browser), `lang`, `history`
+- [ ] `transcribe_file()` → **Deepgram nova-2**
+- [ ] `anormalize_for_llm()` — a no-op while one language is configured
+- [ ] `complete()` → **gpt-4o-mini**, voice persona (1-2 sentences)
+- [ ] `synthesize_browser()` → **Deepgram Aura-2**. The reply is split on clause
+      boundaries and the pieces are synthesised CONCURRENTLY, then joined as
+      MP3 frames. Aura-2 generation scales with text length and was ~70% of the
+      turn; this halves it without changing the voice.
+- **Response**: `{transcript, reply, historyUser, historyAssistant, audio (base64), audioMime}`
+- **Note**: `audioMime` is not cosmetic — the parallel path and the single-shot
+  fallback can return different containers, and the widgets read it rather than
+  assuming MP3.
 
 ---
 
@@ -829,13 +794,78 @@ _All routes require: JWT + `require_admin` (user ID must equal hardcoded `ADMIN_
 
 ---
 
+---
+
+## PUBLIC API ROUTES  `prefix /v1`  _(API-key auth, not session auth)_
+
+The machine-facing surface an agency integrates against. Every route
+authenticates with `Authorization: Bearer nxd_live_...` rather than a dashboard
+session, resolves the key to a `company_id`, and scopes every query to it.
+
+- [ ] **Auth**: API key. `_validate_api_key()` reads `api_keys` for
+      `company_id, scopes, revoked_at`; a revoked or unknown key is a 401.
+      `last_used_at` is written on a throttle rather than every call, which
+      previously doubled the round-trips and churned the row (AUDIT.md M10).
+- [ ] `GET /v1/leads` · `POST /v1/leads` — read and create leads
+- [ ] `GET /v1/appointments` — upcoming appointments
+- [ ] `GET /v1/properties` — the company's listings
+- **DB**: `api_keys` (auth), then `leads` / `appointments` / `properties`,
+  every query filtered by the key's `company_id`
+- **Tenancy**: the key IS the tenant boundary here — there is no session to
+  fall back on, so a missing filter is a cross-tenant read
+
+---
+
+## MCP ROUTES  `prefix /mcp`
+
+A Model Context Protocol endpoint so an agency's own AI tooling can query its
+leads, properties and appointments directly.
+
+- [ ] **Auth**: the same API key as `/v1`, resolved against `api_keys`
+- [ ] `GET /mcp/` — discovery: advertises the available tools
+- [ ] `POST /mcp/` — tool invocation
+- **DB**: `api_keys`, then the same tenant-scoped tables as `/v1`
+- **Note**: the endpoint string shown to customers in the dashboard is derived
+  from the configured API base, not hardcoded — a stale literal there handed
+  every customer a dead endpoint
+
+---
+
+## INTEGRATIONS ROUTES  `prefix /integrations`  _(dashboard session auth)_
+
+- [ ] **Auth**: `CurrentUser` + `CompanyId` on every route (Supabase ES256
+      session, verified against JWKS)
+
+### Webhooks
+- [ ] `GET|POST /integrations/webhooks` — list and register endpoints
+- [ ] `PATCH|DELETE /integrations/webhooks/{id}`
+- [ ] `POST /integrations/webhooks/{id}/test` — send a test delivery
+- [ ] `GET /integrations/webhooks/{id}/logs` — delivery history
+- **Egress guard**: `_is_safe_webhook_url()` rejects non-https, loopback,
+  private, link-local, reserved and metadata addresses before any request is
+  made. Tenant-supplied URLs are otherwise a blind SSRF with an oracle, since
+  the status code comes back in `webhook_logs` (AUDIT.md H7).
+
+### API keys
+- [ ] `GET|POST /integrations/api-keys` — list and mint keys for `/v1` and `/mcp`
+- [ ] `DELETE /integrations/api-keys/{id}` — revoke
+
+### CRM
+- [ ] `GET /integrations/crm/connect/{provider}` — begin OAuth
+- [ ] `GET /integrations/crm/callback/{provider}` — exchange the code
+- [ ] `GET /integrations/crm/connections` — what is connected
+- [ ] `POST /integrations/crm/sync/{provider}` · `DELETE /integrations/crm/{provider}`
+- **At rest**: OAuth tokens are encrypted with a key derived from
+  `APP_SECRET_KEY`. Rotating that secret forces every customer to reconnect.
+
+---
+
 ## Cross-Cutting Reference
 
 ### Auth summary
 
 | Mechanism | Routes |
 |---|---|
-| **NONE** | `/health`, `/voice-demo/*`, `WS /voice/stream/*`, `POST /chat/message`, `GET /chat/greeting`, `POST /book-demo`, `POST /demo/chat`, `GET /onboarding/options`, `POST /pricing/*` |
 | **Twilio HMAC** (`X-Twilio-Signature`) | `POST /voice/inbound`, `POST /voice/status` — skipped if `TELEPHONY_AUTH_TOKEN` blank |
 | **Svix HMAC** (`svix-*` headers) | `POST /rag/inbound-email` — skipped if `RESEND_WEBHOOK_SECRET` blank |
 | **Admin URL token** (`hmac.compare_digest` vs `ADMINTOKEN`) | `GET /admin/invite-quick` |
@@ -884,15 +914,13 @@ _All routes require: JWT + `require_admin` (user ID must equal hardcoded `ADMIN_
 | **OpenAI Embeddings** (`text-embedding-3-small`, `EMBED_API_KEY`) | Every RAG query (all chat/voice turns, `/rag/query`); every ingest (batches of 100) |
 | **OpenAI Whisper API** (`whisper-1`) | `POST /rag/ingest/voice` only |
 | **Deepgram STT** (`nova-2`, `STT_API_KEY`) | `WS /voice/stream` (live call, per audio buffer) |
-| **ElevenLabs TTS** (`eleven_turbo_v2_5`, `TTS_API_KEY`) | `WS /voice/stream` (greeting + every reply) |
+| **Deepgram Aura-2 TTS** (`eleven_turbo_v2_5`, `TTS_API_KEY`) | `WS /voice/stream` (greeting + every reply) |
 | **Jina Reranker** (`jina-reranker-v2-base-multilingual`, `JINA_API_KEY`) | Every RAG query (optional; falls back to score order) |
 | **Resend Email API** (`RESEND_API_KEY`) | `POST /book-demo`, `POST /assistant/notify`, `POST /rag/inbound-email` (fetch email) |
 | **Google Calendar API** | `POST /leads/appointments` (insert), `DELETE /leads/appointments/*` (delete), `GET /leads/calendar/callback` (token exchange) |
 | **Google Translate** (`deep_translator.GoogleTranslator`) | Every chat/voice turn involving non-English text |
 | **Supabase Auth Admin API** | `GET /admin/invite-quick`, `POST /admin/invite`, `POST /companies/child` |
-| **Twilio REST API** | `WS /voice/stream` — only on ElevenLabs TTS failure (send fallback TwiML) |
-| **faster-whisper `tiny.en`** (local Docker) | `WS /voice-demo/stream` (binary audio), `GET /voice-demo/diag` |
-| **Kokoro v1.0 ONNX** (local Docker) | `WS /voice-demo/stream` (per sentence), `GET /voice-demo/diag` |
+| **Twilio REST API** | `WS /voice/stream` — only on Deepgram Aura-2 TTS failure (send fallback TwiML) |
 | **ffmpeg** (subprocess) | Everywhere audio format conversion needed: WebM→WAV (demo STT), WAV→MP3 (demo TTS), MP3→mulaw (voice call TTS), MP3→WebM (diag) |
 
 ---

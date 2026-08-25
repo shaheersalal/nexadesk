@@ -404,5 +404,4 @@ async def demo_voice(
         "historyAssistant": reply_english,
         "audio": base64.b64encode(audio_bytes).decode() if audio_bytes else "",
         "audioMime": audio_mime,
-        "timings": {"stt": round(_t_stt, 3), "llm": round(_t_llm, 3), "tts": round(_t_tts, 3)},
     }

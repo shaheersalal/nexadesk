@@ -42,6 +42,10 @@ deep-translator==1.11.4
 
 # Utilities
 python-jose[cryptography]==3.3.0
+# Imported directly by app/shared/crypto.py (Fernet), which keys CRM token
+# encryption. It arrives transitively via python-jose today; a transitive
+# dependency is not a promise, and this one guards customer credentials.
+cryptography>=42,<46
 passlib[bcrypt]==1.7.4
 aiofiles==24.1.0
 
@@ -50,3 +54,26 @@ aiofiles==24.1.0
 # function-local so the app still boots without it, which is exactly why its
 # absence went unnoticed: the failure only surfaces on the first real call.
 twilio==9.11.0
+
+# Document ingestion. These were imported by app/rag/extractor.py but never
+# declared, so PDF, DOCX, XLSX and HTML uploads failed in production on an
+# ImportError the dashboard surfaced as a raw job error. The imports are
+# function-local, which is why the app booted fine and nothing caught it.
+#
+# OCR (pytesseract, pdf2image) and `unstructured` are deliberately NOT here:
+# they need system binaries or half a gigabyte of dependency, and their code
+# paths now raise a message a person can act on instead of an ImportError.
+pdfplumber==0.11.4
+python-docx==1.1.2
+openpyxl==3.1.5
+beautifulsoup4==4.12.3
+
+# Google Calendar — appointment booking. Same story: imported, never declared,
+# so every booking attempt raised ImportError.
+google-auth==2.36.0
+google-auth-oauthlib==1.2.1
+google-api-python-client==2.151.0
+
+# Imported directly by app/main.py and app/shared/language.py rather than only
+# reached through FastAPI, so it is a real dependency and not a transitive one.
+starlette>=0.41,<0.42

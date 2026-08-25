@@ -57,8 +57,23 @@ def _pdf_text(file_bytes: bytes) -> str:
 
 
 def _pdf_ocr(file_bytes: bytes) -> str:
-    from pdf2image import convert_from_bytes
-    import pytesseract
+    """
+    OCR a scanned PDF.
+
+    Needs the tesseract and poppler binaries, not just the Python wrappers, so
+    it cannot be fixed by adding a requirement. The message is written to be
+    read by a person: the job error string is shown in the dashboard, and
+    "No module named pdf2image" tells an estate agent nothing about what to do.
+    """
+    try:
+        from pdf2image import convert_from_bytes
+        import pytesseract
+    except ImportError as exc:
+        raise RuntimeError(
+            "This PDF has no selectable text, so it needs OCR - which is not "
+            "enabled on this deployment. Upload a text-based PDF, or paste the "
+            "content in directly."
+        ) from exc
     images = convert_from_bytes(file_bytes, dpi=200)
     pages = [pytesseract.image_to_string(img) for img in images]
     return "\n\n".join(pages)
@@ -92,9 +107,17 @@ def _extract_xlsx(file_bytes: bytes) -> str:
 
 
 def _extract_csv(file_bytes: bytes) -> str:
-    import pandas as pd
-    df = pd.read_csv(io.BytesIO(file_bytes))
-    return df.to_string(index=False)
+    """
+    CSV to tab-separated text.
+
+    Deliberately the standard library rather than pandas: this is the only place
+    pandas was used, for one read-and-stringify, and it carries ~50 MB of
+    dependency into every deploy for the privilege.
+    """
+    import csv
+    text = file_bytes.decode("utf-8", errors="replace")
+    rows = list(csv.reader(io.StringIO(text)))
+    return "\n".join("\t".join(cell.strip() for cell in row) for row in rows if any(row))
 
 
 def _extract_html(file_bytes: bytes) -> str:
@@ -106,8 +129,15 @@ def _extract_html(file_bytes: bytes) -> str:
 
 
 def _extract_image_ocr(file_bytes: bytes) -> str:
-    import pytesseract
-    from PIL import Image
+    """Read text out of an image. Same binary requirement as _pdf_ocr."""
+    try:
+        import pytesseract
+        from PIL import Image
+    except ImportError as exc:
+        raise RuntimeError(
+            "Reading text out of images needs OCR, which is not enabled on this "
+            "deployment. Paste the content directly instead."
+        ) from exc
     img = Image.open(io.BytesIO(file_bytes))
     return pytesseract.image_to_string(img)
 
@@ -134,5 +164,10 @@ def _extract_unstructured(file_bytes: bytes, filename: str) -> str:
         from unstructured.partition.auto import partition
         elements = partition(file=io.BytesIO(file_bytes), metadata_filename=filename)
         return "\n\n".join(str(el) for el in elements if str(el).strip())
+    except ImportError:
+        return (
+            "[This file type is not supported on this deployment. "
+            "Supported: PDF, DOCX, XLSX, CSV, HTML, PPTX and plain text.]"
+        )
     except Exception as e:
         return f"[Extraction failed: {e}]"
