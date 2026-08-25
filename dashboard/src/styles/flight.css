@@ -1,0 +1,169 @@
+/*
+ * Flight — the landing surface's token spine and motion primitives.
+ *
+ * Kept out of index.css because the dashboard and the landing page are two
+ * different products sharing one bundle: the dashboard is dense, neutral and
+ * static; the landing is editorial with scroll-linked motion. Mixing their
+ * tokens is how a marketing gradient ends up behind a data table.
+ *
+ * Dark mode is driven by prefers-color-scheme alone — no toggle, no stored
+ * preference, no flash of the wrong theme on first paint.
+ */
+
+:root {
+  /* Motion scale */
+  --motion-fast:   120ms;
+  --motion-base:   200ms;
+  --motion-medium: 280ms;
+  --motion-slow:   400ms;
+  --motion-slower: 600ms;
+
+  --ease-out:        cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out:     cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Semantic surface tokens — light (dawn) */
+  --sky-high:   #f7f9fc;
+  --sky-mid:    #eef1f8;
+  --sky-low:    #e9e3dc;
+  --horizon:    #e8a87c;
+
+  --ink:        #0f1424;
+  --ink-soft:   #3f465e;
+  --ink-mute:   #6b7286;
+  --hairline:   rgba(15, 20, 36, 0.10);
+  --panel:      rgba(255, 255, 255, 0.72);
+  --panel-edge: rgba(15, 20, 36, 0.07);
+
+  /* Text/graphic accent — must clear AA against the light field at 11px. */
+  --accent:      #a85728;
+  /* Button fill. Constant across themes: white text on the dark-mode accent
+     scores 1.85, so a theme-varying CTA colour is unreadable half the time. */
+  --accent-cta:  #b35f2e;
+  --accent-soft: #e8a87c;
+
+  --grain-opacity: 0.035;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sky-high:   #070a14;
+    --sky-mid:    #0b1020;
+    --sky-low:    #151a2e;
+    --horizon:    #e8a87c;
+
+    --ink:        #f2f4f9;
+    --ink-soft:   #b6bdcf;
+    --ink-mute:   #7d8598;
+    --hairline:   rgba(242, 244, 249, 0.12);
+    --panel:      rgba(255, 255, 255, 0.045);
+    --panel-edge: rgba(255, 255, 255, 0.09);
+
+    --accent:      #f0b184;
+    --accent-cta:  #b35f2e;   /* unchanged on purpose — see the light block */
+    --accent-soft: #e8a87c;
+
+    --grain-opacity: 0.05;
+  }
+}
+
+/* The field: cold thin air at altitude, warm haze at the horizon. */
+.flight-field {
+  background:
+    radial-gradient(1200px 620px at 50% -10%, var(--sky-high) 0%, transparent 70%),
+    radial-gradient(900px 500px at 82% 8%, rgba(232, 168, 124, 0.16) 0%, transparent 62%),
+    linear-gradient(180deg, var(--sky-high) 0%, var(--sky-mid) 46%, var(--sky-low) 100%);
+  color: var(--ink);
+}
+
+/* Film grain — kills the flat plastic look on large gradient fields. */
+.flight-field::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+}
+
+/* Scroll-linked reveal. The @supports guard means browsers without scroll
+   timelines simply show the content — the fallback is "visible", never
+   "invisible and waiting for a script that may not run". */
+@supports (animation-timeline: view()) {
+  .lift {
+    animation: lift-in linear both;
+    animation-timeline: view();
+    animation-range: entry 8% cover 34%;
+  }
+  .stratum {
+    animation: drift linear both;
+    animation-timeline: view();
+    animation-range: cover;
+  }
+}
+
+@keyframes lift-in {
+  from { opacity: 0; transform: translate3d(0, 26px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes drift {
+  from { transform: translate3d(0, 5vh, 0); }
+  to   { transform: translate3d(0, -5vh, 0); }
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+}
+
+/* Varied radii — uniform corners look stamped out. */
+.r-sm { border-radius: 8px; }
+.r-md { border-radius: 13px; }
+.r-lg { border-radius: 20px; }
+
+/* Cruise: the horizontal segment. A tall sticky track whose rail translates on
+   X as the page scrolls. Right-to-left, matching direction of travel — the
+   aircraft moves forward, so the world moves backward past the window. */
+.cruise-track { position: relative; }
+.cruise-stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+.cruise-rail {
+  display: flex;
+  gap: 28px;
+  padding-inline: max(6vw, 28px);
+  will-change: transform;
+}
+
+.flight-field :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flight-field *,
+  .flight-field *::before,
+  .flight-field *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Deliver the end state, never a blank section. */
+  .lift    { opacity: 1 !important; transform: none !important; }
+  .stratum { transform: none !important; }
+  /* The rail stops being a scroll hijack and becomes an ordinary horizontally
+     scrollable list the user drives themselves. */
+  .cruise-stage { position: static; height: auto; overflow-x: auto; }
+  .cruise-rail  { transform: none !important; }
+}

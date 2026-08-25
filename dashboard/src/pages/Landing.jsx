@@ -1,528 +1,334 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  Phone, MessageSquare, TrendingUp, Building2, CheckCircle, ArrowRight, Clock, ShieldCheck,
-  Linkedin, Briefcase, Wrench, RefreshCw, ShoppingBag, ChevronDown, Lock, Tag,
-  Database, Puzzle, Code2,
-} from 'lucide-react'
+import { Phone, ArrowUpRight, ArrowRight } from 'lucide-react'
+import FlightPath from '../components/flight/FlightPath'
+import Cruise from '../components/flight/Cruise'
 import VoiceDemoWidget from '../components/VoiceDemoWidget'
 import DemoPreviewModal from '../components/DemoPreviewModal'
-import PricingCalculator from '../components/PricingCalculator'
-import DiscountChat from '../components/DiscountChat'
-import Reveal from '../components/Reveal'
+import { POSTS } from '../content/posts'
+import '../styles/flight.css'
 
-const UPWORK_URL = 'https://www.upwork.com/freelancers/shaheersalal'
-const LINKEDIN_URL = 'https://www.linkedin.com/in/shaheer-salal/'
+/* The live demo line. E.164 for the tel: href, formatted for display. */
+const PHONE_E164 = '+17813655768'
+const PHONE_DISPLAY = '+1 (781) 365-5768'
 
-const SERVICES = [
-  { icon: Phone, title: 'AI Voice Agents', desc: 'Automated receptionists and call handling for businesses.' },
-  { icon: Database, title: 'RAG / Knowledge Platforms', desc: 'AI search tools trained on your documents.' },
-  { icon: Puzzle, title: 'AI Integration', desc: 'Adding ChatGPT/Claude-type features into existing apps and websites.' },
-  { icon: Code2, title: 'Backend Development', desc: 'FastAPI/Python systems, APIs, and automation.' },
+/* One conversion action, one label, reused verbatim in nav, hero and footer. */
+const CTA = 'Call the live line'
+
+const METRICS = [
+  { value: '24/7', label: 'Inbound calls answered', note: 'No voicemail, no queue' },
+  { value: '<1s', label: 'To first spoken word', note: 'Streamed, not batched' },
+  { value: '0', label: 'Prices ever invented', note: 'Grounded or it is not said' },
 ]
 
-const FEATURES = [
+const CAPABILITIES = [
   {
-    icon: Phone,
-    title: 'AI Voice Receptionist',
-    desc: 'Answers every inbound call 24/7. Qualifies the client, captures contact details, and understands property interest, all without a human.',
+    title: 'It answers the phone',
+    body: 'A real number your clients dial. Calls are transcribed as they are spoken, answered while the sentence is still being generated, and logged in full.',
+    detail: 'Streaming speech recognition with server-side voice activity detection — it knows the difference between a pause and a finished thought.',
   },
   {
-    icon: MessageSquare,
-    title: 'Instant Chat Widget',
-    desc: 'Embed on your website or WhatsApp. The AI answers property FAQs, qualifies buyers, and hands off hot clients to you immediately.',
+    title: 'It knows your listings',
+    body: 'Upload brochures, paste descriptions, or let it read your property records. It answers from your inventory, not from the internet.',
+    detail: 'Documents are chunked, embedded and re-ranked per query, then scored for confidence before a word is spoken.',
   },
   {
-    icon: TrendingUp,
-    title: 'Smart Client Scoring',
-    desc: 'Every client gets a score based on budget, timeline, and intent. Your hottest prospects surface to the top automatically.',
+    title: 'It refuses to guess',
+    body: 'When the answer is not in your knowledge base it says so and takes a message. That is the designed behaviour, not a limitation.',
+    detail: 'An invented price is a liability with your name on it. The system is built to lose gracefully rather than improvise.',
   },
   {
-    icon: Building2,
-    title: 'Property Knowledge Base',
-    desc: 'Upload listings, brochures, or paste descriptions. The AI knows your inventory and answers specific questions about each property.',
-  },
-]
-
-// The live demo line. E.164 for the tel: href, formatted for display.
-const DEMO_PHONE_E164 = '+17813655768'
-const DEMO_PHONE_DISPLAY = '+1 (781) 365-5768'
-
-const STEPS = [
-  { n: '01', title: 'See it in action', desc: 'Tour the live dashboard, lead pipeline, and AI conversations, no sign-up needed. Then request access in 60 seconds.' },
-  { n: '02', title: 'We set everything up', desc: 'We configure your AI phone number, upload your knowledge base, and connect the chat widget to your website, fully handled.' },
-  { n: '03', title: 'You start closing deals', desc: 'Every call and chat is handled, qualified, and logged. Open your dashboard and follow up on only the hottest leads.' },
-]
-
-const SHOWCASE = [
-  {
-    icon: ShoppingBag,
-    color: 'text-accent bg-accent/10',
-    title: 'Buyer Inquiry',
-    channel: 'Voice call',
-    sample: '"Hi, I\'m looking for a 2-bedroom near downtown, budget around $400K, is anything available?"',
-    outcome: 'Qualified, scored 82, follow-up call booked for tomorrow.',
+    title: 'It qualifies and books',
+    body: 'Every caller is scored on budget, timeline and intent. Viewings go straight into your calendar; the hottest leads surface first.',
+    detail: 'Lead scoring is rule-based and runs without an extra model call, so it costs nothing in latency.',
   },
   {
-    icon: RefreshCw,
-    color: 'text-purple-500 bg-purple-50',
-    title: 'Lease Renewal',
-    channel: 'Website chat',
-    sample: '"My lease is up next month, can I renew at the same rate?"',
-    outcome: 'Logged as lease renewal, routed to property manager.',
-  },
-  {
-    icon: Wrench,
-    color: 'text-orange-500 bg-orange-50',
-    title: 'Maintenance Request',
-    channel: 'WhatsApp',
-    sample: '"The AC in unit 4B stopped working, it\'s pretty urgent."',
-    outcome: 'Flagged urgent, ticket created, tenant notified of next steps.',
+    title: 'It keeps agencies apart',
+    body: 'Each agency has its own number, its own knowledge, its own leads. An unrecognised caller gets a neutral message, never someone else’s data.',
+    detail: 'Tenant isolation is enforced on every query and every retrieval, and an unknown number is answered by nobody rather than by the wrong agency.',
   },
 ]
 
-const FAQS = [
-  {
-    q: 'How fast can NexaDesk go live?',
-    a: 'Most agencies are live within 48 hours of signing up. We handle the AI phone number setup, knowledge base ingestion, and widget install, you don\'t need to configure anything yourself.',
-  },
-  {
-    q: 'What languages does the AI support?',
-    a: 'English, on both voice and chat. Additional languages are on the roadmap - the speech layer is already provider-agnostic, so adding one is a configuration change rather than a rebuild. We would rather list one language we handle well than several we handle badly.',
-  },
-  {
-    q: 'Can I change my plan later?',
-    a: 'Yes — minutes and seats can be adjusted at any time from your dashboard settings, and your next invoice is prorated automatically.',
-  },
-  {
-    q: 'What happens if I go over my included minutes?',
-    a: 'You\'re charged a flat per-minute overage rate shown in your plan breakdown, no surprise fees, no automatic plan upgrades.',
-  },
-  {
-    q: 'Is my client data secure?',
-    a: 'All call transcripts and client data are stored on encrypted servers and are never sold or shared with third parties.',
-  },
+const PIPELINE = [
+  { stage: 'Caller speaks', detail: 'Audio streams in continuously' },
+  { stage: 'Transcribed live', detail: 'End-of-utterance detected, not timed' },
+  { stage: 'Your knowledge searched', detail: 'Retrieved, re-ranked, confidence scored' },
+  { stage: 'Reply streams out', detail: 'Spoken from the first complete clause' },
 ]
 
-const NAV_LINKS = [
-  { id: 'hero', label: 'Home' },
-  { id: 'demo', label: 'Demo' },
-  { id: 'how-it-works', label: 'How it works' },
-  { id: 'pricing', label: 'Pricing' },
-  { id: 'services', label: 'Services' },
-  { id: 'showcase', label: 'Showcase' },
-  { id: 'faq', label: 'FAQ' },
-]
-
-function scrollToId(id) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+function Nav() {
+  return (
+    <header className="relative z-20">
+      <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
+        <Link to="/" className="flex items-center gap-2.5 text-[15px] font-semibold tracking-[-0.01em]">
+          <span
+            className="grid h-7 w-7 place-items-center rounded-[9px] text-[13px] font-bold"
+            style={{ background: 'var(--accent-cta)', color: '#fff' }}
+          >
+            N
+          </span>
+          NexaDesk
+        </Link>
+        <div className="flex items-center gap-7 text-[14px]">
+          <Link to="/notes" className="hidden transition-colors sm:block hover:opacity-70"
+                style={{ color: 'var(--ink-soft)' }}>
+            Engineering notes
+          </Link>
+          <Link to="/login" className="hidden transition-colors sm:block hover:opacity-70"
+                style={{ color: 'var(--ink-soft)' }}>
+            Sign in
+          </Link>
+          <a
+            href={`tel:${PHONE_E164}`}
+            className="rounded-full px-4 py-2 text-[13.5px] font-medium transition-transform duration-[var(--motion-fast)] hover:-translate-y-px"
+            style={{ border: '1px solid var(--panel-edge)', background: 'var(--panel)' }}
+          >
+            {CTA}
+          </a>
+        </div>
+      </nav>
+    </header>
+  )
 }
 
-function FaqItem({ item, open, onToggle }) {
+/* Fold: stacked. Headline sits ~22% down the fold; nothing else rides it. */
+function Hero() {
   return (
-    <div className="border-b border-gray-100 last:border-0">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between gap-4 py-5 text-left"
+    <section className="relative z-10 mx-auto flex min-h-[88vh] max-w-4xl flex-col justify-start px-6 pb-24 pt-[22vh] text-center">
+      <h1 className="text-balance text-[clamp(2.6rem,7vw,4.6rem)] font-semibold leading-[1.02] tracking-[-0.035em]">
+        Your phone stops
+        <br />
+        going unanswered.
+      </h1>
+
+      <p
+        className="mx-auto mt-7 max-w-lg text-[17px] leading-relaxed"
+        style={{ color: 'var(--ink-soft)' }}
       >
-        <span className="font-medium text-gray-900 text-sm md:text-base">{item.q}</span>
-        <ChevronDown className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      <div className={`grid transition-all duration-300 ease-out ${open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
-        <div className="overflow-hidden">
-          <p className="text-sm text-gray-500 leading-relaxed pb-5">{item.a}</p>
+        An AI receptionist for estate agencies that answers every call, day or night.
+      </p>
+
+      <div className="mt-10 flex flex-col items-center gap-4">
+        <a
+          href={`tel:${PHONE_E164}`}
+          className="group inline-flex items-center gap-3 rounded-full px-7 py-4 text-[19px] font-semibold tracking-[-0.01em] text-white shadow-lg transition-transform duration-[var(--motion-base)] ease-[var(--ease-out)] hover:-translate-y-0.5"
+          style={{ background: 'var(--accent-cta)', boxShadow: '0 1px 2px rgba(0,0,0,.16), 0 14px 34px -12px rgba(200,112,58,.55)' }}
+        >
+          <Phone className="h-[18px] w-[18px]" />
+          {PHONE_DISPLAY}
+        </a>
+        <p className="text-[13px]" style={{ color: 'var(--ink-mute)' }}>
+          Dial it now — it answers. No signup, no form.
+        </p>
+      </div>
+    </section>
+  )
+}
+
+function Proof() {
+  return (
+    <section className="relative z-10 mx-auto max-w-5xl px-6 py-24">
+      <div className="grid gap-px overflow-hidden rounded-[20px]"
+           style={{ background: 'var(--hairline)', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))' }}>
+        {METRICS.map(m => (
+          <div key={m.label} className="lift p-8" style={{ background: 'var(--panel)' }}>
+            <p className="text-[2.6rem] font-semibold leading-none tracking-[-0.04em] tabular-nums"
+               style={{ color: 'var(--accent)' }}>
+              {m.value}
+            </p>
+            <p className="mt-3 text-[14.5px] font-medium">{m.label}</p>
+            <p className="mt-1 text-[13px]" style={{ color: 'var(--ink-mute)' }}>{m.note}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+/* Distinct family: a vertical timeline, not cards and not a split. */
+function Pipeline() {
+  return (
+    <section className="relative z-10 mx-auto max-w-3xl px-6 py-28">
+      <h2 className="lift text-[clamp(1.9rem,4vw,2.6rem)] font-semibold leading-[1.08] tracking-[-0.03em]">
+        What happens in the second
+        <br className="hidden sm:block" /> after someone speaks
+      </h2>
+
+      <ol className="mt-12">
+        {PIPELINE.map((s, i) => (
+          <li key={s.stage} className="lift relative flex gap-6 pb-10 last:pb-0">
+            <div className="flex flex-col items-center">
+              <span
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-full font-mono text-[11px] tabular-nums"
+                style={{ border: '1px solid var(--accent)', color: 'var(--accent)' }}
+              >
+                {i + 1}
+              </span>
+              {i < PIPELINE.length - 1 && (
+                <span className="mt-1 w-px flex-1" style={{ background: 'var(--hairline)' }} />
+              )}
+            </div>
+            <div className="pt-1">
+              <p className="text-[16.5px] font-medium tracking-[-0.01em]">{s.stage}</p>
+              <p className="mt-1 text-[14px]" style={{ color: 'var(--ink-soft)' }}>{s.detail}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+
+      <p className="lift mt-10 border-l-2 pl-5 text-[14.5px] leading-relaxed"
+         style={{ borderColor: 'var(--accent)', color: 'var(--ink-soft)' }}>
+        Nothing waits for the previous step to finish. The earlier design queued them and
+        left two to four seconds of silence on every turn — which callers hear as a dropped line.
+      </p>
+    </section>
+  )
+}
+
+function TryInBrowser() {
+  return (
+    <section className="relative z-10 mx-auto max-w-2xl px-6 py-24">
+      <div className="lift panel r-lg p-8">
+        <p className="text-[13px]" style={{ color: 'var(--ink-mute)' }}>
+          Somewhere you cannot take a call?
+        </p>
+        <h2 className="mt-2 text-[1.6rem] font-semibold tracking-[-0.025em]">
+          Speak to it here instead
+        </h2>
+        <div className="mt-8">
+          <VoiceDemoWidget />
         </div>
       </div>
-    </div>
+    </section>
+  )
+}
+
+function Notes() {
+  const posts = POSTS.slice(0, 3)
+  return (
+    <section className="relative z-10 mx-auto max-w-4xl px-6 py-28">
+      <div className="lift mb-12 flex items-end justify-between gap-6">
+        <div>
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em]"
+             style={{ color: 'var(--accent)' }}>
+            Engineering notes
+          </p>
+          <h2 className="text-[clamp(1.9rem,4vw,2.6rem)] font-semibold leading-[1.08] tracking-[-0.03em]">
+            How it is actually built
+          </h2>
+        </div>
+        <Link to="/notes"
+              className="hidden shrink-0 items-center gap-1.5 text-[14px] font-medium transition-opacity hover:opacity-70 sm:flex"
+              style={{ color: 'var(--accent)' }}>
+          All notes <ArrowRight className="h-4 w-4" />
+        </Link>
+      </div>
+
+      <div className="flex flex-col">
+        {posts.map(p => (
+          <Link
+            key={p.slug}
+            to={`/notes/${p.slug}`}
+            className="lift group border-t py-7 transition-colors duration-[var(--motion-fast)] first:border-t-0"
+            style={{ borderColor: 'var(--hairline)' }}
+          >
+            <div className="flex items-start justify-between gap-6">
+              <div>
+                <h3 className="text-[17.5px] font-medium leading-snug tracking-[-0.015em]">
+                  {p.title}
+                </h3>
+                <p className="mt-2 max-w-2xl text-[14.5px] leading-relaxed" style={{ color: 'var(--ink-soft)' }}>
+                  {p.dek}
+                </p>
+                <p className="mt-3 font-mono text-[11.5px] uppercase tracking-wider" style={{ color: 'var(--ink-mute)' }}>
+                  {p.tags.slice(0, 3).join(' · ')} · {p.readingMinutes} min
+                </p>
+              </div>
+              <ArrowUpRight
+                className="mt-1 h-5 w-5 shrink-0 transition-transform duration-[var(--motion-base)] ease-[var(--ease-out)] group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+                style={{ color: 'var(--accent)' }}
+              />
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function FinalCall({ onRequestAccess }) {
+  return (
+    <section className="relative z-10 mx-auto max-w-3xl px-6 py-32 text-center">
+      <h2 className="lift text-[clamp(2rem,5vw,3rem)] font-semibold leading-[1.05] tracking-[-0.03em]">
+        Hear it before you believe it
+      </h2>
+      <div className="lift mt-9 flex flex-col items-center gap-4">
+        <a
+          href={`tel:${PHONE_E164}`}
+          className="inline-flex items-center gap-3 rounded-full px-7 py-4 text-[18px] font-semibold text-white transition-transform duration-[var(--motion-base)] ease-[var(--ease-out)] hover:-translate-y-0.5"
+          style={{ background: 'var(--accent-cta)', boxShadow: '0 12px 30px -12px rgba(200,112,58,.5)' }}
+        >
+          <Phone className="h-[17px] w-[17px]" />
+          {PHONE_DISPLAY}
+        </a>
+        <p className="text-[13px]" style={{ color: 'var(--ink-mute)' }}>
+          A US number, dialable worldwide. Your usual international rates apply.
+        </p>
+        <button
+          onClick={onRequestAccess}
+          className="mt-2 text-[14px] underline decoration-1 underline-offset-4 transition-opacity hover:opacity-70"
+          style={{ color: 'var(--ink-soft)' }}
+        >
+          Or request access for your agency
+        </button>
+      </div>
+    </section>
+  )
+}
+
+function Footer() {
+  return (
+    <footer className="relative z-10 border-t" style={{ borderColor: 'var(--hairline)' }}>
+      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-6 py-12 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-[14px] font-semibold">NexaDesk</p>
+          <p className="mt-1.5 text-[13px]" style={{ color: 'var(--ink-mute)' }}>
+            AI receptionist for real estate. Answers in English.
+          </p>
+        </div>
+        <nav className="flex flex-wrap gap-x-7 gap-y-3 text-[13.5px]" style={{ color: 'var(--ink-soft)' }}>
+          <a href={`tel:${PHONE_E164}`} className="hover:opacity-70">{CTA}</a>
+          <Link to="/notes" className="hover:opacity-70">Engineering notes</Link>
+          <Link to="/login" className="hover:opacity-70">Sign in</Link>
+        </nav>
+      </div>
+    </footer>
   )
 }
 
 export default function Landing() {
-  const [demoOpen, setDemoOpen] = useState(false)
-  const [offerPlan, setOfferPlan] = useState(null)
-  const [openFaq, setOpenFaq] = useState(0)
-  const [activeSection, setActiveSection] = useState('hero')
-
-  useEffect(() => {
-    const sections = NAV_LINKS.map(l => document.getElementById(l.id)).filter(Boolean)
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.filter(e => e.isIntersecting)
-        if (visible.length > 0) {
-          setActiveSection(visible[0].target.id)
-        }
-      },
-      { rootMargin: '-40% 0px -50% 0px' }
-    )
-    sections.forEach(s => observer.observe(s))
-    return () => observer.disconnect()
-  }, [])
+  const [accessOpen, setAccessOpen] = useState(false)
 
   return (
-    <div className="min-h-screen bg-white font-sans">
-      {demoOpen && <DemoPreviewModal onClose={() => setDemoOpen(false)} />}
-      {offerPlan && <DiscountChat plan={offerPlan} onClose={() => setOfferPlan(null)} />}
-
-      {/* Nav */}
-      <nav className="fixed top-0 inset-x-0 z-40 bg-white/90 backdrop-blur border-b border-gray-100">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <button onClick={() => scrollToId('hero')} className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-navy-600 rounded-lg flex items-center justify-center">
-              <Phone className="w-4 h-4 text-accent" />
-            </div>
-            <span className="font-semibold text-gray-900 text-lg">NexaDesk</span>
-          </button>
-
-          <div className="hidden lg:flex items-center gap-1">
-            {NAV_LINKS.map(l => (
-              <button
-                key={l.id}
-                onClick={() => scrollToId(l.id)}
-                className={`text-sm px-3 py-2 rounded-lg font-medium transition-colors ${
-                  activeSection === l.id ? 'text-accent' : 'text-gray-500 hover:text-gray-900'
-                }`}
-              >
-                {l.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Link to="/login" className="text-sm text-gray-600 hover:text-gray-900 font-medium px-4 py-2">
-              Log in
-            </Link>
-            <Link
-              to="/login?mode=signup"
-              className="text-sm bg-navy-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-navy-700 transition-colors"
-            >
-              Sign up
-            </Link>
-          </div>
-        </div>
-      </nav>
-
-      {/* Hero */}
-      <section id="hero" className="pt-32 pb-20 px-6 bg-gradient-to-b from-navy-600 to-navy-700">
-        <div className="max-w-4xl mx-auto text-center">
-          <p className="text-accent text-sm font-medium tracking-wide mb-4">Your AI answers. You close deals.</p>
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
-            Never Miss a Client.<br />
-            <span className="text-accent">Your AI Receptionist</span><br />
-            Works 24/7.
-          </h1>
-          <p className="text-lg text-white/70 max-w-2xl mx-auto mb-10 leading-relaxed">
-            NexaDesk answers every call and chat, qualifies buyers and tenants, and logs everything to your dashboard — so you close more deals without hiring more staff.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <button
-              onClick={() => setDemoOpen(true)}
-              className="inline-flex items-center justify-center gap-2 bg-accent text-white font-semibold px-8 py-3.5 rounded-xl hover:bg-accent-dark transition-colors text-sm"
-            >
-              See It in Action <ArrowRight className="w-4 h-4" />
-            </button>
-            <Link to="/login"
-              className="inline-flex items-center justify-center gap-2 bg-white/10 text-white font-medium px-8 py-3.5 rounded-xl hover:bg-white/20 transition-colors text-sm border border-white/20">
-              Sign in
-            </Link>
-          </div>
-        </div>
-
-        {/* Dashboard preview — placeholder mockup, swap for a real product screenshot when available */}
-        <Reveal delay={150}>
-          <div className="max-w-5xl mx-auto mt-16 rounded-2xl overflow-hidden shadow-2xl border border-white/10">
-            <div className="bg-navy-800 px-4 py-2.5 flex items-center gap-2">
-              <div className="flex gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-red-400/60" />
-                <span className="w-3 h-3 rounded-full bg-yellow-400/60" />
-                <span className="w-3 h-3 rounded-full bg-green-400/60" />
-              </div>
-              <span className="text-white/30 text-xs ml-2">nexadesk.site — Dashboard</span>
-            </div>
-            <div className="bg-navy-900 p-6 grid grid-cols-4 gap-4">
-              {[['24', 'Total Clients'], ['78', 'Avg Score'], ['5', 'Upcoming'], ['12', 'Conversations']].map(([v, l]) => (
-                <div key={l} className="bg-white/5 rounded-xl p-4 border border-white/10">
-                  <p className="text-2xl font-bold text-white">{v}</p>
-                  <p className="text-xs text-white/40 mt-1">{l}</p>
-                </div>
-              ))}
-            </div>
-            <div className="bg-navy-900 px-6 pb-6 grid grid-cols-3 gap-3">
-              {[
-                ['Ahmed Al-Rashid', 'Buyer Inquiry', '82', 'qualified'],
-                ['Sara Khalid', 'Lease Renewal', '67', 'contacted'],
-                ['James Miller', 'Maintenance', '45', 'new'],
-              ].map(([name, type, score, status]) => (
-                <div key={name} className="bg-white/5 rounded-lg p-3 border border-white/10">
-                  <p className="text-white text-xs font-medium">{name}</p>
-                  <p className="text-white/40 text-xs mt-0.5">{type}</p>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-accent text-xs font-semibold">Score {score}</span>
-                    <span className="text-xs text-white/30 capitalize">{status}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Reveal>
-      </section>
-
-      {/* Stats bar */}
-      <section className="bg-accent py-5 px-6">
-        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-center gap-8 text-white text-sm font-medium">
-          {[
-            [Clock, '24/7 AI Coverage'],
-            [ShieldCheck, 'Never Invents a Price'],
-            [CheckCircle, 'Full Setup Included'],
-          ].map(([Icon, label]) => (
-            <div key={label} className="flex items-center gap-2">
-              <Icon className="w-4 h-4" /> {label}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Demo */}
-      <section id="demo" className="py-20 px-6 bg-gray-50 scroll-mt-16">
-        <Reveal>
-          <div className="max-w-2xl mx-auto">
-            <div className="text-center mb-10">
-              <h2 className="text-3xl font-bold text-gray-900">Call it and hear it for yourself</h2>
-              <p className="text-gray-500 mt-3">
-                Pick up your phone and dial the number below. No sign-up, no form —
-                the same receptionist your clients would reach.
-              </p>
-              <a
-                href={`tel:${DEMO_PHONE_E164}`}
-                className="inline-flex items-center gap-3 mt-6 px-6 py-3.5 rounded-full bg-accent text-white text-xl md:text-2xl font-semibold tracking-wide hover:bg-accent-light transition-colors shadow-sm"
-              >
-                <Phone className="w-5 h-5 shrink-0" />
-                {DEMO_PHONE_DISPLAY}
-              </a>
-              <p className="text-xs text-gray-400 mt-3">
-                US number, callable from anywhere. Your usual international rates apply.
-              </p>
-            </div>
-            <div className="text-center text-sm text-gray-400 mb-6">
-              Not somewhere you can talk? Try the voice demo in your browser instead.
-            </div>
-            <VoiceDemoWidget />
-          </div>
-        </Reveal>
-      </section>
-
-      {/* How it works */}
-      <section id="how-it-works" className="py-20 px-6 scroll-mt-16">
-        <div className="max-w-5xl mx-auto">
-          <Reveal>
-            <div className="text-center mb-14">
-              <h2 className="text-3xl font-bold text-gray-900">How it works</h2>
-              <p className="text-gray-500 mt-3">From first look to qualified client — we set it all up for you.</p>
-            </div>
-          </Reveal>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20">
-            {STEPS.map((s, i) => (
-              <Reveal key={s.n} delay={i * 100}>
-                <div className="relative">
-                  <span className="text-6xl font-black text-gray-100 select-none">{s.n}</span>
-                  <div className="-mt-6">
-                    <h3 className="font-semibold text-gray-900 text-lg mb-2">{s.title}</h3>
-                    <p className="text-gray-500 text-sm leading-relaxed">{s.desc}</p>
-                  </div>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-
-          <Reveal>
-            <div className="text-center mb-14">
-              <h2 className="text-2xl font-bold text-gray-900">Everything your agency needs</h2>
-              <p className="text-gray-500 mt-3">One platform. No extra staff. No missed opportunities.</p>
-            </div>
-          </Reveal>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {FEATURES.map((f, i) => (
-              <Reveal key={f.title} delay={i * 80}>
-                <div className="p-6 rounded-2xl border border-gray-100 hover:border-accent/40 hover:shadow-md transition-all group h-full">
-                  <div className="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center mb-4 group-hover:bg-accent/20 transition-colors">
-                    <f.icon className="w-5 h-5 text-accent" />
-                  </div>
-                  <h3 className="font-semibold text-gray-900 mb-2">{f.title}</h3>
-                  <p className="text-gray-500 text-sm leading-relaxed">{f.desc}</p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing */}
-      <section id="pricing" className="py-20 px-6 bg-gray-50 scroll-mt-16">
-        <div className="max-w-4xl mx-auto">
-          <Reveal>
-            <div className="text-center mb-10">
-              <h2 className="text-3xl font-bold text-gray-900 mb-3">Simple, transparent pricing</h2>
-              <p className="text-gray-500">Pick a tier or build your own — minutes and seats, nothing hidden.</p>
-            </div>
-          </Reveal>
-          <Reveal delay={100}>
-            <PricingCalculator onOffer={setOfferPlan} />
-          </Reveal>
-          <p className="text-center text-xs text-gray-400 mt-6 flex items-center justify-center gap-1.5">
-            <Lock className="w-3 h-3" /> Final pricing is always verified server-side — no contracts, cancel anytime.
-          </p>
-        </div>
-      </section>
-
-      {/* Services */}
-      <section id="services" className="py-20 px-6 scroll-mt-16">
-        <Reveal>
-          <div className="max-w-3xl mx-auto text-center mb-12">
-            <div className="w-12 h-12 bg-navy-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <Briefcase className="w-5 h-5 text-accent" />
-            </div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Built and run by an AI engineer</h2>
-            <p className="text-gray-500 leading-relaxed">
-              NexaDesk is built and operated by Shaheer Salal. Have a custom AI project in mind? Here's what I build:
-            </p>
-          </div>
-        </Reveal>
-
-        <div className="max-w-3xl mx-auto grid grid-cols-1 sm:grid-cols-2 gap-5 mb-10">
-          {SERVICES.map((s, i) => (
-            <Reveal key={s.title} delay={i * 80}>
-              <div className="p-5 rounded-2xl border border-gray-100 hover:border-accent/40 hover:shadow-md transition-all group h-full text-left flex items-start gap-4">
-                <div className="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:bg-accent/20 transition-colors">
-                  <s.icon className="w-5 h-5 text-accent" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-1">{s.title}</h3>
-                  <p className="text-gray-500 text-sm leading-relaxed">{s.desc}</p>
-                </div>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-
-        <Reveal>
-          <div className="max-w-3xl mx-auto text-center">
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <a
-                href={UPWORK_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 bg-[#14a800] text-white font-semibold px-6 py-3 rounded-xl hover:opacity-90 transition-opacity text-sm"
-              >
-                <Briefcase className="w-4 h-4" /> Hire me on Upwork
-              </a>
-              <a
-                href={LINKEDIN_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 bg-[#0A66C2] text-white font-semibold px-6 py-3 rounded-xl hover:opacity-90 transition-opacity text-sm"
-              >
-                <Linkedin className="w-4 h-4" /> Connect on LinkedIn
-              </a>
-            </div>
-          </div>
-        </Reveal>
-      </section>
-
-      {/* Showcase */}
-      <section id="showcase" className="py-20 px-6 bg-gray-50 scroll-mt-16">
-        <div className="max-w-5xl mx-auto">
-          <Reveal>
-            <div className="text-center mb-14">
-              <h2 className="text-3xl font-bold text-gray-900">What your AI handles every day</h2>
-              <p className="text-gray-500 mt-3">Real scenarios NexaDesk qualifies, logs, and routes automatically.</p>
-            </div>
-          </Reveal>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {SHOWCASE.map((s, i) => (
-              <Reveal key={s.title} delay={i * 100}>
-                <div className="bg-white rounded-2xl border border-gray-100 p-6 h-full flex flex-col">
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-4 ${s.color}`}>
-                    <s.icon className="w-4.5 h-4.5" />
-                  </div>
-                  <h3 className="font-semibold text-gray-900 mb-1">{s.title}</h3>
-                  <p className="text-xs text-gray-400 mb-4">{s.channel}</p>
-                  <p className="text-sm text-gray-600 italic leading-relaxed mb-4 flex-1">{s.sample}</p>
-                  <p className="text-xs font-medium text-green-700 bg-green-50 rounded-lg px-3 py-2">{s.outcome}</p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section id="faq" className="py-20 px-6 scroll-mt-16">
-        <div className="max-w-2xl mx-auto">
-          <Reveal>
-            <div className="text-center mb-10">
-              <h2 className="text-3xl font-bold text-gray-900">Frequently asked questions</h2>
-            </div>
-          </Reveal>
-          <Reveal delay={100}>
-            <div>
-              {FAQS.map((item, i) => (
-                <FaqItem
-                  key={item.q}
-                  item={item}
-                  open={openFaq === i}
-                  onToggle={() => setOpenFaq(openFaq === i ? -1 : i)}
-                />
-              ))}
-            </div>
-          </Reveal>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="py-20 px-6 bg-navy-600">
-        <Reveal>
-          <div className="max-w-2xl mx-auto text-center">
-            <h2 className="text-3xl font-bold text-white mb-4">Ready to stop missing clients?</h2>
-            <p className="text-white/60 mb-8">Your AI receptionist can be live within 48 hours, we handle the entire setup.</p>
-            <button
-              onClick={() => setDemoOpen(true)}
-              className="inline-flex items-center gap-2 bg-accent text-white font-semibold px-10 py-4 rounded-xl hover:bg-accent-dark transition-colors"
-            >
-              See It in Action <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        </Reveal>
-      </section>
-
-      {/* Privacy Policy placeholder */}
-      <section id="privacy" className="py-14 px-6 bg-navy-900 border-t border-white/5 scroll-mt-16">
-        <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-lg font-semibold text-white mb-3">Privacy Policy</h2>
-          <p className="text-sm text-white/40 leading-relaxed">
-            Full policy coming soon. In short: call transcripts and client data are stored on encrypted servers,
-            used only to operate your AI receptionist, and never sold or shared with third parties.
-            Questions in the meantime? <a href={`mailto:shaheersalal@gmail.com`} className="text-accent hover:underline">Email us</a>.
-          </p>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-navy-900 py-10 px-6 border-t border-white/5">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-2 text-xs text-white/30">
-            <Phone className="w-3.5 h-3.5 text-accent" />
-            <span className="text-white/50 font-medium">NexaDesk</span>
-            <span>— AI Receptionist for Real Estate</span>
-          </div>
-
-          <div className="flex gap-6 text-xs text-white/30">
-            <button onClick={() => scrollToId('privacy')} className="hover:text-white/60 transition-colors">Privacy</button>
-            <Link to="/login" className="hover:text-white/60 transition-colors">Log in</Link>
-          </div>
-        </div>
-        <p className="text-center text-[11px] text-white/20 mt-6 max-w-xl mx-auto">
-          All call transcripts and client data stored securely on encrypted servers. Never sold or shared.
-        </p>
-      </footer>
+    <div className="flight-field relative min-h-screen font-sans antialiased">
+      <FlightPath />
+      <Nav />
+      <main>
+        <Hero />
+        <Proof />
+        <Cruise
+          eyebrow="On board"
+          heading="What it does once the call connects"
+          intro="Five things, in the order a call actually goes."
+          items={CAPABILITIES}
+        />
+        <Pipeline />
+        <TryInBrowser />
+        <Notes />
+        <FinalCall onRequestAccess={() => setAccessOpen(true)} />
+      </main>
+      <Footer />
+      {accessOpen && <DemoPreviewModal onClose={() => setAccessOpen(false)} />}
     </div>
   )
 }
