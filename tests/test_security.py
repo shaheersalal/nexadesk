@@ -317,3 +317,68 @@ def test_mcp_limit_coercion():
         _coerce_limit(0, 20, 100)
     with pytest.raises(ValueError):
         _coerce_limit(-5, 20, 100)
+
+
+# ── Twilio signature is checked against the URL Twilio actually signed ────────
+
+def test_callback_url_uses_configured_base_not_request_scheme(monkeypatch):
+    """
+    Behind Railway the app reconstructs http:// while Twilio signs https://, so
+    every real inbound call was rejected 403 and the line never answered. The
+    callback URL must come from configuration, which is what Twilio was given.
+    """
+    from app.voice import router as voice_router
+
+    class _URL:
+        path = "/voice/inbound"
+        query = ""
+        def __str__(self):
+            return "http://nexadesk-api-production.up.railway.app/voice/inbound"
+
+    class _Req:
+        url = _URL()
+
+    monkeypatch.setattr(
+        voice_router.settings,
+        "TELEPHONY_WEBHOOK_BASE_URL",
+        "https://nexadesk-api-production.up.railway.app",
+        raising=False,
+    )
+    built = voice_router._callback_url(_Req())
+    assert built == "https://nexadesk-api-production.up.railway.app/voice/inbound"
+    assert built.startswith("https://"), "signature would be computed over the wrong scheme"
+
+
+def test_callback_url_preserves_query_string(monkeypatch):
+    from app.voice import router as voice_router
+
+    class _URL:
+        path = "/voice/status"
+        query = "a=1&b=2"
+        def __str__(self):
+            return "http://x/voice/status?a=1&b=2"
+
+    class _Req:
+        url = _URL()
+
+    monkeypatch.setattr(
+        voice_router.settings, "TELEPHONY_WEBHOOK_BASE_URL", "https://api.example.com/", raising=False
+    )
+    assert voice_router._callback_url(_Req()) == "https://api.example.com/voice/status?a=1&b=2"
+
+
+def test_callback_url_falls_back_when_base_unset(monkeypatch):
+    """Local dev has no webhook base; reconstructing from the request is correct there."""
+    from app.voice import router as voice_router
+
+    class _URL:
+        path = "/voice/inbound"
+        query = ""
+        def __str__(self):
+            return "http://localhost:8000/voice/inbound"
+
+    class _Req:
+        url = _URL()
+
+    monkeypatch.setattr(voice_router.settings, "TELEPHONY_WEBHOOK_BASE_URL", "", raising=False)
+    assert voice_router._callback_url(_Req()) == "http://localhost:8000/voice/inbound"

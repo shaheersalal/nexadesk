@@ -46,7 +46,30 @@ def _validate_twilio(request: Request, form: dict) -> bool:
         return True
     from app.voice.telephony import validate_twilio_signature
     sig = request.headers.get("X-Twilio-Signature", "")
-    return validate_twilio_signature(str(request.url), dict(form), sig)
+    return validate_twilio_signature(_callback_url(request), dict(form), sig)
+
+
+def _callback_url(request: Request) -> str:
+    """
+    Rebuild the URL exactly as Twilio saw it when it computed the signature.
+
+    `str(request.url)` is wrong behind Railway. Twilio signs the https:// URL it
+    was configured with, but uvicorn only honours X-Forwarded-Proto from
+    `--forwarded-allow-ips` (default 127.0.0.1), and Railway's proxy is not on
+    loopback — so the app reconstructs http:// and every signature check fails.
+    Real inbound calls were rejected 403 and the line never answered.
+
+    Widening `--forwarded-allow-ips` would fix the scheme and simultaneously make
+    X-Forwarded-For client-controlled, which is precisely what TRUST_PROXY_HEADERS
+    exists to prevent. So the base comes from configuration instead: it is the
+    same value the webhook was registered with, which is what Twilio signed, and
+    it cannot be influenced by the caller.
+    """
+    base = (settings.TELEPHONY_WEBHOOK_BASE_URL or "").rstrip("/")
+    if not base:
+        return str(request.url)
+    url = f"{base}{request.url.path}"
+    return f"{url}?{request.url.query}" if request.url.query else url
 
 
 @router.post("/inbound")
