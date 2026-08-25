@@ -8,30 +8,35 @@ import { useDocumentProgress, useReducedMotion } from './useFlight'
  * with scroll so the page has a single spatial through-line rather than a set
  * of unrelated animated sections. Exactly one signature detail, per the recipe.
  *
- * Deliberately not an aeroplane illustration. A drawn plane at this scale reads
- * as clip-art on a B2B page; the *path* carries the same idea and stays
- * abstract. The marker is a small craft-shaped wedge, not a picture of one.
+ * The aircraft is a plan-view silhouette in one flat fill — the same language
+ * as the aircraft on an airline route map, which is the one context this shape
+ * appears in without reading as clip-art. It banks into the climb automatically
+ * because offsetRotate follows the path tangent.
  */
 export default function FlightPath() {
   const reduced = useReducedMotion()
   const p = useDocumentProgress({ disabled: reduced })
 
   // Runway, rotation, climb, cruise, descent — in a 0-1000 x 0-1000 field.
+  // Kept inside the viewBox rather than running to its edges. The field is
+  // letterboxed with `meet`, not cropped with `slice`: slice threw away the top
+  // and bottom of the box on a wide viewport, which is exactly where the runway
+  // and the top of the climb live — the aircraft spent most of the page
+  // off-screen, which defeats the entire idea.
   const D =
-    'M -20 880 L 210 880 C 330 880 360 840 430 720 C 500 600 540 470 640 380 ' +
-    'C 740 290 860 250 1020 240'
+    'M 40 820 L 250 820 C 360 820 395 785 460 685 C 530 578 570 452 665 372 ' +
+    'C 755 296 880 258 1160 236'
 
-  const LEN = 1750                       // approximate path length for dashing
+  const LEN = 1620                       // approximate path length for dashing
   const drawn = Math.max(0.02, p)
 
   return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
-    >
-      <svg
-        viewBox="0 0 1000 1000"
-        preserveAspectRatio="xMidYMid slice"
+    <>
+      {/* Trail: behind the page content. */}
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+        <svg
+        viewBox="0 0 1200 1000"
+        preserveAspectRatio="xMidYMid meet"
         className="h-full w-full"
       >
         <defs>
@@ -74,13 +79,38 @@ export default function FlightPath() {
           }}
         />
 
-        {/* Position marker riding the path. */}
-        {!reduced && (
+        </svg>
+      </div>
+
+      {/* The aircraft rides in its own layer ABOVE the content.
+       *
+       * The trail belongs behind the page — it is texture. The aircraft does
+       * not: kept at the same depth it spent whole sections hidden behind the
+       * cards, which is the one thing this motif cannot afford to do. It stays
+       * small, sits below the nav, and never takes pointer events. */}
+      {!reduced && (
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 1200 1000"
+          preserveAspectRatio="xMidYMid meet"
+          className="pointer-events-none fixed inset-0 z-[15] h-full w-full"
+        >
           <g style={{ offsetPath: `path("${D}")`, offsetDistance: `${drawn * 100}%`, offsetRotate: 'auto' }}>
-            <path d="M -9 0 L 7 -5 L 3 0 L 7 5 Z" fill="var(--accent)" opacity="0.9" />
+            <g transform="scale(1.45)">
+              <path
+                d="M 16 0 L 5 1.9 L 1 2 L -6 11 L -8.5 11 L -4.5 2 L -10 1.8
+                   L -13.5 5.5 L -15 5.5 L -13.5 1.6 L -16 1.2 L -16 -1.2
+                   L -13.5 -1.6 L -15 -5.5 L -13.5 -5.5 L -10 -1.8 L -4.5 -2
+                   L -8.5 -11 L -6 -11 L 1 -2 L 5 -1.9 Z"
+                fill="var(--accent-cta)"
+                stroke="var(--sky-high)"
+                strokeWidth="1.1"
+                strokeLinejoin="round"
+              />
+            </g>
           </g>
-        )}
-      </svg>
-    </div>
+        </svg>
+      )}
+    </>
   )
 }
