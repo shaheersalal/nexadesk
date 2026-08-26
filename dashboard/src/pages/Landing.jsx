@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Phone, ArrowUpRight, ArrowRight } from 'lucide-react'
+import { Phone } from 'lucide-react'
 import FlightPath from '../components/flight/FlightPath'
 import Cruise from '../components/flight/Cruise'
 import VoiceDemoWidget from '../components/VoiceDemoWidget'
 import DemoPreviewModal from '../components/DemoPreviewModal'
-import { POSTS } from '../content/posts'
 import '../styles/flight.css'
 
 /* The live demo line. E.164 for the tel: href, formatted for display. */
@@ -70,10 +69,6 @@ function Nav() {
           NexaDesk
         </Link>
         <div className="flex items-center gap-7 text-[14px]">
-          <Link to="/notes" className="hidden transition-colors sm:block hover:opacity-70"
-                style={{ color: 'var(--ink-soft)' }}>
-            Engineering notes
-          </Link>
           <Link to="/login" className="hidden transition-colors sm:block hover:opacity-70"
                 style={{ color: 'var(--ink-soft)' }}>
             Sign in
@@ -203,59 +198,6 @@ function TryInBrowser() {
   )
 }
 
-function Notes() {
-  const posts = POSTS.slice(0, 3)
-  return (
-    <section className="relative z-10 mx-auto max-w-4xl px-6 py-28">
-      <div className="lift mb-12 flex items-end justify-between gap-6">
-        <div>
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em]"
-             style={{ color: 'var(--accent)' }}>
-            Engineering notes
-          </p>
-          <h2 className="text-[clamp(1.9rem,4vw,2.6rem)] font-semibold leading-[1.08] tracking-[-0.03em]">
-            How it is actually built
-          </h2>
-        </div>
-        <Link to="/notes"
-              className="hidden shrink-0 items-center gap-1.5 text-[14px] font-medium transition-opacity hover:opacity-70 sm:flex"
-              style={{ color: 'var(--accent)' }}>
-          All notes <ArrowRight className="h-4 w-4" />
-        </Link>
-      </div>
-
-      <div className="flex flex-col">
-        {posts.map(p => (
-          <Link
-            key={p.slug}
-            to={`/notes/${p.slug}`}
-            className="lift group border-t py-7 transition-colors duration-[var(--motion-fast)] first:border-t-0"
-            style={{ borderColor: 'var(--hairline)' }}
-          >
-            <div className="flex items-start justify-between gap-6">
-              <div>
-                <h3 className="text-[17.5px] font-medium leading-snug tracking-[-0.015em]">
-                  {p.title}
-                </h3>
-                <p className="mt-2 max-w-2xl text-[14.5px] leading-relaxed" style={{ color: 'var(--ink-soft)' }}>
-                  {p.dek}
-                </p>
-                <p className="mt-3 font-mono text-[11.5px] uppercase tracking-wider" style={{ color: 'var(--ink-mute)' }}>
-                  {p.tags.slice(0, 3).join(' · ')} · {p.readingMinutes} min
-                </p>
-              </div>
-              <ArrowUpRight
-                className="mt-1 h-5 w-5 shrink-0 transition-transform duration-[var(--motion-base)] ease-[var(--ease-out)] group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
-                style={{ color: 'var(--accent)' }}
-              />
-            </div>
-          </Link>
-        ))}
-      </div>
-    </section>
-  )
-}
-
 function FinalCall({ onRequestAccess }) {
   return (
     <section className="relative z-10 mx-auto max-w-3xl px-6 py-32 text-center">
@@ -298,7 +240,6 @@ function Footer() {
         </div>
         <nav className="flex flex-wrap gap-x-7 gap-y-3 text-[13.5px]" style={{ color: 'var(--ink-soft)' }}>
           <a href={`tel:${PHONE_E164}`} className="hover:opacity-70">{CTA}</a>
-          <Link to="/notes" className="hover:opacity-70">Engineering notes</Link>
           <Link to="/login" className="hover:opacity-70">Sign in</Link>
         </nav>
       </div>
@@ -324,7 +265,6 @@ export default function Landing() {
         />
         <Pipeline />
         <TryInBrowser />
-        <Notes />
         <FinalCall onRequestAccess={() => setAccessOpen(true)} />
       </main>
       <Footer />

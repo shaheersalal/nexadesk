@@ -18,8 +18,6 @@ import SupportInbox from './pages/SupportInbox'
 import Setup from './pages/Setup'
 import AdminPanel from './pages/AdminPanel'
 import Integrations from './pages/Integrations'
-import Notes from './pages/Notes'
-import NotePost from './pages/NotePost'
 
 const ADMIN_UID = '7227a933-56ef-45c4-8cbc-1c8331c74b21'
 
@@ -55,10 +53,6 @@ export default function App() {
         <Route path="/" element={session ? <Navigate to="/dashboard" replace /> : <Landing />} />
         <Route path="/login" element={session ? <Navigate to="/dashboard" replace /> : <Login />} />
 
-        {/* Engineering notes — public, and readable while signed in, since the
-            audience is technical evaluators as much as prospects. */}
-        <Route path="/notes" element={<Notes />} />
-        <Route path="/notes/:slug" element={<NotePost />} />
 
         {/* Onboarding — handles its own auth (invite token in URL hash) */}
         <Route path="/setup" element={<Setup />} />
