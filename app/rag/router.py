@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from app.auth.middleware import CurrentUser, CompanyId, AccessibleCompanyIds
 from app.config import get_settings
-from app.dependencies import get_supabase_admin
+from app.dependencies import RlsDb
 from app.rag.pipeline import ingest_file, ingest_text
 from app.rag.store import query_with_confidence
 from app.shared.llm import complete
@@ -168,13 +168,14 @@ async def query_rag(
 
 @router.get("/documents")
 async def list_documents(
+    db: RlsDb,
     company_id: CompanyId,
     accessible_company_ids: AccessibleCompanyIds,
     current_user: CurrentUser,
     filter_company_id: Optional[str] = Query(None, description="Narrow to one child company id"),
 ):
     ids = [filter_company_id] if filter_company_id and filter_company_id in accessible_company_ids else accessible_company_ids
-    sb = get_supabase_admin()
+    sb = db
     result = (
         sb.table("documents")
         .select("*")
@@ -186,10 +187,10 @@ async def list_documents(
 
 
 @router.delete("/documents/{doc_id}", status_code=204)
-async def delete_document(doc_id: str, company_id: CompanyId, current_user: CurrentUser):
+async def delete_document(doc_id: str, db: RlsDb, company_id: CompanyId, current_user: CurrentUser):
     from app.rag.store import delete_doc_chunks
     from app.dependencies import _qdrant_client
-    sb = get_supabase_admin()
+    sb = db
     sb.table("documents").delete().eq("id", doc_id).eq("company_id", company_id).execute()
     if _qdrant_client:
         await delete_doc_chunks(doc_id, _qdrant_client)

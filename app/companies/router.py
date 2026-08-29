@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from app.auth.middleware import CurrentUser, CompanyId, AccessibleCompanyIds
 from app.auth.middleware import require_owner_or_admin
 from app.config import get_settings
-from app.dependencies import get_supabase_admin
+from app.dependencies import RlsDb, get_supabase_admin
 from app.companies.models import CompanyUpdate, ChildCompanyCreate
 
 router = APIRouter()
@@ -11,6 +11,11 @@ router = APIRouter()
 
 @router.patch("/me")
 async def update_my_company(body: CompanyUpdate, company_id: CompanyId, current_user: CurrentUser):
+    # Service-role on purpose: `companies` carries a SELECT policy only, so an
+    # UPDATE as the caller is refused by the database. Adding write policies is
+    # the proper fix and needs a migration; until then the company_id filter
+    # below is the boundary, and it comes from the verified session rather than
+    # from the request.
     payload = body.model_dump(exclude_unset=True)
     sb = get_supabase_admin()
     result = sb.table("companies").update(payload).eq("id", company_id).execute()
@@ -21,12 +26,13 @@ async def update_my_company(body: CompanyUpdate, company_id: CompanyId, current_
 
 @router.get("/accessible")
 async def list_accessible_companies(
+    db: RlsDb,
     company_id: CompanyId,
     accessible_company_ids: AccessibleCompanyIds,
     current_user: CurrentUser,
 ):
     """Return company rows for all IDs the current user can access (self + children)."""
-    sb = get_supabase_admin()
+    sb = db
     result = (
         sb.table("companies")
         .select("id, name, parent_company_id")
@@ -38,6 +44,9 @@ async def list_accessible_companies(
 
 
 @router.post("/child", status_code=status.HTTP_201_CREATED)
+# Service-role: creating a company means writing a row the caller cannot yet be
+# scoped to, and `companies` has no INSERT policy. The parent relationship is
+# validated in code.
 async def create_child_company(
     body: ChildCompanyCreate,
     company_id: CompanyId,

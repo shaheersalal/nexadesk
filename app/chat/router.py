@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.auth.middleware import CurrentUser
+from app.dependencies import RlsDb
 from app.chat.engine import chat_turn
 from app.dependencies import get_supabase_admin
 from app.shared.prompts import CHAT_GREETING
@@ -76,33 +77,26 @@ async def send_message(body: ChatMessage):
 
 
 @router.get("/history/{session_id}")
-async def get_history(session_id: str, current_user: CurrentUser):
-    """Fetch conversation transcript. Requires auth — dashboard use only."""
-    sb = get_supabase_admin()
+async def get_history(session_id: str, db: RlsDb, current_user: CurrentUser):
+    """
+    Fetch a conversation transcript. Dashboard use only.
+
+    Runs as the caller, so row-level security decides whether the row is
+    visible: another company's session simply is not found. The previous version
+    read the row with service-role and then compared company ids by hand, which
+    both fetched a row it was about to reject and let a user whose company_id
+    was null through the check entirely — `if user_cid and ...` is not a denial
+    when user_cid is None.
+    """
     result = (
-        sb.table("conversations")
-        .select("transcript, language, started_at, company_id")
+        db.table("conversations")
+        .select("transcript, language, started_at")
         .eq("session_id", session_id)
-        .single()
         .execute()
     )
     if not result.data:
         raise HTTPException(status_code=404, detail="Session not found")
-
-    # Verify the conversation belongs to the authenticated user's company — fail closed on any error
-    try:
-        user_company = sb.table("users").select("company_id").eq("id", current_user["id"]).single().execute()
-        user_cid = (user_company.data or {}).get("company_id")
-    except Exception:
-        raise HTTPException(status_code=403, detail="Access denied")
-    if user_cid and result.data.get("company_id") != user_cid:
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    return {
-        "transcript": result.data.get("transcript"),
-        "language": result.data.get("language"),
-        "started_at": result.data.get("started_at"),
-    }
+    return result.data[0]
 
 
 @router.get("/greeting")

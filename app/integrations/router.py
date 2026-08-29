@@ -11,14 +11,12 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, HttpUrl
 
 from app.auth.middleware import CurrentUser, CompanyId
-from app.dependencies import get_supabase_admin
+from app.dependencies import RlsDb
 from app.integrations.events import EVENTS, fire_event
 
 router = APIRouter()
 
 
-def _sb():
-    return get_supabase_admin()
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -42,17 +40,17 @@ class WebhookUpdate(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/webhooks")
-async def list_webhooks(company_id: CompanyId, _: CurrentUser):
-    result = _sb().table("webhook_endpoints").select("id,url,events,active,created_at") \
+async def list_webhooks(db: RlsDb, company_id: CompanyId, _: CurrentUser):
+    result = db.table("webhook_endpoints").select("id,url,events,active,created_at") \
         .eq("company_id", company_id).order("created_at", desc=True).execute()
     return result.data or []
 
 
 @router.post("/webhooks", status_code=status.HTTP_201_CREATED)
-async def create_webhook(body: WebhookCreate, company_id: CompanyId, _: CurrentUser):
+async def create_webhook(body: WebhookCreate, db: RlsDb, company_id: CompanyId, _: CurrentUser):
     body.validate_events()
     secret = secrets.token_hex(32)
-    result = _sb().table("webhook_endpoints").insert({
+    result = db.table("webhook_endpoints").insert({
         "company_id": company_id,
         "url": str(body.url),
         "events": body.events,
@@ -65,13 +63,13 @@ async def create_webhook(body: WebhookCreate, company_id: CompanyId, _: CurrentU
 
 
 @router.patch("/webhooks/{webhook_id}")
-async def update_webhook(webhook_id: UUID, body: WebhookUpdate, company_id: CompanyId, _: CurrentUser):
+async def update_webhook(webhook_id: UUID, body: WebhookUpdate, db: RlsDb, company_id: CompanyId, _: CurrentUser):
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if "url" in updates:
         updates["url"] = str(updates["url"])
     if not updates:
         raise HTTPException(400, "Nothing to update")
-    result = _sb().table("webhook_endpoints").update(updates) \
+    result = db.table("webhook_endpoints").update(updates) \
         .eq("id", str(webhook_id)).eq("company_id", company_id).execute()
     if not result.data:
         raise HTTPException(404, "Webhook not found")
@@ -79,14 +77,14 @@ async def update_webhook(webhook_id: UUID, body: WebhookUpdate, company_id: Comp
 
 
 @router.delete("/webhooks/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_webhook(webhook_id: UUID, company_id: CompanyId, _: CurrentUser):
-    _sb().table("webhook_endpoints").delete() \
+async def delete_webhook(webhook_id: UUID, db: RlsDb, company_id: CompanyId, _: CurrentUser):
+    db.table("webhook_endpoints").delete() \
         .eq("id", str(webhook_id)).eq("company_id", company_id).execute()
 
 
 @router.post("/webhooks/{webhook_id}/test")
-async def test_webhook(webhook_id: UUID, company_id: CompanyId, _: CurrentUser):
-    result = _sb().table("webhook_endpoints").select("*") \
+async def test_webhook(webhook_id: UUID, db: RlsDb, company_id: CompanyId, _: CurrentUser):
+    result = db.table("webhook_endpoints").select("*") \
         .eq("id", str(webhook_id)).eq("company_id", company_id).single().execute()
     if not result.data:
         raise HTTPException(404, "Webhook not found")
@@ -104,13 +102,13 @@ async def test_webhook(webhook_id: UUID, company_id: CompanyId, _: CurrentUser):
 
 
 @router.get("/webhooks/{webhook_id}/logs")
-async def get_webhook_logs(webhook_id: UUID, company_id: CompanyId, _: CurrentUser):
+async def get_webhook_logs(webhook_id: UUID, db: RlsDb, company_id: CompanyId, _: CurrentUser):
     # Verify ownership
-    ep = _sb().table("webhook_endpoints").select("id") \
+    ep = db.table("webhook_endpoints").select("id") \
         .eq("id", str(webhook_id)).eq("company_id", company_id).single().execute()
     if not ep.data:
         raise HTTPException(404, "Webhook not found")
-    logs = _sb().table("webhook_logs").select(
+    logs = db.table("webhook_logs").select(
         "id,event,status_code,attempts,delivered_at,next_retry_at,error,created_at"
     ).eq("endpoint_id", str(webhook_id)).order("created_at", desc=True).limit(50).execute()
     return logs.data or []

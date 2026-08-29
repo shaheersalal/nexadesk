@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.auth.middleware import CurrentUser, CompanyId, require_owner_or_admin
-from app.dependencies import get_supabase_admin
+from app.dependencies import RlsDb
 
 router = APIRouter()
 
@@ -24,8 +24,6 @@ ALL_SCOPES = ["leads:read", "leads:write", "appointments:read", "properties:read
 MAX_KEYS_PER_COMPANY = 20
 
 
-def _sb():
-    return get_supabase_admin()
 
 
 def _hash_key(raw: str) -> str:
@@ -38,8 +36,8 @@ class KeyCreate(BaseModel):
 
 
 @router.get("/api-keys")
-async def list_keys(company_id: CompanyId, _: CurrentUser):
-    result = _sb().table("api_keys").select(
+async def list_keys(db: RlsDb, company_id: CompanyId, _: CurrentUser):
+    result = db.table("api_keys").select(
         "id,name,key_prefix,scopes,last_used,created_at,revoked_at"
     ).eq("company_id", company_id).is_("revoked_at", None).order("created_at", desc=True).execute()
     return result.data or []
@@ -47,6 +45,7 @@ async def list_keys(company_id: CompanyId, _: CurrentUser):
 
 @router.post("/api-keys", status_code=status.HTTP_201_CREATED)
 async def create_key(
+    db: RlsDb,
     body: KeyCreate,
     company_id: CompanyId,
     _admin=Depends(require_owner_or_admin),
@@ -64,7 +63,7 @@ async def create_key(
     if not body.scopes:
         raise HTTPException(400, "At least one scope is required")
 
-    existing = _sb().table("api_keys").select("id", count="exact") \
+    existing = db.table("api_keys").select("id", count="exact") \
         .eq("company_id", company_id).is_("revoked_at", None).execute()
     if (existing.count or 0) >= MAX_KEYS_PER_COMPANY:
         raise HTTPException(
@@ -75,7 +74,7 @@ async def create_key(
     raw_key = "nxd_live_" + secrets.token_hex(32)
     key_prefix = raw_key[:16]  # "nxd_live_" + 7 hex chars
 
-    result = _sb().table("api_keys").insert({
+    result = db.table("api_keys").insert({
         "company_id": company_id,
         "name": body.name,
         "key_hash": _hash_key(raw_key),
@@ -90,8 +89,8 @@ async def create_key(
 
 
 @router.delete("/api-keys/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def revoke_key(key_id: str, company_id: CompanyId, _: CurrentUser):
-    result = _sb().table("api_keys").update({
+async def revoke_key(key_id: str, db: RlsDb, company_id: CompanyId, _: CurrentUser):
+    result = db.table("api_keys").update({
         "revoked_at": datetime.now(timezone.utc).isoformat()
     }).eq("id", key_id).eq("company_id", company_id).is_("revoked_at", None).execute()
     if not result.data:

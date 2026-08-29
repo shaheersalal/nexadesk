@@ -219,3 +219,73 @@ def test_no_child_table_row_is_addressed_without_its_company():
         "Row-addressed queries on company-owned tables with no company_id "
         "filter:\n  " + "\n  ".join(offenders)
     )
+
+
+# ── Authenticated routes must run as the caller, not as the system ───────────
+
+# Routes that legitimately act as the system rather than as their caller. Each
+# needs a reason; the point of the list is that adding to it is a decision.
+SERVICE_ROLE_ALLOWED = {
+    # `companies` carries a SELECT policy only, so an INSERT or UPDATE as the
+    # caller is refused by the database. migrations/0004_companies_write_policies.sql
+    # adds them; once it is applied to live Supabase these three move to RlsDb
+    # and come off this list.
+    ("app/companies/router.py", "update_my_company"),
+    ("app/companies/router.py", "create_child_company"),
+    ("app/onboarding/router.py", "onboarding_complete"),
+    # Cross-tenant by design, gated on a single admin uid: triage of inbound
+    # access requests and issuing invites.
+    ("app/admin/router.py", "list_requests"),
+    ("app/admin/router.py", "invite_user"),
+    ("app/admin/router.py", "invite_quick"),
+}
+
+
+def _authenticated_handlers():
+    """(file, function, source) for every route handler that requires a user."""
+    for path in sorted(APP.rglob("*.py")):
+        src = path.read_text(encoding="utf-8")
+        if "CurrentUser" not in src and "require_admin" not in src:
+            continue
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:
+            continue
+        rel = path.relative_to(APP.parent).as_posix()
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            decorated = any(
+                isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute)
+                and isinstance(d.func.value, ast.Name) and d.func.value.id == "router"
+                for d in node.decorator_list
+            )
+            if not decorated:
+                continue
+            args = ast.unparse(node.args) if hasattr(ast, "unparse") else ""
+            needs_user = "CurrentUser" in args or any(
+                "require_admin" in ast.unparse(d) for d in node.decorator_list
+            ) or "require_admin" in args
+            if needs_user:
+                yield rel, node.name, ast.get_source_segment(src, node) or ""
+
+
+def test_authenticated_routes_do_not_use_the_service_role_client():
+    """
+    A signed-in caller's request must run under their own identity.
+
+    get_supabase_admin() bypasses row-level security, so using it on a route
+    that has a caller throws away the database's enforcement and puts the whole
+    tenant boundary back on remembering a filter. Routes that genuinely act as
+    the system are listed above with a reason.
+    """
+    offenders = []
+    for rel, name, src in _authenticated_handlers():
+        if (rel, name) in SERVICE_ROLE_ALLOWED:
+            continue
+        if "get_supabase_admin(" in src:
+            offenders.append(f"{rel}::{name}")
+    assert not offenders, (
+        "Authenticated routes using the service-role client, which bypasses "
+        "RLS:\n  " + "\n  ".join(offenders)
+    )

@@ -6,36 +6,36 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from typing import Optional
 from fastapi import Query
 from app.auth.middleware import CurrentUser, CompanyId, AccessibleCompanyIds
-from app.dependencies import get_supabase_admin
+from app.dependencies import RlsDb
 from app.properties.models import PropertyCreate, PropertyUpdate, property_to_text
 
 router = APIRouter()
 
 
-def _supabase():
-    return get_supabase_admin()
 
 
 @router.get("/")
 async def list_properties(
+    db: RlsDb,
     company_id: CompanyId,
     accessible_company_ids: AccessibleCompanyIds,
     filter_company_id: Optional[str] = Query(None, description="Narrow to one child company id"),
 ):
     ids = [filter_company_id] if filter_company_id and filter_company_id in accessible_company_ids else accessible_company_ids
-    sb = _supabase()
+    sb = db
     result = sb.table("properties").select("*").in_("company_id", ids).order("created_at", desc=True).execute()
     return result.data
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_property(
+    db: RlsDb,
     body: PropertyCreate,
     company_id: CompanyId,
     current_user: CurrentUser,
     background_tasks: BackgroundTasks,
 ):
-    sb = _supabase()
+    sb = db
     row = body.model_dump()
     row["company_id"] = company_id
     # Convert Decimal → float for JSON serialisation
@@ -52,8 +52,8 @@ async def create_property(
 
 
 @router.get("/{property_id}")
-async def get_property(property_id: UUID, company_id: CompanyId):
-    sb = _supabase()
+async def get_property(property_id: UUID, db: RlsDb, company_id: CompanyId):
+    sb = db
     result = (
         sb.table("properties")
         .select("*")
@@ -69,12 +69,13 @@ async def get_property(property_id: UUID, company_id: CompanyId):
 
 @router.patch("/{property_id}")
 async def update_property(
+    db: RlsDb,
     property_id: UUID,
     body: PropertyUpdate,
     company_id: CompanyId,
     background_tasks: BackgroundTasks,
 ):
-    sb = _supabase()
+    sb = db
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if "price" in updates and updates["price"] is not None:
         updates["price"] = float(updates["price"])
@@ -94,8 +95,8 @@ async def update_property(
 
 
 @router.delete("/{property_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_property(property_id: UUID, company_id: CompanyId):
-    sb = _supabase()
+async def delete_property(property_id: UUID, db: RlsDb, company_id: CompanyId):
+    sb = db
     sb.table("properties").delete().eq("id", str(property_id)).eq("company_id", company_id).execute()
 
 
