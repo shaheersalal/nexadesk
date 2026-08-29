@@ -145,9 +145,22 @@ async def create_appointment(body: AppointmentCreate, company_id: CompanyId, cur
         if row.get(field):
             row[field] = str(row[field])
 
-    # Create Google Calendar event (optional)
-    lead = sb.table("leads").select("name, email").eq("id", row["lead_id"]).single().execute()
-    lead_data = lead.data or {}
+    # The lead must belong to the caller's company.
+    #
+    # lead_id arrives in the request body, and neither this read nor the status
+    # update below was scoped — so an authenticated user of one agency could
+    # pass another agency's lead id and both read that lead's name and email
+    # (which then receives the calendar invite) and write to it. The backend
+    # uses the service-role client and bypasses RLS, so nothing else was
+    # stopping it. Tenant isolation here rests entirely on this filter.
+    lead = (
+        sb.table("leads").select("name, email")
+        .eq("id", row["lead_id"]).eq("company_id", company_id)
+        .maybe_single().execute()
+    )
+    if not lead or not lead.data:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    lead_data = lead.data
     summary = f"Property Showing — {lead_data.get('name', 'Guest')}"
     google_id = await create_event(
         company_id=company_id,
@@ -162,8 +175,11 @@ async def create_appointment(body: AppointmentCreate, company_id: CompanyId, cur
     result = sb.table("appointments").insert(row).execute()
     appt = result.data[0]
 
-    # Update lead status to 'appointment'
-    sb.table("leads").update({"status": "appointment"}).eq("id", row["lead_id"]).execute()
+    # Update lead status to 'appointment' — scoped for the same reason as above.
+    (
+        sb.table("leads").update({"status": "appointment"})
+        .eq("id", row["lead_id"]).eq("company_id", company_id).execute()
+    )
 
     fire_event(company_id, "appointment.booked", appt)
     return appt
@@ -186,8 +202,15 @@ async def update_appointment(appt_id: UUID, body: AppointmentUpdate, company_id:
 @router.delete("/appointments/{appt_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_appointment(appt_id: UUID, company_id: CompanyId, current_user: CurrentUser):
     sb = _sb()
-    appt = sb.table("appointments").select("google_event_id").eq("id", str(appt_id)).single().execute()
-    if appt.data and appt.data.get("google_event_id"):
+    # Scoped: unfiltered, this both confirmed another tenant's appointment
+    # exists and handed its google_event_id to delete_event() under this
+    # company's credentials.
+    appt = (
+        sb.table("appointments").select("google_event_id")
+        .eq("id", str(appt_id)).eq("company_id", company_id)
+        .maybe_single().execute()
+    )
+    if appt and appt.data and appt.data.get("google_event_id"):
         await delete_event(company_id, appt.data["google_event_id"])
     sb.table("appointments").delete().eq("id", str(appt_id)).eq("company_id", company_id).execute()
 

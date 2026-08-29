@@ -92,7 +92,7 @@ async def inbound_call(request: Request):
 
     # Create Redis session (side effect: stored under call_sid for the WS to load)
     redis = await get_redis(settings)
-    await create_session(call_sid, company_id, redis)
+    await create_session(call_sid, company_id, redis, caller_number=form.get("From"))
 
     twiml = build_stream_twiml(call_sid)
     return Response(content=twiml, media_type="application/xml")
@@ -322,6 +322,14 @@ async def _finalize_call(session, duration: int) -> None:
     for field in ("name", "phone", "email"):
         if lead_data.get(field):
             lead_payload[field] = lead_data[field]
+
+    # Caller ID is the fallback phone number. A caller who hangs up before
+    # giving details, or who never says a number out loud, still left one on the
+    # call — and a lead with no way to reach the person is not a lead. Anything
+    # they actually stated wins, since they may be calling from a different
+    # phone to the one they want to be reached on.
+    if not lead_payload.get("phone") and session.caller_number:
+        lead_payload["phone"] = session.caller_number
     if lead_data.get("notes"):
         lead_payload["notes"] = lead_data["notes"]
 
@@ -335,8 +343,14 @@ async def _finalize_call(session, duration: int) -> None:
         lead_result = sb.table("leads").insert(lead_payload).execute()
         lead_id = lead_result.data[0]["id"] if lead_result.data else None
 
-    # Save conversation
-    if transcript_text and lead_id:
+    # Save conversation.
+    #
+    # Written for every call that reached this point, not only those with a
+    # transcript. A call that connected and produced nothing is still a call the
+    # agency needs to see — previously those vanished entirely, leaving an empty
+    # lead in the dashboard with no record of where it came from, which is
+    # exactly what a missed call looks like and exactly what they most need.
+    if lead_id:
         turns = []
         for part in session.transcript_parts:
             if part.startswith("Caller: "):
@@ -350,7 +364,10 @@ async def _finalize_call(session, duration: int) -> None:
             "channel": "voice",
             "session_id": session.call_sid,
             "transcript": turns,
-            "summary": lead_data.get("notes", ""),
+            "summary": lead_data.get("notes") or (
+                "" if transcript_text
+                else "Call connected but no conversation took place."
+            ),
             "language": session.language,
             "call_duration": duration,
             "ended_at": datetime.now(timezone.utc).isoformat(),

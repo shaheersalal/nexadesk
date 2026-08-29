@@ -16,6 +16,10 @@ SESSION_TTL = 3600  # 1 hour
 class CallSession:
     call_sid: str
     company_id: str
+    # The number that dialled us, straight off Twilio's `From`. Without this a
+    # voice lead has no phone number at all unless the caller reads one out,
+    # which makes the lead unactionable — the agency cannot call them back.
+    caller_number: Optional[str] = None
     language: str = "en"
     language_confirmed: bool = False  # False until the first turn's audio has been language-detected
     conversation_history: list[dict] = field(default_factory=list)
@@ -56,11 +60,17 @@ async def delete_session(call_sid: str, redis: aioredis.Redis) -> None:
     await redis.delete(_key(call_sid))
 
 
-async def create_session(call_sid: str, company_id: str, redis: aioredis.Redis) -> CallSession:
+async def create_session(
+    call_sid: str,
+    company_id: str,
+    redis: aioredis.Redis,
+    caller_number: Optional[str] = None,
+) -> CallSession:
     from datetime import datetime, timezone
     session = CallSession(
         call_sid=call_sid,
         company_id=company_id,
+        caller_number=caller_number,
         started_at=datetime.now(timezone.utc).isoformat(),
     )
     await save_session(session, redis)
