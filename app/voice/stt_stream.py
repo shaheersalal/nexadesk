@@ -33,6 +33,19 @@ DEEPGRAM_WS = "wss://api.deepgram.com/v1/listen"
 IDLE_TIMEOUT = 30.0
 
 
+def _configured_default_language() -> str | None:
+    """
+    The language to ask for when the caller's is not yet known.
+
+    Returns the single configured language when only one is supported, which is
+    the honest thing to request rather than pretending to detect. With several
+    configured it returns None, and the parameter is omitted entirely — Deepgram
+    then defaults to English, which is still better than a 400 that kills the call.
+    """
+    langs = [x.strip() for x in (settings.SUPPORTED_LANGUAGES or "").split(",") if x.strip()]
+    return langs[0] if len(langs) == 1 else None
+
+
 def _build_url(language: str | None) -> str:
     params = {
         "model": settings.STT_MODEL,
@@ -48,10 +61,20 @@ def _build_url(language: str | None) -> str:
         "utterance_end_ms": "1000",
         "vad_events": "true",
     }
+    # Never send detect_language on the streaming socket.
+    #
+    # Deepgram rejects it outright with HTTP 400 — verified against nova-2 and
+    # nova-3, while the same URL with `language=` or with no language parameter
+    # at all connects fine. That 400 was thrown from DeepgramStream.__aenter__
+    # before the greeting was ever synthesised, so the handler aborted and every
+    # single inbound call was answered with silence until the caller hung up.
+    #
+    # It fired on every call, not an unlucky few: stt_language is None whenever
+    # session.language_confirmed is False, which it always is on a fresh call.
+    if not language:
+        language = _configured_default_language()
     if language:
         params["language"] = language
-    else:
-        params["detect_language"] = "true"
     query = "&".join(f"{k}={v}" for k, v in params.items())
     return f"{DEEPGRAM_WS}?{query}"
 
