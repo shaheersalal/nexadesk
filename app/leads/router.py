@@ -5,6 +5,7 @@ from datetime import datetime, timezone, date
 from fastapi import APIRouter, HTTPException, Depends, status, Query, Request
 from fastapi.responses import RedirectResponse
 
+from app.dependencies import RlsDb
 from app.auth.middleware import CurrentUser, CompanyId, AccessibleCompanyIds
 from app.config import get_settings
 from app.dependencies import get_supabase_admin
@@ -19,8 +20,6 @@ from app.leads.calendar import create_event, delete_event, get_auth_url, exchang
 router = APIRouter()
 
 
-def _sb():
-    return get_supabase_admin()
 
 
 def _resolve_ids(accessible: list[str], filter_id: Optional[str]) -> list[str]:
@@ -34,6 +33,7 @@ def _resolve_ids(accessible: list[str], filter_id: Optional[str]) -> list[str]:
 
 @router.get("/")
 async def list_leads(
+    db: RlsDb,
     company_id: CompanyId,
     accessible_company_ids: AccessibleCompanyIds,
     current_user: CurrentUser,
@@ -44,7 +44,7 @@ async def list_leads(
     filter_company_id: Optional[str] = Query(None, description="Narrow to one child company id"),
 ):
     ids = _resolve_ids(accessible_company_ids, filter_company_id)
-    q = _sb().table("leads").select("*, conversations(id, channel, started_at)").in_("company_id", ids)
+    q = db.table("leads").select("*, conversations(id, channel, started_at)").in_("company_id", ids)
     if status_filter:
         q = q.eq("status", status_filter)
     if source:
@@ -54,21 +54,21 @@ async def list_leads(
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
-async def create_lead(body: LeadCreate, company_id: CompanyId, current_user: CurrentUser):
+async def create_lead(body: LeadCreate, db: RlsDb, company_id: CompanyId, current_user: CurrentUser):
     row = body.model_dump()
     row["company_id"] = company_id
     if row.get("assigned_to"):
         row["assigned_to"] = str(row["assigned_to"])
-    result = _sb().table("leads").insert(row).execute()
+    result = db.table("leads").insert(row).execute()
     lead = result.data[0]
     fire_event(company_id, "lead.created", lead)
     return lead
 
 
 @router.get("/{lead_id}")
-async def get_lead(lead_id: UUID, company_id: CompanyId, current_user: CurrentUser):
+async def get_lead(lead_id: UUID, db: RlsDb, company_id: CompanyId, current_user: CurrentUser):
     result = (
-        _sb().table("leads")
+        db.table("leads")
         .select("*, conversations(*), appointments(*)")
         .eq("id", str(lead_id))
         .eq("company_id", company_id)
@@ -81,13 +81,13 @@ async def get_lead(lead_id: UUID, company_id: CompanyId, current_user: CurrentUs
 
 
 @router.patch("/{lead_id}")
-async def update_lead(lead_id: UUID, body: LeadUpdate, company_id: CompanyId, current_user: CurrentUser):
+async def update_lead(lead_id: UUID, body: LeadUpdate, db: RlsDb, company_id: CompanyId, current_user: CurrentUser):
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if "assigned_to" in updates and updates["assigned_to"]:
         updates["assigned_to"] = str(updates["assigned_to"])
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
     result = (
-        _sb().table("leads").update(updates)
+        db.table("leads").update(updates)
         .eq("id", str(lead_id)).eq("company_id", company_id).execute()
     )
     if not result.data:
@@ -96,9 +96,9 @@ async def update_lead(lead_id: UUID, body: LeadUpdate, company_id: CompanyId, cu
 
 
 @router.patch("/{lead_id}/status")
-async def update_lead_status(lead_id: UUID, body: LeadStatusUpdate, company_id: CompanyId, current_user: CurrentUser):
+async def update_lead_status(lead_id: UUID, body: LeadStatusUpdate, db: RlsDb, company_id: CompanyId, current_user: CurrentUser):
     result = (
-        _sb().table("leads")
+        db.table("leads")
         .update({"status": body.status, "updated_at": datetime.now(timezone.utc).isoformat()})
         .eq("id", str(lead_id)).eq("company_id", company_id).execute()
     )
@@ -110,14 +110,15 @@ async def update_lead_status(lead_id: UUID, body: LeadStatusUpdate, company_id: 
 
 
 @router.delete("/{lead_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_lead(lead_id: UUID, company_id: CompanyId, current_user: CurrentUser):
-    _sb().table("leads").delete().eq("id", str(lead_id)).eq("company_id", company_id).execute()
+async def delete_lead(lead_id: UUID, db: RlsDb, company_id: CompanyId, current_user: CurrentUser):
+    db.table("leads").delete().eq("id", str(lead_id)).eq("company_id", company_id).execute()
 
 
 # ── Appointments ──────────────────────────────────────────────────────────────
 
 @router.get("/appointments/upcoming")
 async def list_appointments(
+    db: RlsDb,
     company_id: CompanyId,
     accessible_company_ids: AccessibleCompanyIds,
     current_user: CurrentUser,
@@ -126,7 +127,7 @@ async def list_appointments(
     filter_company_id: Optional[str] = Query(None, description="Narrow to one child company id"),
 ):
     ids = _resolve_ids(accessible_company_ids, filter_company_id)
-    q = _sb().table("appointments").select("*, leads(name, phone), properties(title, address)").in_("company_id", ids)
+    q = db.table("appointments").select("*, leads(name, phone), properties(title, address)").in_("company_id", ids)
     if from_date:
         q = q.gte("datetime", from_date.isoformat())
     else:
@@ -136,8 +137,8 @@ async def list_appointments(
 
 
 @router.post("/appointments", status_code=status.HTTP_201_CREATED)
-async def create_appointment(body: AppointmentCreate, company_id: CompanyId, current_user: CurrentUser):
-    sb = _sb()
+async def create_appointment(body: AppointmentCreate, db: RlsDb, company_id: CompanyId, current_user: CurrentUser):
+    sb = db
     row = body.model_dump()
     row["company_id"] = company_id
     row["datetime"] = row["datetime"].isoformat()
@@ -186,12 +187,12 @@ async def create_appointment(body: AppointmentCreate, company_id: CompanyId, cur
 
 
 @router.patch("/appointments/{appt_id}")
-async def update_appointment(appt_id: UUID, body: AppointmentUpdate, company_id: CompanyId, current_user: CurrentUser):
+async def update_appointment(appt_id: UUID, body: AppointmentUpdate, db: RlsDb, company_id: CompanyId, current_user: CurrentUser):
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if "datetime" in updates:
         updates["datetime"] = updates["datetime"].isoformat()
     result = (
-        _sb().table("appointments").update(updates)
+        db.table("appointments").update(updates)
         .eq("id", str(appt_id)).eq("company_id", company_id).execute()
     )
     if not result.data:
@@ -200,8 +201,8 @@ async def update_appointment(appt_id: UUID, body: AppointmentUpdate, company_id:
 
 
 @router.delete("/appointments/{appt_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_appointment(appt_id: UUID, company_id: CompanyId, current_user: CurrentUser):
-    sb = _sb()
+async def delete_appointment(appt_id: UUID, db: RlsDb, company_id: CompanyId, current_user: CurrentUser):
+    sb = db
     # Scoped: unfiltered, this both confirmed another tenant's appointment
     # exists and handed its google_event_id to delete_event() under this
     # company's credentials.
@@ -219,12 +220,13 @@ async def delete_appointment(appt_id: UUID, company_id: CompanyId, current_user:
 
 @router.get("/analytics/summary")
 async def get_analytics(
+    db: RlsDb,
     company_id: CompanyId,
     accessible_company_ids: AccessibleCompanyIds,
     current_user: CurrentUser,
     filter_company_id: Optional[str] = Query(None, description="Narrow to one child company id"),
 ):
-    sb = _sb()
+    sb = db
     # UTC, not the server's local date: on a Railway container in a different
     # region than the user, date.today() rolls over at the wrong moment and
     # "today's appointments" silently shifts by a day.

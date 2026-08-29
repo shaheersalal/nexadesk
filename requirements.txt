@@ -14,6 +14,10 @@ pydantic[email]==2.11.7
 # makes pip's resolver explore every supabase release and fail with
 # `resolution-too-deep`, which breaks the Railway/Nixpacks build too.
 supabase==2.31.0
+# Imported directly by app/dependencies.py for the RLS-scoped client. It
+# arrives transitively through supabase, but a transitive dependency is not
+# a promise and this one carries the tenant boundary.
+postgrest>=2.31,<3
 
 # Vector DB
 qdrant-client==1.12.1

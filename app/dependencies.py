@@ -1,9 +1,14 @@
 import logging
+import ssl
+from typing import Iterator
+
+import httpx
+from postgrest import SyncPostgrestClient
 from functools import lru_cache
 from typing import Annotated
 
 import redis.asyncio as aioredis
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from starlette.concurrency import run_in_threadpool
 from jose import jwt, JWTError
@@ -270,3 +275,66 @@ async def get_company_id(
             pass  # Caching is an optimisation, never a failure path
 
     return company_id
+
+
+# ── RLS-scoped database access ────────────────────────────────────────────────
+#
+# get_supabase_admin() returns the service-role client, which BYPASSES row-level
+# security. That is correct for system paths with no user — Twilio webhooks, the
+# public chat widget, API-key routes, onboarding before the user row exists —
+# but it means that on dashboard routes the only thing separating tenants is a
+# company_id filter someone remembered to write.
+#
+# The database already enforces isolation properly: RLS is enabled on every
+# tenant table, with policies built on accessible_company_ids() for reads and
+# current_company_id() for writes. Verified live — an anon key reads zero rows
+# from every tenant table, and a token for one user returns only that user's
+# company. Nothing was using it.
+#
+# This dependency hands a route a client carrying the caller's own JWT, so
+# Postgres decides what they may see. A forgotten filter then returns no rows
+# instead of someone else's.
+
+_SSL_CONTEXT = ssl.create_default_context()
+# Built once at import. httpx loads the CA bundle on every Client() otherwise,
+# which measured 334ms per construction — per request, that would be a third of
+# a second added to every dashboard call. With the context shared it is 0.1ms.
+
+
+def get_access_token(request: Request) -> str:
+    """The caller's Supabase JWT, as sent. Verified upstream by get_current_user."""
+    header = request.headers.get("Authorization", "")
+    if not header.lower().startswith("bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing bearer token",
+        )
+    return header.split(" ", 1)[1].strip()
+
+
+def get_rls_db(request: Request) -> Iterator[SyncPostgrestClient]:
+    """
+    A database handle that runs as the caller, with RLS applied.
+
+    Use this on any route that serves tenant data to a signed-in user. Keep
+    get_supabase_admin() for system paths that genuinely have no user; each of
+    those is a deliberate choice, not a default.
+    """
+    token = get_access_token(request)
+    settings = get_settings()
+    http = httpx.Client(verify=_SSL_CONTEXT, timeout=30.0)
+    try:
+        yield SyncPostgrestClient(
+            f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1",
+            schema="public",
+            headers={
+                "apikey": settings.SUPABASE_ANON_KEY,
+                "Authorization": f"Bearer {token}",
+            },
+            http_client=http,
+        )
+    finally:
+        http.close()
+
+
+RlsDb = Annotated[SyncPostgrestClient, Depends(get_rls_db)]
