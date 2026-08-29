@@ -57,8 +57,14 @@ def _build_url(language: str | None) -> str:
         # Interim results let us show/act on partials; endpointing + utterance_end
         # give us a reliable "caller stopped speaking" signal.
         "interim_results": "true",
-        "endpointing": "300",
-        "utterance_end_ms": "1000",
+        # 300ms was too eager. People pause mid-sentence to think, and at that
+        # setting Deepgram called the turn finished while the caller was still
+        # mid-thought — the assistant answered half a question, which reads as
+        # being interrupted. 600ms is long enough to ride out a normal pause and
+        # short enough not to feel laggy, and the streaming synthesis added on
+        # the other side more than pays back the extra wait.
+        "endpointing": "600",
+        "utterance_end_ms": "1400",
         "vad_events": "true",
     }
     # Never send detect_language on the streaming socket.
@@ -92,6 +98,10 @@ class DeepgramStream:
 
     def __init__(self, language: str | None = "en"):
         self._language = language
+        # Set the moment Deepgram's VAD hears speech. The caller talking over
+        # the assistant is the assistant's cue to stop, not something to talk
+        # through — see the barge-in handling in voice/router.py.
+        self.speech_started = asyncio.Event()
         self._ws: websockets.WebSocketClientProtocol | None = None
         self._queue: asyncio.Queue[str] = asyncio.Queue()
         self._reader: asyncio.Task | None = None
@@ -130,6 +140,8 @@ class DeepgramStream:
                         # speech_final means Deepgram's VAD saw the caller stop.
                         if msg.get("speech_final"):
                             await self._flush(buffer)
+                elif mtype == "SpeechStarted":
+                    self.speech_started.set()
                 elif mtype == "UtteranceEnd":
                     # Backstop: fires when audio goes quiet without speech_final.
                     await self._flush(buffer)

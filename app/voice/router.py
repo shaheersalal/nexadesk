@@ -14,16 +14,18 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, Depends
 from fastapi.responses import Response
 
+from starlette.concurrency import run_in_threadpool
+
 from app.config import get_settings
 from app.dependencies import get_redis, get_supabase_admin
 from app.voice.telephony import build_stream_twiml, build_fallback_twiml, twilio_client
 from app.voice.call_session import create_session, load_session, save_session, delete_session
 from app.voice.stt_stream import DeepgramStream
 from app.voice.tts import synthesize_to_mulaw
-from app.voice.tts_stream import stream_speech
+from app.voice.tts_live import speak_tokens
 from app.voice.conversation import stream_voice_turn
 from app.shared.llm import complete as llm_complete
-from app.shared.prompts import CALL_GREETING, LEAD_SUMMARY_PROMPT
+from app.shared.prompts import CALL_GREETING, CALL_GREETING_NO_STOCK, LEAD_SUMMARY_PROMPT
 
 router = APIRouter()
 settings = get_settings()
@@ -166,6 +168,7 @@ async def media_stream(websocket: WebSocket, call_sid: str):
                             websocket,
                             stream_sid,
                             stream_voice_turn(utterance, session),
+                            stt=stt,
                         )
                     await save_session(session, redis)
 
@@ -181,10 +184,7 @@ async def media_stream(websocket: WebSocket, call_sid: str):
                         stream_sid = msg.get("start", {}).get("streamSid") or msg.get("streamSid")
                         logger.info("Media stream started: call=%s stream=%s", call_sid, stream_sid)
                         # Greet only once we know where to send audio.
-                        company_name = await _get_company_name(session.company_id)
-                        greeting = CALL_GREETING.format(
-                            company_name=company_name, ai_name=settings.APP_NAME
-                        )
+                        greeting = await _build_greeting(session.company_id)
                         async with speaking:
                             audio = await _greeting_audio(greeting, redis)
                             if audio and stream_sid:
@@ -214,14 +214,46 @@ async def media_stream(websocket: WebSocket, call_sid: str):
         await save_session(session, redis)
 
 
-async def _speak_stream(websocket: WebSocket, stream_sid: str | None, token_iter) -> None:
-    """Synthesise a streaming reply clause by clause and send each to Twilio."""
+async def _speak_stream(
+    websocket: WebSocket,
+    stream_sid: str | None,
+    token_iter,
+    stt=None,
+) -> None:
+    """
+    Speak a streamed reply, and stop the moment the caller talks over it.
+
+    Audio comes from one continuous synthesis socket rather than a synthesis
+    request per clause, so there is no seam between fragments and no gap when a
+    fragment loses its race with playback.
+
+    Barge-in: if Deepgram's VAD reports speech while we are talking, we stop
+    sending and tell Twilio to drop whatever is already queued. Without the
+    clear, Twilio keeps playing seconds of buffered audio the caller is
+    talking over, which is the behaviour people hate most in phone bots.
+    """
     if not stream_sid:
         logger.error("No streamSid yet — dropping reply audio")
         return
-    async for text, audio in stream_speech(token_iter):
-        logger.debug("AI: %s", text)
+
+    if stt is not None:
+        stt.speech_started.clear()
+
+    interrupted = False
+    async for audio in speak_tokens(token_iter):
+        if stt is not None and stt.speech_started.is_set():
+            interrupted = True
+            break
         await _send_media(websocket, stream_sid, audio)
+
+    if interrupted:
+        logger.info("Caller barged in — clearing queued audio")
+        try:
+            await websocket.send_text(json.dumps({
+                "event": "clear", "streamSid": stream_sid,
+            }))
+        except Exception:
+            pass
 
 
 async def _send_media(websocket: WebSocket, stream_sid: str, audio: bytes) -> None:
@@ -264,6 +296,53 @@ async def _greeting_audio(text: str, redis) -> bytes:
         except Exception as exc:
             logger.warning("Greeting cache write failed: %s", exc)
     return audio
+
+
+async def _build_greeting(company_id: str) -> str:
+    """
+    Compose the opening line from the company's own record and inventory.
+
+    Built rather than hardcoded so it stays true per tenant: the name comes from
+    the company, and the places come from the listings actually loaded, so it
+    can never offer to discuss stock that is not there. A company with no
+    listings gets the shorter line instead.
+    """
+    def _fetch():
+        sb = get_supabase_admin()
+        company = (
+            sb.table("companies")
+            .select("name, receptionist_name")
+            .eq("id", company_id).maybe_single().execute()
+        )
+        cities = (
+            sb.table("properties").select("city")
+            .eq("company_id", company_id).limit(200).execute()
+        )
+        return company, cities
+
+    try:
+        company_res, cities_res = await run_in_threadpool(_fetch)
+    except Exception as exc:
+        logger.warning("Greeting build failed (%s) — using a plain opener", exc)
+        return "Hi, thanks for calling. How can I help?"
+
+    company = (company_res.data if company_res else None) or {}
+    ai_name = company.get("receptionist_name") or settings.APP_NAME
+    owner = company.get("name") or ""
+    owner_line = f"I answer the phone for {owner}." if owner else ""
+
+    counts: dict[str, int] = {}
+    for row in (cities_res.data or []):
+        city = (row.get("city") or "").strip()
+        if city:
+            counts[city] = counts.get(city, 0) + 1
+    top = [c for c, _ in sorted(counts.items(), key=lambda kv: -kv[1])[:3]]
+
+    if not top:
+        return CALL_GREETING_NO_STOCK.format(ai_name=ai_name, owner_line=owner_line).strip()
+
+    places = top[0] if len(top) == 1 else ", ".join(top[:-1]) + f" and {top[-1]}"
+    return CALL_GREETING.format(ai_name=ai_name, owner_line=owner_line, places=places).strip()
 
 
 async def _send_tts(
@@ -334,7 +413,12 @@ async def _finalize_call(session, duration: int) -> None:
         lead_payload["notes"] = lead_data["notes"]
 
     if session.lead_id:
-        sb.table("leads").update(lead_payload).eq("id", session.lead_id).execute()
+        # Defence in depth: the session is already company-scoped, but a forged
+        # or stale session id must not be able to write another tenant's lead.
+        (
+            sb.table("leads").update(lead_payload)
+            .eq("id", session.lead_id).eq("company_id", session.company_id).execute()
+        )
         lead_id = session.lead_id
     else:
         # New lead — set source and initial status

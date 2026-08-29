@@ -176,7 +176,7 @@ async def _sync_to_crms(company_id: str, event: str, payload: dict):
                         "refresh_token": encrypt(t.get("refresh_token", stored_refresh)),
                         "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=t.get("expires_in", 3600))).isoformat(),
                         "updated_at": datetime.now(timezone.utc).isoformat(),
-                    }).eq("id", conn["id"]).execute()
+                    }).eq("id", conn["id"]).eq("company_id", company_id).execute()
                 except Exception as exc:
                     logger.warning("CRM token refresh failed for %s/%s: %s", company_id, provider, exc)
                     continue

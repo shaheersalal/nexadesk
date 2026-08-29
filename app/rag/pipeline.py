@@ -96,7 +96,7 @@ async def ingest_file(
             "chunk_count": chunk_count,
             "quality_score": round(quality.score, 2),
             "file_type": meta.file_type,
-        }).eq("id", doc_id).execute()
+        }).eq("id", doc_id).eq("company_id", company_id).execute()
 
         return {
             "doc_id": doc_id,
@@ -109,7 +109,7 @@ async def ingest_file(
         sb.table("documents").update({
             "status": "failed",
             "error_message": str(e)[:500],
-        }).eq("id", doc_id).execute()
+        }).eq("id", doc_id).eq("company_id", company_id).execute()
         raise
 
 

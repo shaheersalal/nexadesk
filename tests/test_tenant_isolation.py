@@ -148,3 +148,74 @@ def test_the_check_can_actually_fail():
     assert _is_scoped(_chain_calls(scoped))
     assert not _is_scoped(_chain_calls(unscoped))
     assert _addresses_a_row(_chain_calls(unscoped))
+
+
+# ── Whole-app enforcement ────────────────────────────────────────────────────
+
+import pathlib  # noqa: E402
+
+APP = pathlib.Path(__file__).resolve().parent.parent / "app"
+
+# Rows that belong to a company through a company_id column.
+CHILD_TABLES = {
+    "leads", "appointments", "conversations", "properties", "documents",
+    "api_keys", "webhook_endpoints", "webhook_logs", "crm_connections",
+}
+
+# Sites where the row key is not a tenant reference and a company filter would
+# be meaningless. Each is listed with the reason, so adding to this set is a
+# decision someone has to justify rather than a way to silence the test.
+ALLOWED = {
+    # webhook_logs row this process just inserted, updated with its delivery
+    # result. The id never leaves the function.
+    ("app/integrations/events.py", "webhook_logs"),
+    # crm_router refreshes tokens on a row it already fetched under a company
+    # filter, keyed by that row's own id.
+    ("app/integrations/crm_router.py", "crm_connections"),
+}
+
+
+def _all_queries():
+    for path in sorted(APP.rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        rel = path.relative_to(APP.parent).as_posix()
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "execute"):
+                continue
+            chain = _chain_calls(node)
+            table = None
+            for method, args in chain:
+                if method == "table" and args and isinstance(args[0], ast.Constant):
+                    table = args[0].value
+                    break
+            if table:
+                yield rel, node.lineno, table, chain
+
+
+def test_no_child_table_row_is_addressed_without_its_company():
+    """
+    Every query that picks a row out of a company-owned table by id must also
+    filter on company_id.
+
+    The backend runs as service-role and bypasses row-level security, so this
+    filter is the entire tenant boundary. Without it, an id is authorisation —
+    and ids travel in request bodies.
+    """
+    offenders = []
+    for rel, line, table, chain in _all_queries():
+        if table not in CHILD_TABLES:
+            continue
+        if not _addresses_a_row(chain) or _is_scoped(chain):
+            continue
+        if any(rel.startswith(p) and table == t for p, t in ALLOWED):
+            continue
+        offenders.append(f"{rel}:{line} -> {table}")
+    assert not offenders, (
+        "Row-addressed queries on company-owned tables with no company_id "
+        "filter:\n  " + "\n  ".join(offenders)
+    )

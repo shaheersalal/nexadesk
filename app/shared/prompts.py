@@ -103,9 +103,11 @@ Extract and return a JSON object with these fields (use null if not mentioned):
 Return ONLY valid JSON. No markdown, no explanation.
 """
 
-CALL_GREETING = """\
-Thank you for calling {company_name}! This is {ai_name}, how can I help you today?\
-"""
+CALL_GREETING = """Hi, I'm {ai_name}. {owner_line} I can talk you through listings in {places}, or how I'm built under the hood. Which would you prefer?"""
+
+# Said instead when the company has no listings loaded yet, so the assistant
+# never offers to discuss inventory that does not exist.
+CALL_GREETING_NO_STOCK = """Hi, I'm {ai_name}. {owner_line} What can I help you with?"""
 
 CHAT_GREETING = """\
 Hi there! I'm {ai_name}, the AI assistant for {company_name}. \

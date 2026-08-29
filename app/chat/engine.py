@@ -94,12 +94,21 @@ async def _persist_turn(
         {"role": "assistant", "content": assistant_msg, "timestamp": now},
     ]
 
-    existing = sb.table("conversations").select("id, transcript").eq("session_id", session_id).execute()
+    # session_id arrives from the client on a public endpoint, so it is only
+    # a hint, never a grant: scope the lookup to the company being addressed.
+    existing = (
+        sb.table("conversations").select("id, transcript")
+        .eq("session_id", session_id).eq("company_id", company_id).execute()
+    )
     if existing.data:
         conv_id = existing.data[0]["id"]
         transcript = existing.data[0].get("transcript") or []
         transcript.extend(turn)
-        sb.table("conversations").update({"transcript": transcript, "language": language}).eq("id", conv_id).execute()
+        (
+            sb.table("conversations")
+            .update({"transcript": transcript, "language": language})
+            .eq("id", conv_id).eq("company_id", company_id).execute()
+        )
     else:
         sb.table("conversations").insert({
             "company_id": company_id,
