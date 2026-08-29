@@ -186,11 +186,7 @@ async def media_stream(websocket: WebSocket, call_sid: str):
                         # Greet only once we know where to send audio.
                         greeting = await _build_greeting(session.company_id)
                         async with speaking:
-                            audio = await _greeting_audio(greeting, redis)
-                            if audio and stream_sid:
-                                await _send_media(websocket, stream_sid, audio)
-                            else:
-                                await _send_tts(websocket, greeting, call_sid, stream_sid)
+                            await _speak_greeting(websocket, stream_sid, greeting, redis)
 
                     elif event_type == "media":
                         await stt.send(base64.b64decode(msg["media"]["payload"]))
@@ -268,34 +264,6 @@ async def _send_media(websocket: WebSocket, stream_sid: str, audio: bytes) -> No
 GREETING_CACHE_TTL = 60 * 60 * 24  # a day; the key changes if the text does
 
 
-async def _greeting_audio(text: str, redis) -> bytes:
-    """
-    The greeting as mulaw, synthesised once per company and then replayed.
-
-    Aura-2 costs roughly 0.22s per word, so this fourteen-word line took ~4s to
-    render — four seconds of dead air at the start of every single call, before
-    the caller has heard anything at all. It is byte-identical on every call to
-    a given company, so it is synthesised once and cached.
-
-    The key is derived from the text, so renaming the company or editing the
-    greeting invalidates it automatically rather than serving the old name.
-    A cache failure is never fatal: it falls through to synthesising live.
-    """
-    key = "greeting_mulaw:" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
-    try:
-        cached = await redis.get(key)
-        if cached:
-            return base64.b64decode(cached)
-    except Exception as exc:
-        logger.warning("Greeting cache read failed (%s) — synthesising live", exc)
-
-    audio = await synthesize_to_mulaw(text)
-    if audio:
-        try:
-            await redis.set(key, base64.b64encode(audio).decode(), ex=GREETING_CACHE_TTL)
-        except Exception as exc:
-            logger.warning("Greeting cache write failed: %s", exc)
-    return audio
 
 
 async def _build_greeting(company_id: str) -> str:
@@ -328,9 +296,6 @@ async def _build_greeting(company_id: str) -> str:
 
     company = (company_res.data if company_res else None) or {}
     ai_name = company.get("receptionist_name") or settings.APP_NAME
-    owner = company.get("name") or ""
-    owner_line = f"I answer the phone for {owner}." if owner else ""
-
     counts: dict[str, int] = {}
     for row in (cities_res.data or []):
         city = (row.get("city") or "").strip()
@@ -339,10 +304,55 @@ async def _build_greeting(company_id: str) -> str:
     top = [c for c, _ in sorted(counts.items(), key=lambda kv: -kv[1])[:3]]
 
     if not top:
-        return CALL_GREETING_NO_STOCK.format(ai_name=ai_name, owner_line=owner_line).strip()
+        return CALL_GREETING_NO_STOCK.format(ai_name=ai_name).strip()
 
     places = top[0] if len(top) == 1 else ", ".join(top[:-1]) + f" and {top[-1]}"
-    return CALL_GREETING.format(ai_name=ai_name, owner_line=owner_line, places=places).strip()
+    return CALL_GREETING.format(ai_name=ai_name, places=places).strip()
+
+
+async def _speak_greeting(websocket, stream_sid, text: str, redis) -> None:
+    """
+    Say the greeting, fast on every call including the first.
+
+    A cache hit replays the rendered audio immediately. A miss streams it
+    instead of waiting for the whole render: the caller hears the opening words
+    in about a second rather than sitting through the full synthesis, and the
+    audio is stored on the way past so the next call is instant.
+
+    Rendering the whole greeting up front cost 9 seconds of silence the first
+    time a company's greeting changed — which is exactly when a real caller is
+    most likely to be on the line, since the text only changes when someone has
+    just edited it.
+    """
+    key = "greeting_mulaw:" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
+
+    try:
+        cached = await redis.get(key)
+        if cached:
+            await _send_media(websocket, stream_sid, base64.b64decode(cached))
+            return
+    except Exception as exc:
+        logger.warning("Greeting cache read failed (%s)", exc)
+
+    async def _one() -> "asyncio.AsyncIterator[str]":
+        yield text
+
+    collected = bytearray()
+    try:
+        async for chunk in speak_tokens(_one()):
+            collected.extend(chunk)
+            await _send_media(websocket, stream_sid, chunk)
+    except Exception as exc:
+        logger.error("Greeting synthesis failed: %s", exc)
+        await _send_tts(websocket, text, "greeting", stream_sid)
+        return
+
+    if collected:
+        try:
+            await redis.set(key, base64.b64encode(bytes(collected)).decode(),
+                            ex=GREETING_CACHE_TTL)
+        except Exception:
+            pass
 
 
 async def _send_tts(

@@ -103,11 +103,14 @@ Extract and return a JSON object with these fields (use null if not mentioned):
 Return ONLY valid JSON. No markdown, no explanation.
 """
 
-CALL_GREETING = """Hi, I'm {ai_name}. {owner_line} I can talk you through listings in {places}, or how I'm built under the hood. Which would you prefer?"""
+# Deliberately short. Spoken time is roughly 0.4s per word, and a caller who
+# has to sit through a paragraph before saying anything has already formed an
+# opinion. It names itself, sets the two things worth asking about, and stops.
+CALL_GREETING = """Hi, I'm {ai_name}. Ask me about listings in {places}, or about how I'm built."""
 
 # Said instead when the company has no listings loaded yet, so the assistant
 # never offers to discuss inventory that does not exist.
-CALL_GREETING_NO_STOCK = """Hi, I'm {ai_name}. {owner_line} What can I help you with?"""
+CALL_GREETING_NO_STOCK = """Hi, I'm {ai_name}. How can I help?"""
 
 CHAT_GREETING = """\
 Hi there! I'm {ai_name}, the AI assistant for {company_name}. \
