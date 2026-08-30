@@ -226,13 +226,11 @@ def test_no_child_table_row_is_addressed_without_its_company():
 # Routes that legitimately act as the system rather than as their caller. Each
 # needs a reason; the point of the list is that adding to it is a decision.
 SERVICE_ROLE_ALLOWED = {
-    # `companies` carries a SELECT policy only, so an INSERT or UPDATE as the
-    # caller is refused by the database. migrations/0004_companies_write_policies.sql
-    # adds them; once it is applied to live Supabase these three move to RlsDb
-    # and come off this list.
-    ("app/companies/router.py", "update_my_company"),
+    # Calls auth.admin.invite_user_by_email, which a caller-scoped client cannot
+    # do, and rolls back by deleting the company it just created — which
+    # migration 0004 deliberately does not permit. The INSERT would pass RLS;
+    # the rest of the function is what keeps it here.
     ("app/companies/router.py", "create_child_company"),
-    ("app/onboarding/router.py", "onboarding_complete"),
     # Cross-tenant by design, gated on a single admin uid: triage of inbound
     # access requests and issuing invites.
     ("app/admin/router.py", "list_requests"),

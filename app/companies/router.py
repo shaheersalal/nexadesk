@@ -10,14 +10,9 @@ router = APIRouter()
 
 
 @router.patch("/me")
-async def update_my_company(body: CompanyUpdate, company_id: CompanyId, current_user: CurrentUser):
-    # Service-role on purpose: `companies` carries a SELECT policy only, so an
-    # UPDATE as the caller is refused by the database. Adding write policies is
-    # the proper fix and needs a migration; until then the company_id filter
-    # below is the boundary, and it comes from the verified session rather than
-    # from the request.
+async def update_my_company(body: CompanyUpdate, db: RlsDb, company_id: CompanyId, current_user: CurrentUser):
     payload = body.model_dump(exclude_unset=True)
-    sb = get_supabase_admin()
+    sb = db
     result = sb.table("companies").update(payload).eq("id", company_id).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -44,9 +39,12 @@ async def list_accessible_companies(
 
 
 @router.post("/child", status_code=status.HTTP_201_CREATED)
-# Service-role: creating a company means writing a row the caller cannot yet be
-# scoped to, and `companies` has no INSERT policy. The parent relationship is
-# validated in code.
+# Service-role, and it has to be: this calls auth.admin.invite_user_by_email,
+# which is not available to a caller-scoped client, and its rollback path
+# deletes the company it just made — which migration 0004 deliberately does not
+# permit, since deleting a company orphans its leads, conversations, properties
+# and documents. The INSERT itself would pass RLS; the rest of the function is
+# what keeps it here.
 async def create_child_company(
     body: ChildCompanyCreate,
     company_id: CompanyId,

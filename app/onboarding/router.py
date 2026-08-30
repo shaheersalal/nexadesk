@@ -4,7 +4,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.auth.middleware import CurrentUser, CompanyId
-from app.dependencies import get_supabase_admin
+from app.dependencies import RlsDb
 
 router = APIRouter()
 
@@ -38,10 +38,11 @@ async def onboarding_options():
 @router.post("/complete")
 async def onboarding_complete(
     body: OnboardingCompleteRequest,
+    db: RlsDb,
     company_id: CompanyId,
     current_user: CurrentUser,
 ):
-    sb = get_supabase_admin()
+    sb = db
     receptionist_name = (body.receptionist_name or "").strip() or "Nexa"
 
     update_payload = {
