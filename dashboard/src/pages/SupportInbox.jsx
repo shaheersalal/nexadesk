@@ -107,7 +107,7 @@ export default function SupportInbox() {
 
       {/* Thread list — hidden on mobile when viewing a thread */}
       <div className={`
-        w-full md:w-72 border-r border-gray-200 flex flex-col bg-white flex-shrink-0
+        w-full md:w-72 border-r border-gray-200 flex flex-col bg-surface flex-shrink-0
         ${mobileView === 'thread' ? 'hidden md:flex' : 'flex'}
       `}>
         <div className="px-5 py-5 border-b border-gray-100">
@@ -154,7 +154,7 @@ export default function SupportInbox() {
           flex-1 flex flex-col min-h-0
           ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}
         `}>
-          <div className="px-4 md:px-6 py-4 border-b border-gray-200 bg-white flex items-center gap-3 flex-shrink-0">
+          <div className="px-4 md:px-6 py-4 border-b border-gray-200 bg-surface flex items-center gap-3 flex-shrink-0">
             <button onClick={handleBack} className="md:hidden text-gray-400 hover:text-gray-600 mr-1">
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -172,7 +172,7 @@ export default function SupportInbox() {
                   <div className={`max-w-xs md:max-w-sm px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
                     msg.sender_role === 'admin'
                       ? 'bg-accent text-white rounded-br-sm'
-                      : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'
+                      : 'bg-surface border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'
                   }`}>
                     {msg.content}
                   </div>
@@ -185,7 +185,7 @@ export default function SupportInbox() {
             <div ref={bottomRef} />
           </div>
 
-          <form onSubmit={sendReply} className="px-4 md:px-6 py-4 bg-white border-t border-gray-200 flex gap-3 flex-shrink-0">
+          <form onSubmit={sendReply} className="px-4 md:px-6 py-4 bg-surface border-t border-gray-200 flex gap-3 flex-shrink-0">
             <input
               value={reply}
               onChange={e => setReply(e.target.value)}

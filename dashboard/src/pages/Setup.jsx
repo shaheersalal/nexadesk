@@ -42,10 +42,10 @@ function SetPasswordScreen({ meta, onDone }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-navy-600 to-navy-700 flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-10 w-full max-w-md">
+      <div className="bg-surface rounded-2xl shadow-2xl p-8 md:p-10 w-full max-w-md">
         <div className="flex items-center gap-2 mb-8">
           <div className="w-8 h-8 bg-navy-600 rounded-lg flex items-center justify-center">
-            <Phone className="w-4 h-4 text-accent" />
+            <Phone className="w-4 h-4 text-accent-ink" />
           </div>
           <span className="font-semibold text-gray-900">NexaDesk</span>
         </div>
@@ -213,7 +213,7 @@ export default function Setup() {
   if (stage === 'done') {
     return (
       <div className="min-h-screen bg-navy-600 flex items-center justify-center px-6">
-        <div className="bg-white rounded-2xl shadow-xl p-10 max-w-md w-full text-center">
+        <div className="bg-surface rounded-2xl shadow-xl p-10 max-w-md w-full text-center">
           <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-5">
             <CheckCircle className="w-8 h-8 text-green-500" />
           </div>
@@ -239,7 +239,7 @@ export default function Setup() {
       <div className="h-14 bg-navy-600 flex items-center justify-between px-6 flex-shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 bg-navy-700 rounded-lg flex items-center justify-center">
-            <Phone className="w-3.5 h-3.5 text-accent" />
+            <Phone className="w-3.5 h-3.5 text-accent-ink" />
           </div>
           <span className="text-white font-semibold">NexaDesk</span>
         </div>
@@ -249,10 +249,10 @@ export default function Setup() {
       </div>
 
       <div className="flex-1 flex items-center justify-center px-4 py-10">
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 w-full max-w-lg">
+        <form onSubmit={handleSubmit} className="bg-surface rounded-2xl border border-gray-200 shadow-sm p-8 w-full max-w-lg">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-9 h-9 rounded-full bg-navy-600 flex items-center justify-center flex-shrink-0">
-              <Sparkles className="w-4 h-4 text-accent" />
+              <Sparkles className="w-4 h-4 text-accent-ink" />
             </div>
             <div>
               <p className="text-sm font-semibold text-gray-900">Two quick questions</p>

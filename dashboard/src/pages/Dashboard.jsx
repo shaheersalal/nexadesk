@@ -8,9 +8,9 @@ import EmptyState from '../components/EmptyState'
 
 function reqIcon(notes) {
   if (!notes) return { icon: MessageSquare, color: 'text-gray-400 bg-gray-50', label: 'Inquiry' }
-  if (notes.startsWith('[MAINTENANCE]')) return { icon: Wrench, color: 'text-orange-500 bg-orange-50', label: 'Maintenance' }
-  if (notes.startsWith('[LEASE RENEWAL]')) return { icon: RefreshCw, color: 'text-purple-500 bg-purple-50', label: 'Lease Renewal' }
-  return { icon: ShoppingBag, color: 'text-accent bg-accent/10', label: 'Buyer Inquiry' }
+  if (notes.startsWith('[MAINTENANCE]')) return { icon: Wrench, color: 'text-orange-700 bg-orange-50', label: 'Maintenance' }
+  if (notes.startsWith('[LEASE RENEWAL]')) return { icon: RefreshCw, color: 'text-purple-700 bg-purple-50', label: 'Lease Renewal' }
+  return { icon: ShoppingBag, color: 'text-accent-ink bg-accent/10', label: 'Buyer Inquiry' }
 }
 
 function timeAgo(iso) {
@@ -35,12 +35,12 @@ function LiveFeedItem({ item }) {
       className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors group"
     >
       <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
-        isVoice ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-500'
+        isVoice ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'
       }`}>
         {isVoice ? <Phone className="w-3.5 h-3.5" /> : <MessageSquare className="w-3.5 h-3.5" />}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-800 truncate group-hover:text-accent">
+        <p className="text-sm font-medium text-gray-800 truncate group-hover:text-accent-ink">
           {item.lead_name || (isVoice ? 'Incoming call' : 'New chat')}
         </p>
         <p className="text-xs text-gray-400 capitalize">{item.channel}</p>
@@ -173,7 +173,7 @@ export default function Dashboard() {
                   className="flex items-center justify-between gap-2 py-2 border-b border-gray-50 last:border-0 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors group"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate group-hover:text-accent">{lead.name || 'Unknown'}</p>
+                    <p className="text-sm font-medium text-gray-800 truncate group-hover:text-accent-ink">{lead.name || 'Unknown'}</p>
                     <p className="text-xs text-gray-400">{timeAgo(lead.created_at)}</p>
                   </div>
                   <ScoreBadge score={lead.score} />
@@ -219,7 +219,7 @@ export default function Dashboard() {
         {/* Today's appointments */}
         <div className="card">
           <h2 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-            <CalendarDays className="w-4 h-4 text-accent" />
+            <CalendarDays className="w-4 h-4 text-accent-ink" />
             Today's Appointments
           </h2>
           {todaysAppointments.length === 0 ? (
@@ -239,7 +239,7 @@ export default function Dashboard() {
                   className="flex items-center justify-between gap-2 py-2 border-b border-gray-50 last:border-0 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors group"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate group-hover:text-accent">{appt.leads?.name || 'Unknown lead'}</p>
+                    <p className="text-sm font-medium text-gray-800 truncate group-hover:text-accent-ink">{appt.leads?.name || 'Unknown lead'}</p>
                     <p className="text-xs text-gray-400">{appt.properties?.title || appt.type}</p>
                   </div>
                   <p className="text-xs font-medium text-gray-700 flex-shrink-0">
@@ -269,7 +269,7 @@ export default function Dashboard() {
                     <Icon className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate group-hover:text-accent">{lead.name}</p>
+                    <p className="text-sm font-medium text-gray-800 truncate group-hover:text-accent-ink">{lead.name}</p>
                     <p className="text-xs text-gray-400">{label} · {conv?.channel || 'voice'}</p>
                     {lead.notes && (
                       <p className="text-xs text-gray-400 truncate mt-0.5">

@@ -121,13 +121,13 @@ export default function DiscountChat({ plan, onClose }) {
       onClick={onClose}
     >
       <div
-        className="bg-white w-full sm:w-96 h-[520px] rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+        className="bg-surface w-full sm:w-96 h-[520px] rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 bg-navy-600 flex-shrink-0">
           <div className="flex items-center gap-2">
-            <Tag className="w-4 h-4 text-accent" />
+            <Tag className="w-4 h-4 text-accent-ink" />
             <div>
               <p className="text-sm font-semibold text-white">Nexa — Pricing</p>
               <p className="text-xs text-gray-400 mt-0.5">
@@ -150,7 +150,7 @@ export default function DiscountChat({ plan, onClose }) {
                     ? 'bg-accent text-white rounded-br-sm'
                     : m.isConfirmation
                     ? 'bg-green-50 border border-green-200 text-green-800 rounded-bl-sm'
-                    : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'
+                    : 'bg-surface border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'
                 }`}
               >
                 {m.text}
@@ -182,7 +182,7 @@ export default function DiscountChat({ plan, onClose }) {
 
           {loading && (
             <div className="flex justify-start">
-              <div className="flex gap-1 px-3 py-2.5 bg-white border border-gray-200 rounded-2xl rounded-bl-sm shadow-sm">
+              <div className="flex gap-1 px-3 py-2.5 bg-surface border border-gray-200 rounded-2xl rounded-bl-sm shadow-sm">
                 {[0, 1, 2].map(i => (
                   <span key={i} className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce"
                     style={{ animationDelay: `${i * 0.15}s` }} />
@@ -194,7 +194,7 @@ export default function DiscountChat({ plan, onClose }) {
         </div>
 
         {/* Input */}
-        <form onSubmit={handleSend} className="px-4 py-3 border-t border-gray-100 bg-white flex gap-2 flex-shrink-0">
+        <form onSubmit={handleSend} className="px-4 py-3 border-t border-gray-100 bg-surface flex gap-2 flex-shrink-0">
           <input
             value={input}
             onChange={e => setInput(e.target.value)}

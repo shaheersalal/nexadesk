@@ -13,8 +13,8 @@ const STATUS_COLORS = {
   scheduled:  'bg-blue-50 text-blue-700',
   confirmed:  'bg-green-50 text-green-700',
   completed:  'bg-gray-100 text-gray-500',
-  cancelled:  'bg-red-50 text-red-500',
-  no_show:    'bg-orange-50 text-orange-600',
+  cancelled:  'bg-red-50 text-red-700',
+  no_show:    'bg-orange-50 text-orange-700',
 }
 
 export default function Appointments() {
@@ -67,7 +67,7 @@ export default function Appointments() {
       {/* Form modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+          <div className="bg-surface rounded-2xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between p-6 border-b border-gray-100">
               <h2 className="text-lg font-semibold">Schedule Appointment</h2>
               <button onClick={() => setShowForm(false)}><X className="w-5 h-5 text-gray-400" /></button>
@@ -158,7 +158,7 @@ export default function Appointments() {
           {appointments.map((appt) => (
             <div key={appt.id} className="card flex flex-wrap items-start gap-4">
               <div className="text-center flex-shrink-0 w-16">
-                <p className="text-xs font-semibold text-accent">{dateLabel(appt.datetime)}</p>
+                <p className="text-xs font-semibold text-accent-ink">{dateLabel(appt.datetime)}</p>
                 <p className="text-lg font-bold text-gray-900">
                   {format(new Date(appt.datetime), 'h:mm')}
                 </p>

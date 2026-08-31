@@ -2,21 +2,242 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Theme tokens, shared with the landing page.
+ *
+ * The dashboard had 574 hardcoded colour utilities (bg-white, text-gray-900,
+ * border-gray-200 …) and no dark mode at all, while the landing already ran a
+ * token system that follows the system setting. Signing in therefore threw the
+ * visitor from a warm, theme-aware surface into a fixed cold-grey one.
+ *
+ * Rather than add a `dark:` variant to all 574 — which is a lot of hand edits
+ * and a lot of chances to miss one — the palette itself is redefined. Tailwind's
+ * grey scale now resolves to these variables, and `bg-white` was renamed to
+ * `bg-surface` (see tailwind.config.js), so every existing utility becomes
+ * theme-aware without touching a single page.
+ *
+ * `white` itself stays literally white. It is used throughout as white-on-a-
+ * coloured-fill — button labels, the sidebar wordmark, translucent overlays —
+ * and remapping it made all of those vanish against their dark backgrounds.
+ *
+ * The ramp is therefore semantic, not literal: `surface` means "raised panel",
+ * `gray-50` means "app background", `gray-900` means "primary text". In dark
+ * mode those roles keep their meaning and the underlying values invert. Using a
+ * grey utility to mean an actual grey — a neutral chip, say — will follow the
+ * theme too, which is nearly always what you want here.
+ *
+ * Values are raw RGB triplets so Tailwind's slash-opacity syntax keeps working
+ * (bg-black/50, border-gray-200/60 …).
+ */
+
+:root {
+  /* Surfaces — light. Matches the landing's dawn field. */
+  --c-surface:  255 255 255;   /* raised panel: cards, inputs, modals */
+  --c-gray-50:  247 249 252;   /* app background */
+  --c-gray-100: 238 241 248;   /* subtle fill, table stripes */
+  --c-gray-200: 224 228 238;   /* hairlines, borders */
+  --c-gray-300: 203 209 223;   /* stronger borders, disabled edges */
+  --c-gray-400: 104 112 132;   /* muted text — held at AA, not decorative */
+  --c-gray-500:  95 103 122;   /* secondary text */
+  --c-gray-600:  79  87 106;   /* body text */
+  --c-gray-700:  56  63  81;   /* strong body */
+  --c-gray-800:  31  37  54;   /* headings */
+  --c-gray-900:  15  20  36;   /* primary text — the landing's ink */
+
+  /* The sidebar keeps its own ink so it reads as a distinct plane in both
+     themes rather than dissolving into the page in dark mode. */
+  --c-navy-600:  17  23  42;
+  --c-navy-700:  27  34  56;
+
+  --c-accent:      168  87  40;   /* accent text — AA on light surfaces */
+  --c-accent-cta:  179  95  46;   /* button fill — constant across themes */
+  --c-accent-soft: 232 168 124;
+  --c-accent-ink-h: 143  71  30;  /* accent text, hover — darker on light */
+
+  /* Status hues.
+     The same fill/text split as the grey ramp: 50-300 are fills and hairlines,
+     700-900 is text laid on them. In dark mode the fills become the hue mixed
+     down into the surface and the text mirrors up the ramp, so a chip stays a
+     chip instead of a bright card-coloured slab on a dark page.
+     400-600 are pinned to their literal values in tailwind.config.js — those
+     are status dots, the record button and the toasts, and several carry a
+     white glyph that a lighter fill would strand. */
+  --c-red-50:       254 242 242;
+  --c-red-100:      254 226 226;
+  --c-red-200:      254 202 202;
+  --c-red-300:      252 165 165;
+  --c-red-700:      185  28  28;
+  --c-red-800:      153  27  27;
+  --c-red-900:      127  29  29;
+  --c-orange-50:    255 247 237;
+  --c-orange-100:   255 237 213;
+  --c-orange-200:   254 215 170;
+  --c-orange-300:   253 186 116;
+  --c-orange-700:   194  65  12;
+  --c-orange-800:   154  52  18;
+  --c-orange-900:   124  45  18;
+  --c-amber-50:     255 251 235;
+  --c-amber-100:    254 243 199;
+  --c-amber-200:    253 230 138;
+  --c-amber-300:    252 211  77;
+  --c-amber-700:    180  83   9;
+  --c-amber-800:    146  64  14;
+  --c-amber-900:    120  53  15;
+  --c-yellow-50:    254 252 232;
+  --c-yellow-100:   254 249 195;
+  --c-yellow-200:   254 240 138;
+  --c-yellow-300:   253 224  71;
+  --c-yellow-700:   161  98   7;
+  --c-yellow-800:   133  77  14;
+  --c-yellow-900:   113  63  18;
+  --c-green-50:     240 253 244;
+  --c-green-100:    220 252 231;
+  --c-green-200:    187 247 208;
+  --c-green-300:    134 239 172;
+  --c-green-700:     21 128  61;
+  --c-green-800:     22 101  52;
+  --c-green-900:     20  83  45;
+  --c-emerald-50:   236 253 245;
+  --c-emerald-100:  209 250 229;
+  --c-emerald-200:  167 243 208;
+  --c-emerald-300:  110 231 183;
+  --c-emerald-700:    4 120  87;
+  --c-emerald-800:    6  95  70;
+  --c-emerald-900:    6  78  59;
+  --c-teal-50:      240 253 250;
+  --c-teal-100:     204 251 241;
+  --c-teal-200:     153 246 228;
+  --c-teal-300:      94 234 212;
+  --c-teal-700:      15 118 110;
+  --c-teal-800:      17  94  89;
+  --c-teal-900:      19  78  74;
+  --c-blue-50:      239 246 255;
+  --c-blue-100:     219 234 254;
+  --c-blue-200:     191 219 254;
+  --c-blue-300:     147 197 253;
+  --c-blue-700:      29  78 216;
+  --c-blue-800:      30  64 175;
+  --c-blue-900:      30  58 138;
+  --c-purple-50:    250 245 255;
+  --c-purple-100:   243 232 255;
+  --c-purple-200:   233 213 255;
+  --c-purple-300:   216 180 254;
+  --c-purple-700:   126  34 206;
+  --c-purple-800:   107  33 168;
+  --c-purple-900:    88  28 135;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --c-surface:    16  22  42;   /* raised panel, lifted off the background */
+    --c-gray-50:     7  10  20;   /* app background — the landing's night sky */
+    --c-gray-100:   23  30  52;
+    --c-gray-200:   38  46  71;   /* hairlines: lighter than the surface now */
+    --c-gray-300:   54  63  90;
+    --c-gray-400:  142 151 172;
+    --c-gray-500:  162 170 190;
+    --c-gray-600:  178 186 204;
+    --c-gray-700:  205 212 226;
+    --c-gray-800:  228 233 243;
+    --c-gray-900:  242 244 249;   /* primary text — the landing's dark-mode ink */
+
+    --c-navy-600:   11  16  32;
+    --c-navy-700:   24  31  52;
+
+    --c-accent:    240 177 132;   /* lightened for AA on dark surfaces */
+    --c-accent-cta: 179  95  46;  /* unchanged: white text needs a fixed fill */
+    --c-accent-soft: 232 168 124;
+    --c-accent-ink-h: 250 212 184;  /* …and lighter on dark, not darker */
+  --c-accent-ink-h: 143  71  30;  /* accent text, hover — darker on light */
+
+    --c-red-50:        34  26  44;
+    --c-red-100:       45  28  45;
+    --c-red-200:       61  31  47;
+    --c-red-300:       87  37  50;
+    --c-red-700:      252 165 165;
+    --c-red-800:      254 202 202;
+    --c-red-900:      254 226 226;
+    --c-orange-50:     35  29  40;
+    --c-orange-100:    46  34  39;
+    --c-orange-200:    63  41  38;
+    --c-orange-300:    91  52  36;
+    --c-orange-700:   253 186 116;
+    --c-orange-800:   254 215 170;
+    --c-orange-900:   255 237 213;
+    --c-amber-50:      34  33  40;
+    --c-amber-100:     46  40  38;
+    --c-amber-200:     62  49  36;
+    --c-amber-300:     89  66  32;
+    --c-amber-700:    252 211  77;
+    --c-amber-800:    253 230 138;
+    --c-amber-900:    254 243 199;
+    --c-yellow-50:     33  35  39;
+    --c-yellow-100:    44  42  38;
+    --c-yellow-200:    60  53  35;
+    --c-yellow-300:    86  72  31;
+    --c-yellow-700:   253 224  71;
+    --c-yellow-800:   254 240 138;
+    --c-yellow-900:   254 249 195;
+    --c-green-50:      17  36  46;
+    --c-green-100:     18  45  49;
+    --c-green-200:     20  57  52;
+    --c-green-300:     22  78  59;
+    --c-green-700:    134 239 172;
+    --c-green-800:    187 247 208;
+    --c-green-900:    220 252 231;
+    --c-emerald-50:    16  35  49;
+    --c-emerald-100:   16  43  53;
+    --c-emerald-200:   16  55  59;
+    --c-emerald-300:   16  74  70;
+    --c-emerald-700:  110 231 183;
+    --c-emerald-800:  167 243 208;
+    --c-emerald-900:  209 250 229;
+    --c-teal-50:       16  35  52;
+    --c-teal-100:      17  43  58;
+    --c-teal-200:      17  54  67;
+    --c-teal-300:      17  74  82;
+    --c-teal-700:      94 234 212;
+    --c-teal-800:     153 246 228;
+    --c-teal-900:     204 251 241;
+    --c-blue-50:       19  31  58;
+    --c-blue-100:      22  36  69;
+    --c-blue-200:      25  44  83;
+    --c-blue-300:      30  57 107;
+    --c-blue-700:     147 197 253;
+    --c-blue-800:     191 219 254;
+    --c-blue-900:     219 234 254;
+    --c-purple-50:     28  27  58;
+    --c-purple-100:    36  30  69;
+    --c-purple-200:    46  35  83;
+    --c-purple-300:    65  42 108;
+    --c-purple-700:   216 180 254;
+    --c-purple-800:   233 213 255;
+    --c-purple-900:   243 232 255;
+  }
+}
+
 @layer base {
   body {
     @apply font-sans bg-gray-50 text-gray-900 antialiased;
+  }
+
+  /* Native controls (scrollbars, form widgets) follow the theme too, otherwise
+     a dark page gets a bright scrollbar bolted to the side of it. */
+  :root { color-scheme: light; }
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme: dark; }
   }
 }
 
 @layer components {
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-6;
+    @apply bg-surface rounded-xl shadow-sm border border-gray-200 p-6;
   }
   .btn-primary {
     @apply bg-accent hover:bg-accent-dark text-white font-medium px-4 py-2 rounded-lg transition-colors;
   }
   .btn-secondary {
-    @apply bg-white hover:bg-gray-50 text-gray-700 font-medium px-4 py-2 rounded-lg border border-gray-200 transition-colors;
+    @apply bg-surface hover:bg-gray-100 text-gray-700 font-medium px-4 py-2 rounded-lg border border-gray-200 transition-colors;
   }
   .status-pill {
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;

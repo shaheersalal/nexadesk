@@ -7,7 +7,7 @@ const ACCEPT = '.pdf,.docx,.doc,.txt,.csv,.xlsx,.pptx,.png,.jpg,.jpeg,.html'
 
 function QualityBadge({ score }) {
   const pct = Math.round(score * 100)
-  const color = pct >= 70 ? 'text-green-600' : pct >= 40 ? 'text-yellow-600' : 'text-red-500'
+  const color = pct >= 70 ? 'text-green-700' : pct >= 40 ? 'text-yellow-600' : 'text-red-500'
   return <span className={`text-xs font-medium ${color}`}>{pct}% quality</span>
 }
 
@@ -23,7 +23,7 @@ function Toast({ message, onDone }) {
     return () => clearTimeout(t)
   }, [onDone])
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-gray-900 text-white text-sm px-5 py-3 rounded-xl shadow-lg">
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-inverse text-white text-sm px-5 py-3 rounded-xl shadow-lg">
       <CheckCheck className="w-4 h-4 text-green-400 flex-shrink-0" />
       {message}
     </div>
@@ -206,7 +206,7 @@ export default function Knowledge() {
             dragging ? 'border-accent bg-accent/5' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
           }`}
         >
-          <Upload className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+          <Upload className="w-8 h-8 text-gray-400 mx-auto mb-3" />
           <p className="text-sm text-gray-500 font-medium">Drag & drop files here, or click to browse</p>
           <p className="text-xs text-gray-400 mt-1">
             Export your listings as CSV/Excel from your portal account, or just snap a photo of a printed listing sheet — Nexa reads both.
@@ -245,7 +245,7 @@ export default function Knowledge() {
           <div className="flex-1">
             {transcribing ? (
               <div className="flex items-center gap-2 text-sm text-gray-500">
-                <Loader className="w-4 h-4 animate-spin text-accent" />
+                <Loader className="w-4 h-4 animate-spin text-accent-ink" />
                 Transcribing and indexing your voice note…
               </div>
             ) : recording ? (
@@ -325,27 +325,27 @@ export default function Knowledge() {
           <div className="space-y-2">
             {documents.map((doc) => (
               <div key={doc.id} className="flex items-center gap-4 py-2.5 border-b border-gray-50 last:border-0">
-                <FileText className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-gray-700 font-medium truncate">{doc.filename}</p>
                   <div className="flex items-center gap-3 mt-0.5">
                     <span className="text-xs text-gray-400 capitalize">{doc.category}</span>
                     {doc.chunk_count > 0 && (
                       <>
-                        <span className="text-xs text-gray-300">·</span>
+                        <span className="text-xs text-gray-400">·</span>
                         <span className="text-xs text-gray-400">{doc.chunk_count} chunks</span>
                       </>
                     )}
                     {doc.quality_score != null && (
                       <>
-                        <span className="text-xs text-gray-300">·</span>
+                        <span className="text-xs text-gray-400">·</span>
                         <QualityBadge score={doc.quality_score} />
                       </>
                     )}
                   </div>
                 </div>
                 <StatusIcon status={doc.status} />
-                <button onClick={() => handleDelete(doc.id)} className="text-gray-300 hover:text-red-400 transition-colors">
+                <button onClick={() => handleDelete(doc.id)} className="text-gray-400 hover:text-red-400 transition-colors">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>

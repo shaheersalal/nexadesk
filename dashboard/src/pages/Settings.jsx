@@ -163,7 +163,7 @@ export default function Settings() {
         <p className="text-xs text-gray-400 mb-3">
           Copy this snippet and paste it before the closing &lt;/body&gt; tag on your website.
         </p>
-        <div className="bg-gray-900 rounded-lg p-4 relative">
+        <div className="bg-inverse rounded-lg p-4 relative">
           <pre className="text-xs text-green-400 overflow-x-auto whitespace-pre-wrap">{widgetCode}</pre>
           <button
             onClick={copyWidget}
@@ -183,7 +183,7 @@ export default function Settings() {
         <p className="text-xs text-gray-400 mb-3">
           Forward or CC any email with a listing sheet, CSV/Excel export, or photo attached to this address — Nexa reads it automatically. No setup needed on your end.
         </p>
-        <div className="bg-gray-900 rounded-lg p-4 relative">
+        <div className="bg-inverse rounded-lg p-4 relative">
           <pre className="text-xs text-green-400 overflow-x-auto whitespace-pre-wrap">{listingsAddress}</pre>
           <button
             onClick={copyListingsAddress}

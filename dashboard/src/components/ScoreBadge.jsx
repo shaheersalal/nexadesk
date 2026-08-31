@@ -4,7 +4,7 @@
 export function scoreTier(score) {
   if (score >= 70) return { dot: 'bg-green-500', text: 'text-green-700', bg: 'bg-green-50', ring: 'bg-green-500' }
   if (score >= 40) return { dot: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50', ring: 'bg-amber-400' }
-  return { dot: 'bg-red-500', text: 'text-red-600', bg: 'bg-red-50', ring: 'bg-red-400' }
+  return { dot: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50', ring: 'bg-red-400' }
 }
 
 export default function ScoreBadge({ score, size = 'sm' }) {

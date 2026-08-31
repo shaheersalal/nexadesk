@@ -25,7 +25,7 @@ const STATUS_COLORS = {
   active:     'bg-green-50 text-green-700 border-green-200',
   pending:    'bg-amber-50 text-amber-700 border-amber-200',
   sold:       'bg-gray-100 text-gray-500 border-gray-200',
-  off_market: 'bg-red-50 text-red-600 border-red-200',
+  off_market: 'bg-red-50 text-red-700 border-red-200',
 }
 
 const TYPE_LABELS = {
@@ -95,7 +95,7 @@ function PropertyModal({ property, onClose, onSave }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-surface rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-100">
           <h2 className="text-lg font-semibold text-gray-900">
             {property?.id ? 'Edit Property' : 'Add Property'}
@@ -147,7 +147,7 @@ function PropertyCard({ property, index, onEdit, onDelete }) {
   const desc = property.description?.slice(0, 100)
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow group">
+    <div className="bg-surface rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow group">
       {/* Photo */}
       <div className="relative h-44 overflow-hidden bg-gray-100">
         <img
@@ -162,14 +162,14 @@ function PropertyCard({ property, index, onEdit, onDelete }) {
 
         {/* Status badge over image */}
         <div className="absolute top-3 left-3">
-          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border backdrop-blur-sm bg-white/90 ${STATUS_COLORS[property.status] || 'bg-gray-100 text-gray-500'}`}>
+          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border backdrop-blur-sm ${STATUS_COLORS[property.status] || 'bg-gray-100 text-gray-500'}`}>
             {property.status?.replace('_', ' ')}
           </span>
         </div>
 
         {/* Type badge */}
         <div className="absolute top-3 right-3">
-          <span className="text-xs font-medium px-2 py-1 rounded-full bg-black/50 text-white backdrop-blur-sm">
+          <span className="text-xs font-medium px-2 py-1 rounded-full bg-black/60 text-white backdrop-blur-sm">
             {TYPE_LABELS[property.property_type] || property.property_type}
           </span>
         </div>
@@ -241,7 +241,7 @@ function PropertyCard({ property, index, onEdit, onDelete }) {
             </button>
             <button
               onClick={() => onDelete(property.id)}
-              className="flex items-center gap-1 text-xs text-red-300 hover:text-red-500 transition-colors"
+              className="flex items-center gap-1 text-xs text-red-700 hover:text-red-800 transition-colors"
             >
               <Trash2 className="w-3.5 h-3.5" /> Delete
             </button>
@@ -304,7 +304,7 @@ export default function Properties() {
             key={f}
             onClick={() => setFilter(f)}
             className={`px-4 py-1.5 rounded-md text-sm font-medium capitalize transition-colors ${
-              filter === f ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              filter === f ? 'bg-surface text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}
           >
             {f} <span className="text-xs opacity-60">({counts[f]})</span>

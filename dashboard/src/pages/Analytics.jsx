@@ -7,12 +7,12 @@ function StatCard({ icon: Icon, label, value, sub, color = 'accent' }) {
   return (
     <div className="card flex items-start gap-4">
       <div className={`p-2.5 rounded-xl ${color === 'accent' ? 'bg-accent/10' : 'bg-blue-50'}`}>
-        <Icon className={`w-5 h-5 ${color === 'accent' ? 'text-accent' : 'text-blue-500'}`} />
+        <Icon className={`w-5 h-5 ${color === 'accent' ? 'text-accent-ink' : 'text-blue-500'}`} />
       </div>
       <div>
         <p className="text-2xl font-semibold text-gray-900">{value}</p>
         <p className="text-sm text-gray-500">{label}</p>
-        {sub && <p className="text-xs text-green-600 mt-0.5">{sub}</p>}
+        {sub && <p className="text-xs text-green-700 mt-0.5">{sub}</p>}
       </div>
     </div>
   )

@@ -19,9 +19,9 @@ function LeadCard({ lead, onStatusChange }) {
     : <MessageSquare className="w-3 h-3" />
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm hover:shadow-md transition-shadow">
+    <div className="bg-surface rounded-xl border border-gray-100 p-4 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between mb-2">
-        <Link to={`/dashboard/leads/${lead.id}`} className="font-medium text-gray-900 text-sm hover:text-accent">
+        <Link to={`/dashboard/leads/${lead.id}`} className="font-medium text-gray-900 text-sm hover:text-accent-ink">
           {lead.name || 'Unknown'}
         </Link>
         <span className="flex items-center gap-1 text-xs text-gray-400">{sourceIcon}{lead.source}</span>
@@ -34,7 +34,7 @@ function LeadCard({ lead, onStatusChange }) {
         <select
           value={lead.status}
           onChange={(e) => onStatusChange(lead.id, e.target.value)}
-          className="text-xs border border-gray-100 rounded-md px-1.5 py-0.5 text-gray-500 bg-white focus:outline-none"
+          className="text-xs border border-gray-100 rounded-md px-1.5 py-0.5 text-gray-500 bg-surface focus:outline-none"
           onClick={(e) => e.stopPropagation()}
         >
           {COLUMNS.map((c) => (

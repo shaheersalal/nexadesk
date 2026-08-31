@@ -79,10 +79,10 @@ export default function AdminPanel() {
       )}
 
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+      <div className="bg-surface border-b border-gray-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-navy-600 rounded-lg flex items-center justify-center">
-            <Phone className="w-4 h-4 text-accent" />
+            <Phone className="w-4 h-4 text-accent-ink" />
           </div>
           <div>
             <span className="font-semibold text-gray-900">NexaDesk</span>
@@ -105,7 +105,7 @@ export default function AdminPanel() {
             { label: 'Pending',        value: requests.filter(r => r.status === 'pending').length,  icon: Clock,       color: 'text-yellow-600' },
             { label: 'Invited',        value: requests.filter(r => r.status === 'invited').length,  icon: Send,        color: 'text-blue-600' },
           ].map(c => (
-            <div key={c.label} className="bg-white rounded-xl border border-gray-200 p-5 flex items-center gap-4">
+            <div key={c.label} className="bg-surface rounded-xl border border-gray-200 p-5 flex items-center gap-4">
               <div className={`w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center ${c.color}`}>
                 <c.icon className="w-5 h-5" />
               </div>
@@ -122,7 +122,7 @@ export default function AdminPanel() {
             <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
           </div>
         ) : requests.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-200 p-16 text-center">
+          <div className="bg-surface rounded-2xl border border-gray-200 p-16 text-center">
             <p className="text-gray-400 text-sm">No access requests yet.</p>
           </div>
         ) : (
@@ -156,7 +156,7 @@ function RequestRow({ req, onInvite, inviting }) {
   const isInviting = inviting === req.id
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
+    <div className="bg-surface rounded-xl border border-gray-200 p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 mb-3">

@@ -46,11 +46,11 @@ export default function Login() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex items-center justify-center gap-2 mb-8">
-          <Phone className="w-7 h-7 text-accent" />
+          <Phone className="w-7 h-7 text-accent-ink" />
           <span className="text-white text-2xl font-semibold">{appName}</span>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl p-8">
+        <div className="bg-surface rounded-2xl shadow-xl p-8">
           <h1 className="text-xl font-semibold text-gray-900 mb-1">
             {mode === 'login' ? 'Welcome back' : 'Create your account'}
           </h1>
@@ -109,7 +109,7 @@ export default function Login() {
             {mode === 'login' ? "Don't have an account? " : 'Already have one? '}
             <button
               onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
-              className="text-accent font-medium hover:underline"
+              className="text-accent-ink font-medium hover:underline"
             >
               {mode === 'login' ? 'Sign up' : 'Sign in'}
             </button>

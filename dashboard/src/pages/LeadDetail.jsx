@@ -8,19 +8,19 @@ import { scoreTier } from '../components/ScoreBadge'
 function badge(status) {
   const map = {
     new: 'bg-gray-100 text-gray-600',
-    contacted: 'bg-blue-50 text-blue-600',
+    contacted: 'bg-blue-50 text-blue-700',
     qualified: 'bg-yellow-50 text-yellow-700',
     appointment: 'bg-green-50 text-green-700',
     closed_won: 'bg-emerald-50 text-emerald-700',
-    closed_lost: 'bg-red-50 text-red-500',
+    closed_lost: 'bg-red-50 text-red-700',
   }
   return map[status] || 'bg-gray-100 text-gray-600'
 }
 
 function requestType(notes) {
   if (!notes) return null
-  if (notes.startsWith('[MAINTENANCE]')) return { label: 'Maintenance Request', icon: Wrench, color: 'text-orange-500 bg-orange-50' }
-  if (notes.startsWith('[LEASE RENEWAL]')) return { label: 'Lease Renewal', icon: RefreshCw, color: 'text-purple-500 bg-purple-50' }
+  if (notes.startsWith('[MAINTENANCE]')) return { label: 'Maintenance Request', icon: Wrench, color: 'text-orange-700 bg-orange-50' }
+  if (notes.startsWith('[LEASE RENEWAL]')) return { label: 'Lease Renewal', icon: RefreshCw, color: 'text-purple-700 bg-purple-50' }
   return null
 }
 
@@ -104,7 +104,7 @@ function ConversationTranscript({ conversation }) {
           {isVoice ? 'Voice Call' : 'Chat'} Transcript
         </span>
         {conversation.language && conversation.language !== 'en' && (
-          <span className="ml-1 text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full uppercase">
+          <span className="ml-1 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full uppercase">
             {conversation.language}
           </span>
         )}
@@ -208,7 +208,7 @@ export default function LeadDetail() {
             )}
 
             <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mb-3">
-              <User className="w-6 h-6 text-accent" />
+              <User className="w-6 h-6 text-accent-ink" />
             </div>
             <h1 className="text-lg font-semibold text-gray-900">{lead.name || 'Unknown'}</h1>
             <div className="flex flex-wrap items-center gap-2 mt-1 mb-4">
@@ -217,12 +217,12 @@ export default function LeadDetail() {
                 {lead.status.replace('_', ' ')}
               </span>
               {lead.needs_human && (
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-600">
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-700">
                   Needs human
                 </span>
               )}
               {lead.language && lead.language !== 'en' && (
-                <span className="text-xs bg-blue-50 text-blue-500 px-2 py-0.5 rounded-full uppercase">{lead.language}</span>
+                <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full uppercase">{lead.language}</span>
               )}
             </div>
 

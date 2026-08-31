@@ -3,9 +3,10 @@ import { Outlet, NavLink, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import {
   LayoutDashboard, Building2, BookOpen, Users, Calendar, Bot,
-  Settings, LogOut, Phone, Menu, X, Sparkles, ShieldCheck, MessageSquare, LifeBuoy, BarChart3,
+  Settings, LogOut, Menu, X, Sparkles, ShieldCheck, MessageSquare, LifeBuoy, BarChart3,
   ChevronsUpDown, ChevronLeft, ChevronRight, Plug,
 } from 'lucide-react'
+import PlaneMark from './PlaneMark'
 import { getAccessibleCompanies, getSelectedCompanyId, setSelectedCompanyId } from '../lib/api'
 
 const ADMIN_UID = '7227a933-56ef-45c4-8cbc-1c8331c74b21'
@@ -79,10 +80,10 @@ export default function Layout({ session }) {
       {/* Mobile top bar */}
       <div className="fixed top-0 left-0 right-0 h-14 bg-navy-600 flex items-center justify-between px-4 z-30 md:hidden">
         <Link to="/dashboard" className="flex items-center gap-2">
-          <Phone className="w-4 h-4 text-accent" />
+          <PlaneMark className="w-4 h-4 text-accent-light" />
           <span className="text-white font-semibold text-base">{appName}</span>
         </Link>
-        <button onClick={() => setSidebarOpen(true)} className="text-gray-400 hover:text-white p-1">
+        <button onClick={() => setSidebarOpen(true)} className="text-on-inverse hover:text-white p-1">
           <Menu className="w-6 h-6" />
         </button>
       </div>
@@ -102,17 +103,17 @@ export default function Layout({ session }) {
         {/* Logo */}
         <div className="h-16 flex items-center gap-2 px-4 border-b border-navy-700 overflow-hidden">
           <Link to="/dashboard" className="flex items-center gap-2 flex-1 min-w-0">
-            <Phone className="w-5 h-5 text-accent flex-shrink-0" />
+            <PlaneMark className="w-5 h-5 text-accent-light flex-shrink-0" />
             <span className={`text-white font-semibold text-lg truncate ${sidebarCollapsed ? 'md:hidden' : ''}`}>{appName}</span>
           </Link>
           <button
             onClick={() => setSidebarCollapsed(c => !c)}
             title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="hidden md:block text-gray-400 hover:text-white p-0.5 flex-shrink-0"
+            className="hidden md:block text-on-inverse hover:text-white p-0.5 flex-shrink-0"
           >
             {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
           </button>
-          <button onClick={closeSidebar} className="text-gray-400 hover:text-white md:hidden flex-shrink-0">
+          <button onClick={closeSidebar} className="text-on-inverse hover:text-white md:hidden flex-shrink-0">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -131,7 +132,7 @@ export default function Layout({ session }) {
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
-              <ChevronsUpDown className="w-3.5 h-3.5 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <ChevronsUpDown className="w-3.5 h-3.5 text-on-inverse absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
           </div>
         )}
@@ -150,7 +151,7 @@ export default function Layout({ session }) {
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   sidebarCollapsed ? 'md:justify-center md:px-2' : ''
-                } ${isActive ? 'bg-accent text-white' : 'text-gray-400 hover:bg-navy-700 hover:text-white'}`
+                } ${isActive ? 'bg-accent text-white' : 'text-on-inverse hover:bg-navy-700 hover:text-white'}`
               }
             >
               <Icon className="w-4 h-4 flex-shrink-0" />
@@ -193,7 +194,7 @@ export default function Layout({ session }) {
             <button
               onClick={() => { setSupportOpen(true); closeSidebar() }}
               title={sidebarCollapsed ? 'Support' : undefined}
-              className={`flex items-center gap-2 text-gray-400 hover:text-white text-xs transition-colors w-full px-3 py-1.5 rounded-lg hover:bg-navy-700 ${sidebarCollapsed ? 'md:justify-center md:px-2' : ''}`}
+              className={`flex items-center gap-2 text-on-inverse hover:text-white text-xs transition-colors w-full px-3 py-1.5 rounded-lg hover:bg-navy-700 ${sidebarCollapsed ? 'md:justify-center md:px-2' : ''}`}
             >
               <LifeBuoy className="w-3.5 h-3.5 flex-shrink-0" />
               <span className={sidebarCollapsed ? 'md:hidden' : ''}>Support</span>
@@ -202,7 +203,7 @@ export default function Layout({ session }) {
           <button
             onClick={handleSignOut}
             title={sidebarCollapsed ? 'Sign out' : undefined}
-            className={`flex items-center gap-2 text-gray-400 hover:text-white text-xs transition-colors w-full px-3 py-1.5 rounded-lg hover:bg-navy-700 ${sidebarCollapsed ? 'md:justify-center md:px-2' : ''}`}
+            className={`flex items-center gap-2 text-on-inverse hover:text-white text-xs transition-colors w-full px-3 py-1.5 rounded-lg hover:bg-navy-700 ${sidebarCollapsed ? 'md:justify-center md:px-2' : ''}`}
           >
             <LogOut className="w-3.5 h-3.5 flex-shrink-0" />
             <span className={sidebarCollapsed ? 'md:hidden' : ''}>Sign out</span>

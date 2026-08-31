@@ -56,7 +56,7 @@ export default function AIAgent() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="px-4 md:px-8 py-5 md:py-6 border-b border-gray-200 bg-white">
+      <div className="px-4 md:px-8 py-5 md:py-6 border-b border-gray-200 bg-surface">
         <h1 className="text-2xl font-semibold text-gray-900">AI Agent</h1>
         <p className="text-sm text-gray-500 mt-1">Live chat demo · Voice agent setup</p>
       </div>
@@ -64,14 +64,14 @@ export default function AIAgent() {
       <div className="flex-1 flex flex-col md:flex-row gap-4 md:gap-6 p-4 md:p-8 min-h-0 overflow-y-auto md:overflow-hidden">
 
         {/* ── Chat Widget ─────────────────────────────── */}
-        <div className="flex-1 flex flex-col bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="flex-1 flex flex-col bg-surface rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
             <div className="w-8 h-8 bg-accent rounded-full flex items-center justify-center">
               <Bot className="w-4 h-4 text-white" />
             </div>
             <div>
               <p className="text-sm font-semibold text-gray-900">AI Receptionist</p>
-              <p className="text-xs text-green-500 flex items-center gap-1">
+              <p className="text-xs text-green-700 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 bg-green-500 rounded-full inline-block" />
                 Online
               </p>
@@ -128,7 +128,7 @@ export default function AIAgent() {
         <div className="w-full md:w-80 flex flex-col gap-4 flex-shrink-0">
 
           {/* Status card */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+          <div className="bg-surface rounded-xl border border-gray-200 shadow-sm p-5">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-navy-600 rounded-xl flex items-center justify-center">
                 <PhoneCall className="w-5 h-5 text-white" />
@@ -147,7 +147,7 @@ export default function AIAgent() {
               ].map(item => (
                 <div key={item.key} className="flex items-center justify-between py-1.5">
                   <span className="text-xs text-gray-500">{item.label}</span>
-                  <span className="text-xs font-medium text-amber-500 bg-amber-50 px-2 py-0.5 rounded-full">
+                  <span className="text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
                     Not configured
                   </span>
                 </div>
@@ -162,7 +162,7 @@ export default function AIAgent() {
           </div>
 
           {/* Phone number input */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+          <div className="bg-surface rounded-xl border border-gray-200 shadow-sm p-5">
             <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide block mb-3">
               Your Twilio Phone Number
             </label>
@@ -187,7 +187,7 @@ export default function AIAgent() {
           </div>
 
           {/* How it works */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+          <div className="bg-surface rounded-xl border border-gray-200 shadow-sm p-5">
             <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">How Voice Works</p>
             <div className="space-y-3">
               {[

@@ -74,7 +74,7 @@ export default function AssistantChat() {
           title="Assistant"
         >
           <MessageCircle className="w-6 h-6" />
-          <span className="absolute -top-8 right-0 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+          <span className="absolute -top-8 right-0 bg-inverse text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
             Assistant
           </span>
         </button>
@@ -82,7 +82,7 @@ export default function AssistantChat() {
 
       {/* Chat panel */}
       {open && (
-        <div className="fixed bottom-6 right-6 z-[55] w-80 sm:w-96 flex flex-col rounded-2xl shadow-2xl overflow-hidden border border-gray-200 bg-white">
+        <div className="fixed bottom-6 right-6 z-[55] w-80 sm:w-96 flex flex-col rounded-2xl shadow-2xl overflow-hidden border border-gray-200 bg-surface">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-navy-600 flex-shrink-0">
             <div>
@@ -104,7 +104,7 @@ export default function AssistantChat() {
                 <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed ${
                   m.role === 'user'
                     ? 'bg-accent text-white rounded-br-sm'
-                    : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'
+                    : 'bg-surface border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'
                 }`}>
                   {m.content}
                 </div>
@@ -112,7 +112,7 @@ export default function AssistantChat() {
             ))}
             {typing && (
               <div className="flex justify-start">
-                <div className="flex gap-1 px-3 py-2.5 bg-white border border-gray-200 rounded-2xl rounded-bl-sm shadow-sm">
+                <div className="flex gap-1 px-3 py-2.5 bg-surface border border-gray-200 rounded-2xl rounded-bl-sm shadow-sm">
                   {[0, 1, 2].map(i => (
                     <span key={i} className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce"
                       style={{ animationDelay: `${i * 0.15}s` }} />
@@ -123,7 +123,7 @@ export default function AssistantChat() {
           </div>
 
           {/* Input */}
-          <div className="flex gap-2 px-3 py-3 bg-white border-t border-gray-100 flex-shrink-0">
+          <div className="flex gap-2 px-3 py-3 bg-surface border-t border-gray-100 flex-shrink-0">
             <input
               ref={inputRef}
               value={input}

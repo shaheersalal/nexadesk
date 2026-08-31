@@ -142,7 +142,7 @@ export default function VoiceDemoWidget() {
           </div>
         </div>
 
-        <div className="p-6 flex flex-col items-center gap-4 bg-white">
+        <div className="p-6 flex flex-col items-center gap-4 bg-surface">
           <div className={`gap-1.5 flex-wrap justify-center ${LANGUAGES.length > 1 ? 'flex' : 'hidden'}`}>
             {LANGUAGES.map(l => (
               <button

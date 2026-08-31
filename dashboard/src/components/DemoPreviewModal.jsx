@@ -66,7 +66,7 @@ function Slide2Leads() {
     <div className="h-full flex flex-col p-6 md:p-10" style={{ background: 'linear-gradient(135deg, #0a0a1a 0%, #111827 100%)' }}>
       <p className="text-xs font-semibold text-purple-300 uppercase tracking-widest mb-2">Lead Pipeline</p>
       <h2 className="text-2xl md:text-4xl font-bold text-white mb-2">Every Lead, Scored & Ranked</h2>
-      <p className="text-gray-400 text-sm md:text-base mb-6">AI scores each lead 0–100 based on intent, budget match, and engagement. Your best prospects surface instantly.</p>
+      <p className="text-on-inverse text-sm md:text-base mb-6">AI scores each lead 0–100 based on intent, budget match, and engagement. Your best prospects surface instantly.</p>
       <div className="grid grid-cols-3 gap-3 flex-1">
         {cols.map(col => (
           <div key={col.title} style={{ background: col.bg, borderRadius: 12, padding: 12, border: `1px solid ${col.color}22` }}>
@@ -79,7 +79,7 @@ function Slide2Leads() {
                 <div key={l.name} style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 8, padding: '10px 12px' }}>
                   <p className="text-sm font-medium text-white truncate">{l.name}</p>
                   <div className="flex items-center justify-between mt-1">
-                    <span className="text-xs text-gray-400">{l.tag}</span>
+                    <span className="text-xs text-on-inverse">{l.tag}</span>
                     <span className="text-xs font-bold" style={{ color: col.color }}>{l.score}</span>
                   </div>
                 </div>
@@ -190,7 +190,7 @@ function Slide5Appointments() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white">{a.name}</p>
-              <p className="text-xs text-gray-400 truncate">{a.property}</p>
+              <p className="text-xs text-on-inverse truncate">{a.property}</p>
             </div>
             <div className="text-right flex-shrink-0">
               <p className="text-xs text-white/80">{a.time}</p>

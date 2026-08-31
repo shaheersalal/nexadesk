@@ -55,7 +55,7 @@ export default function PricingCalculator({ onOffer }) {
           return (
             <div
               key={t.name}
-              className={`rounded-2xl border p-6 flex flex-col bg-white ${
+              className={`rounded-2xl border p-6 flex flex-col bg-surface ${
                 t.highlight ? 'border-accent shadow-lg shadow-accent/10 relative' : 'border-gray-200'
               }`}
             >
@@ -84,9 +84,9 @@ export default function PricingCalculator({ onOffer }) {
         })}
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-200 p-6 md:p-8">
+      <div className="bg-surface rounded-2xl border border-gray-200 p-6 md:p-8">
         <div className="flex items-center gap-2 mb-6">
-          <Sparkles className="w-4 h-4 text-accent" />
+          <Sparkles className="w-4 h-4 text-accent-ink" />
           <h3 className="font-semibold text-gray-900">Build your own plan</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">

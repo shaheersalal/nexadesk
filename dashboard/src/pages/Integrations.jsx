@@ -69,7 +69,7 @@ function SectionHeader({ icon: Icon, title, description }) {
   return (
     <div className="flex items-start gap-3 pb-3 border-b border-gray-100">
       <div className="w-9 h-9 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-        <Icon className="w-4 h-4 text-accent" />
+        <Icon className="w-4 h-4 text-accent-ink" />
       </div>
       <div>
         <h2 className="text-base font-semibold text-gray-900">{title}</h2>
@@ -125,7 +125,7 @@ function AddWebhookForm({ onCreated, onCancel }) {
       <p className="text-sm font-semibold text-amber-800">Webhook created — save your signing secret</p>
       <p className="text-xs text-amber-700">Use this to verify NexaDesk requests. It will <strong>not be shown again</strong>.</p>
       <div className="flex items-center gap-2">
-        <code className="flex-1 bg-white border border-amber-300 rounded-lg px-3 py-2 text-xs font-mono text-gray-800 truncate">{secret}</code>
+        <code className="flex-1 bg-surface border border-amber-300 rounded-lg px-3 py-2 text-xs font-mono text-gray-800 truncate">{secret}</code>
         <CopyButton text={secret} className="text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300" />
       </div>
       <button onClick={onCancel} className="text-xs font-semibold text-amber-700 hover:text-amber-900">Done →</button>
@@ -236,7 +236,7 @@ function WebhookRow({ webhook, onDelete }) {
             Logs {logsOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
           <button onClick={del} disabled={deleting}
-            className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors disabled:opacity-50">
+            className="text-red-400 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-colors disabled:opacity-50">
             {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
           </button>
         </div>
@@ -260,7 +260,7 @@ function WebhooksSection() {
     <section className="space-y-4">
       <div className="flex items-start justify-between gap-4">
         <SectionHeader icon={Plug} title="Webhooks"
-          description={<>NexaDesk POSTs JSON to your URL in real time. Verify with the <code className="bg-gray-100 px-1 rounded">X-NexaDesk-Signature</code> header.</>} />
+          description={<>NexaDesk POSTs JSON to your URL in real time. Verify with the <code className="bg-gray-100 text-gray-600 px-1 rounded">X-NexaDesk-Signature</code> header.</>} />
         {!adding && (
           <button onClick={() => setAdding(true)}
             className="flex items-center gap-1.5 text-sm font-semibold text-white bg-accent hover:bg-accent-dark px-4 py-2 rounded-lg transition-colors flex-shrink-0 mt-0.5">
@@ -385,14 +385,13 @@ function CrmSection() {
                         {syncing === p.id ? 'Syncing…' : 'Sync'}
                       </button>
                       <button onClick={() => disconnect(p.id)} disabled={disconnecting === p.id}
-                        className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors disabled:opacity-50">
+                        className="text-red-400 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-colors disabled:opacity-50">
                         {disconnecting === p.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2Off className="w-4 h-4" />}
                       </button>
                     </div>
                   ) : (
                     <button onClick={() => connect(p.id)} disabled={connecting === p.id}
-                      className="flex items-center gap-1.5 text-xs font-semibold text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60"
-                      style={{ backgroundColor: p.color }}>
+                      className="flex items-center gap-1.5 text-xs font-semibold text-white bg-accent hover:bg-accent-dark px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60">
                       {connecting === p.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
                       {connecting === p.id ? 'Redirecting…' : 'Connect'}
                     </button>
@@ -458,7 +457,7 @@ function ApiKeysSection() {
           <p className="text-sm font-semibold text-amber-800">New API key — save it now</p>
           <p className="text-xs text-amber-700">This will <strong>not be shown again</strong>.</p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 bg-white border border-amber-300 rounded-lg px-3 py-2 text-xs font-mono text-gray-800 break-all">{newKey}</code>
+            <code className="flex-1 bg-surface border border-amber-300 rounded-lg px-3 py-2 text-xs font-mono text-gray-800 break-all">{newKey}</code>
             <CopyButton text={newKey} className="text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 flex-shrink-0" />
           </div>
           <button onClick={() => setNewKey(null)} className="text-xs font-semibold text-amber-700 hover:text-amber-900">Done →</button>
@@ -525,7 +524,7 @@ function ApiKeysSection() {
                 <div className="flex items-center gap-3 flex-shrink-0">
                   {k.last_used && <span className="text-xs text-gray-400">Used {new Date(k.last_used).toLocaleDateString()}</span>}
                   <button onClick={() => revoke(k.id)} title="Revoke key"
-                    className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors">
+                    className="text-red-400 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-colors">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -574,7 +573,7 @@ function McpSection() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {tools.map(t => (
           <div key={t.name} className="border border-gray-200 rounded-xl px-4 py-3 flex items-start gap-3">
-            <Zap className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
+            <Zap className="w-4 h-4 text-accent-ink mt-0.5 flex-shrink-0" />
             <div>
               <p className="text-sm font-semibold text-gray-800 font-mono">{t.name}</p>
               <p className="text-xs text-gray-400 mt-0.5">{t.desc}</p>
@@ -594,7 +593,7 @@ function McpSection() {
       <div className="border border-gray-200 rounded-xl p-4 space-y-2">
         <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Add via Claude Code CLI</p>
         <div className="flex items-start gap-2">
-          <pre className="flex-1 bg-gray-900 text-green-400 rounded-lg px-3 py-2.5 text-xs font-mono overflow-x-auto whitespace-pre-wrap break-all">{cliSnippet}</pre>
+          <pre className="flex-1 bg-inverse text-green-400 rounded-lg px-3 py-2.5 text-xs font-mono overflow-x-auto whitespace-pre-wrap break-all">{cliSnippet}</pre>
           <CopyButton text={cliSnippet} className="text-gray-600 bg-gray-100 hover:bg-gray-200 border border-gray-200 flex-shrink-0" />
         </div>
       </div>
@@ -602,13 +601,13 @@ function McpSection() {
       <div className="border border-gray-200 rounded-xl p-4 space-y-2">
         <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Or add to .mcp.json</p>
         <div className="flex items-start gap-2">
-          <pre className="flex-1 bg-gray-900 text-green-400 rounded-lg px-3 py-2.5 text-xs font-mono overflow-x-auto">{jsonSnippet}</pre>
+          <pre className="flex-1 bg-inverse text-green-400 rounded-lg px-3 py-2.5 text-xs font-mono overflow-x-auto">{jsonSnippet}</pre>
           <CopyButton text={jsonSnippet} className="text-gray-600 bg-gray-100 hover:bg-gray-200 border border-gray-200 flex-shrink-0" />
         </div>
       </div>
 
       <p className="text-xs text-gray-400 px-1">
-        Replace <code className="bg-gray-100 px-1 rounded">YOUR_API_KEY</code> with a key from the API Keys section above.
+        Replace <code className="bg-gray-100 text-gray-600 px-1 rounded">YOUR_API_KEY</code> with a key from the API Keys section above.
         Scopes on the key control what the MCP agent can do.
       </p>
     </section>
