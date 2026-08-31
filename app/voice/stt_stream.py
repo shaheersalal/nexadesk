@@ -48,16 +48,23 @@ IDLE_TIMEOUT = 30.0
 # guarantee: whatever text we are holding, finalised or still interim, is
 # delivered once it has stopped changing for this long.
 #
-# A stalled transcript is not proof the caller stopped talking — Deepgram's
-# interims lag, and at 1.5 s the timer still fired mid-sentence on a live call:
-# it delivered 'Hi. What do you have', then 'properties do you have available in
-# Nashville?' as a second turn, and the assistant answered both.
+# A stalled transcript is not proof the caller stopped talking, and neither is
+# local silence on its own: the caller can have genuinely stopped while Deepgram
+# is still a second behind on what they already said. Both of those cut a live
+# call in half mid-question —
 #
-# So the transcript going quiet is only half the test. The other half is the
-# audio itself, which is ground truth and owned by us rather than inferred from
-# Deepgram's timing: a turn is over when the text has stopped changing *and* the
-# caller has actually fallen silent.
-SETTLE_SECONDS = 1.2
+#   Caller: Hi. What properties do you have
+#   Caller: What properties do you have available in Nashville?
+#
+# — and the assistant answered each half separately.
+#
+# The reliable test uses Deepgram's own clock. Every Results message carries
+# `start` + `duration`, which is the audio timestamp it has finished analysing,
+# and it keeps advancing through silence. Measuring the caller's last voiced
+# frame on the same audio timeline, the turn is over once Deepgram has analysed
+# at least SILENCE_SECONDS of audio *past* that point — whatever they said has
+# been transcribed by then, and nothing followed it.
+SETTLE_SECONDS = 0.6
 SILENCE_SECONDS = 0.7
 
 # If the line is noisy enough that local silence detection never triggers, fall
@@ -162,8 +169,11 @@ class DeepgramStream:
         # What the settle timer last delivered, so the late-arriving final of an
         # already-delivered utterance does not run the turn a second time.
         self._delivered = ""
-        # Local voice activity, measured on the caller's own audio.
-        self._last_voice_at = 0.0
+        # Voice activity and Deepgram's progress, both on the audio timeline
+        # rather than the wall clock, so neither is thrown off by jitter.
+        self._audio_seconds = 0.0     # how much caller audio we have forwarded
+        self._voice_until = 0.0       # timestamp of their last voiced frame
+        self._processed_to = 0.0      # how far Deepgram says it has analysed
         self._noise_floor = 0.0
 
     async def __aenter__(self) -> "DeepgramStream":
@@ -192,6 +202,11 @@ class DeepgramStream:
                 if mtype == "Results":
                     alt = (msg.get("channel", {}).get("alternatives") or [{}])[0]
                     text = (alt.get("transcript") or "").strip()
+                    # How far into the call Deepgram has analysed. Advances even
+                    # while the line is silent, which is what makes it usable as
+                    # a "has it caught up yet" signal.
+                    end = (msg.get("start") or 0.0) + (msg.get("duration") or 0.0)
+                    self._processed_to = max(self._processed_to, end)
 
                     # Already delivered by the settle timer. Deepgram goes on
                     # repeating it — as an interim, and often later as a final —
@@ -247,8 +262,10 @@ class DeepgramStream:
                 if idle >= HARD_SETTLE_SECONDS:
                     logger.info("Settling turn: transcript idle %.1fs", idle)
                     await self._flush()
-                elif idle >= SETTLE_SECONDS and self._caller_is_quiet():
-                    logger.info("Settling turn: transcript idle %.1fs, caller quiet", idle)
+                elif idle >= SETTLE_SECONDS and self._caller_finished():
+                    logger.info(
+                        "Settling turn: transcript idle %.1fs, analysed to %.1fs "
+                        "vs last voice at %.1fs", idle, self._processed_to, self._voice_until)
                     await self._flush()
         except asyncio.CancelledError:
             pass
@@ -282,15 +299,15 @@ class DeepgramStream:
         """
         Track whether the caller is still speaking, from the audio itself.
 
-        Deepgram's transcript timing is not a reliable indicator — its interims
-        can stall for well over a second mid-sentence — so the settle timer also
-        needs to know, independently, when the line has actually gone quiet.
+        Position is kept in audio seconds, not wall-clock time, so it can be
+        compared directly against the timestamps Deepgram reports.
 
         The threshold rides on a slow noise floor rather than being fixed, so a
         hissy line does not read as continuous speech.
         """
         if not frame:
             return
+        self._audio_seconds += len(frame) / 8000.0
         peak = 0
         for byte in frame:
             sample = _ULAW[byte]
@@ -303,13 +320,15 @@ class DeepgramStream:
         # the quietest recent audio rather than being dragged up by speech.
         self._noise_floor = min(peak, self._noise_floor * 1.02 + 1.0)
         if peak > max(self._noise_floor * 4.0, 900):
-            self._last_voice_at = time.monotonic()
+            self._voice_until = self._audio_seconds
 
-    def _caller_is_quiet(self) -> bool:
-        # Nothing measured yet (no audio fed) — don't hold the turn hostage.
-        if not self._last_voice_at:
+    def _caller_finished(self) -> bool:
+        """Has Deepgram analysed far enough past the caller's last word?"""
+        # No audio measured (unit tests, or a track that never carried voice) —
+        # don't hold the turn hostage on a signal we do not have.
+        if not self._voice_until:
             return True
-        return time.monotonic() - self._last_voice_at >= SILENCE_SECONDS
+        return self._processed_to >= self._voice_until + SILENCE_SECONDS
 
     async def send(self, audio: bytes) -> None:
         """Forward one raw mulaw frame from Twilio."""

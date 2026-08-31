@@ -39,11 +39,21 @@ class FakeSocket:
         return gen()
 
 
-def results(transcript, *, is_final=False, speech_final=False):
+def results(transcript, *, is_final=False, speech_final=False, end=None):
+    """
+    One Deepgram Results frame.
+
+    `end` is the audio timestamp Deepgram has analysed up to. It is what the
+    settle logic uses to tell "the caller stopped" from "Deepgram has not caught
+    up yet", so it defaults to a value far enough ahead that tests which are not
+    about that distinction behave as if it has caught up.
+    """
     return {
         "type": "Results",
         "is_final": is_final,
         "speech_final": speech_final,
+        "start": 0.0,
+        "duration": 9999.0 if end is None else end,
         "channel": {"alternatives": [{"transcript": transcript}]},
     }
 
@@ -154,9 +164,14 @@ SILENCE = b"\xff" * 160
 
 
 @pytest.mark.asyncio
-async def test_stalled_transcript_does_not_settle_while_caller_is_talking():
+async def test_stalled_transcript_does_not_settle_while_deepgram_lags():
+    """
+    The live failure: the caller has stopped, but Deepgram is still a second
+    behind on what they already said, so the text on hand is only half of it.
+    """
     line = "Hi. What do you have"
-    frames = [(0.02, results(line))] + [(0.1, results(line)) for _ in range(14)]
+    # Deepgram has only analysed up to 2.0s; the caller spoke until 2.9s.
+    frames = [(0.02, results(line, end=2.0))] + [(0.1, results(line, end=2.0)) for _ in range(14)]
 
     stream = DeepgramStream(language="en")
     stream._ws = FakeSocket(frames)
@@ -169,27 +184,25 @@ async def test_stalled_transcript_does_not_settle_while_caller_is_talking():
         async for utterance in stream.utterances():
             got.append(utterance)
 
-    async def keep_talking():
-        # Caller is still audibly speaking the whole time.
-        for _ in range(160):
-            stream.note_audio(SPEECH)
-            await asyncio.sleep(0.01)
+    # 2.9s of caller speech on the audio timeline.
+    for _ in range(int(2.9 / 0.02)):
+        stream.note_audio(SPEECH)
 
     task = asyncio.create_task(collect())
-    talker = asyncio.create_task(keep_talking())
-    await asyncio.sleep(1.2)          # well past SETTLE_SECONDS (0.25 here)
+    await asyncio.sleep(1.0)          # well past SETTLE_SECONDS
     stream._closed = True
-    for t in (task, talker, stream._settler, stream._reader):
+    for t in (task, stream._settler, stream._reader):
         t.cancel()
 
-    assert got == [], f"cut the caller off mid-sentence: {got}"
+    assert got == [], f"cut the caller off while Deepgram was still behind: {got}"
 
 
 @pytest.mark.asyncio
-async def test_settles_once_the_caller_actually_stops(monkeypatch):
-    monkeypatch.setattr(stt_stream, "SILENCE_SECONDS", 0.2)
+async def test_settles_once_deepgram_has_analysed_past_the_last_word():
     line = "Hi. What do you have available in Nashville"
-    frames = [(0.02, results(line))] + [(0.1, results(line)) for _ in range(14)]
+    # Caller spoke until 2.9s; Deepgram works past it, to 3.7s.
+    frames = [(0.02, results(line, end=2.9))]
+    frames += [(0.1, results(line, end=3.0 + i * 0.4)) for i in range(6)]
 
     stream = DeepgramStream(language="en")
     stream._ws = FakeSocket(frames)
@@ -202,19 +215,13 @@ async def test_settles_once_the_caller_actually_stops(monkeypatch):
         async for utterance in stream.utterances():
             got.append(utterance)
 
-    async def talk_then_stop():
-        for _ in range(20):
-            stream.note_audio(SPEECH)
-            await asyncio.sleep(0.01)
-        while True:
-            stream.note_audio(SILENCE)
-            await asyncio.sleep(0.01)
+    for _ in range(int(2.9 / 0.02)):
+        stream.note_audio(SPEECH)
 
     task = asyncio.create_task(collect())
-    talker = asyncio.create_task(talk_then_stop())
     await asyncio.sleep(1.2)
     stream._closed = True
-    for t in (task, talker, stream._settler, stream._reader):
+    for t in (task, stream._settler, stream._reader):
         t.cancel()
 
     assert got == [line], f"expected one settled turn, got {got}"
@@ -229,16 +236,16 @@ def test_noise_floor_adapts_so_a_hissy_line_is_not_heard_as_speech():
     stops *registering*, not that time passes.
     """
     stream = DeepgramStream(language="en")
-    hiss = bytes([0x60, 0xE0] * 80)      # ~-472 / +472, well above pure silence
+    hiss = bytes([0x60, 0xE0] * 80)      # ~+-372, well above pure silence
 
     for _ in range(400):                 # let the floor climb to the hiss level
         stream.note_audio(hiss)
-    settled = stream._last_voice_at
+    settled = stream._voice_until
 
     for _ in range(50):
         stream.note_audio(hiss)
-    assert stream._last_voice_at == settled, "steady line noise still read as speech"
+    assert stream._voice_until == settled, "steady line noise still read as speech"
 
     # Real speech over that same noisy line must still register.
     stream.note_audio(bytes([0x00, 0x80] * 80))
-    assert stream._last_voice_at > settled, "speech was masked by the noise floor"
+    assert stream._voice_until > settled, "speech was masked by the noise floor"
