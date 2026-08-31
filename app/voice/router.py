@@ -201,7 +201,12 @@ async def media_stream(websocket: WebSocket, call_sid: str):
                         greet_task = asyncio.create_task(_greet(stream_sid))
 
                     elif event_type == "media":
-                        await stt.send(base64.b64decode(msg["media"]["payload"]))
+                        frame = base64.b64decode(msg["media"]["payload"])
+                        # Feed the frame to our own voice activity tracking as
+                        # well: the turn is only over when the transcript has
+                        # settled *and* the caller has actually stopped talking.
+                        stt.note_audio(frame)
+                        await stt.send(frame)
 
                     elif event_type == "stop":
                         break

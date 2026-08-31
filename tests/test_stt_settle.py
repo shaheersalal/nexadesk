@@ -136,3 +136,109 @@ async def test_growing_interim_does_not_cut_the_caller_off():
     got = await drive(frames, collect_for=1.2)
 
     assert got == ["I would like to book a viewing"], got
+
+
+# --- local voice activity ---------------------------------------------------
+#
+# A stalled transcript is not proof the caller stopped. On a live call the timer
+# fired mid-sentence and split one question into two turns, which the assistant
+# answered separately:
+#
+#   Caller: Hi. What do you have
+#   Caller: properties do you have available in Nashville?
+#
+# So settling also requires the caller's audio to have gone quiet.
+
+SPEECH = bytes([0x00, 0x80]) * 80    # loud mu-law frame
+SILENCE = b"\xff" * 160
+
+
+@pytest.mark.asyncio
+async def test_stalled_transcript_does_not_settle_while_caller_is_talking():
+    line = "Hi. What do you have"
+    frames = [(0.02, results(line))] + [(0.1, results(line)) for _ in range(14)]
+
+    stream = DeepgramStream(language="en")
+    stream._ws = FakeSocket(frames)
+    stream._reader = asyncio.create_task(stream._read_loop())
+    stream._settler = asyncio.create_task(stream._settle_loop())
+
+    got = []
+
+    async def collect():
+        async for utterance in stream.utterances():
+            got.append(utterance)
+
+    async def keep_talking():
+        # Caller is still audibly speaking the whole time.
+        for _ in range(160):
+            stream.note_audio(SPEECH)
+            await asyncio.sleep(0.01)
+
+    task = asyncio.create_task(collect())
+    talker = asyncio.create_task(keep_talking())
+    await asyncio.sleep(1.2)          # well past SETTLE_SECONDS (0.25 here)
+    stream._closed = True
+    for t in (task, talker, stream._settler, stream._reader):
+        t.cancel()
+
+    assert got == [], f"cut the caller off mid-sentence: {got}"
+
+
+@pytest.mark.asyncio
+async def test_settles_once_the_caller_actually_stops(monkeypatch):
+    monkeypatch.setattr(stt_stream, "SILENCE_SECONDS", 0.2)
+    line = "Hi. What do you have available in Nashville"
+    frames = [(0.02, results(line))] + [(0.1, results(line)) for _ in range(14)]
+
+    stream = DeepgramStream(language="en")
+    stream._ws = FakeSocket(frames)
+    stream._reader = asyncio.create_task(stream._read_loop())
+    stream._settler = asyncio.create_task(stream._settle_loop())
+
+    got = []
+
+    async def collect():
+        async for utterance in stream.utterances():
+            got.append(utterance)
+
+    async def talk_then_stop():
+        for _ in range(20):
+            stream.note_audio(SPEECH)
+            await asyncio.sleep(0.01)
+        while True:
+            stream.note_audio(SILENCE)
+            await asyncio.sleep(0.01)
+
+    task = asyncio.create_task(collect())
+    talker = asyncio.create_task(talk_then_stop())
+    await asyncio.sleep(1.2)
+    stream._closed = True
+    for t in (task, talker, stream._settler, stream._reader):
+        t.cancel()
+
+    assert got == [line], f"expected one settled turn, got {got}"
+
+
+def test_noise_floor_adapts_so_a_hissy_line_is_not_heard_as_speech():
+    """
+    A constant low-level hiss must stop counting as voice once the floor has
+    settled, otherwise a noisy line never goes quiet and the turn never lands.
+
+    Asserted on _last_voice_at rather than the clock: the point is that hiss
+    stops *registering*, not that time passes.
+    """
+    stream = DeepgramStream(language="en")
+    hiss = bytes([0x60, 0xE0] * 80)      # ~-472 / +472, well above pure silence
+
+    for _ in range(400):                 # let the floor climb to the hiss level
+        stream.note_audio(hiss)
+    settled = stream._last_voice_at
+
+    for _ in range(50):
+        stream.note_audio(hiss)
+    assert stream._last_voice_at == settled, "steady line noise still read as speech"
+
+    # Real speech over that same noisy line must still register.
+    stream.note_audio(bytes([0x00, 0x80] * 80))
+    assert stream._last_voice_at > settled, "speech was masked by the noise floor"

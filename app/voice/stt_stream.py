@@ -48,12 +48,36 @@ IDLE_TIMEOUT = 30.0
 # guarantee: whatever text we are holding, finalised or still interim, is
 # delivered once it has stopped changing for this long.
 #
-# Must stay clear of Deepgram's interim cadence, which is about one message a
-# second. At 0.9 s the timer fired while the caller was still mid-sentence —
-# the interim simply had not been updated yet — and the assistant answered
-# 'Hello. I am looking for'. 1.5 s means the text has gone at least one full
-# interim without changing before we call the turn over.
-SETTLE_SECONDS = 1.5
+# A stalled transcript is not proof the caller stopped talking — Deepgram's
+# interims lag, and at 1.5 s the timer still fired mid-sentence on a live call:
+# it delivered 'Hi. What do you have', then 'properties do you have available in
+# Nashville?' as a second turn, and the assistant answered both.
+#
+# So the transcript going quiet is only half the test. The other half is the
+# audio itself, which is ground truth and owned by us rather than inferred from
+# Deepgram's timing: a turn is over when the text has stopped changing *and* the
+# caller has actually fallen silent.
+SETTLE_SECONDS = 1.2
+SILENCE_SECONDS = 0.7
+
+# If the line is noisy enough that local silence detection never triggers, fall
+# back to the transcript alone rather than never answering.
+HARD_SETTLE_SECONDS = 4.0
+
+# mu-law byte -> signed 16-bit, built once. audioop would do this but it is
+# deprecated and slated for removal in 3.13, and this is ten lines.
+def _build_ulaw_table() -> list[int]:
+    table = []
+    for byte in range(256):
+        u = ~byte & 0xFF
+        sign, exponent, mantissa = u & 0x80, (u >> 4) & 0x07, u & 0x0F
+        magnitude = ((mantissa << 1) + 33) << exponent
+        magnitude = (magnitude - 33) << 2   # conventional G.711 scale, +-32124
+        table.append(-magnitude if sign else magnitude)
+    return table
+
+
+_ULAW = _build_ulaw_table()
 
 
 def _configured_default_language() -> str | None:
@@ -138,6 +162,9 @@ class DeepgramStream:
         # What the settle timer last delivered, so the late-arriving final of an
         # already-delivered utterance does not run the turn a second time.
         self._delivered = ""
+        # Local voice activity, measured on the caller's own audio.
+        self._last_voice_at = 0.0
+        self._noise_floor = 0.0
 
     async def __aenter__(self) -> "DeepgramStream":
         if not settings.STT_API_KEY:
@@ -216,8 +243,12 @@ class DeepgramStream:
                 await asyncio.sleep(0.1)
                 if not self._final and not self._interim:
                     continue
-                if time.monotonic() - self._changed_at >= SETTLE_SECONDS:
-                    logger.info("Settling turn without an endpoint event from Deepgram")
+                idle = time.monotonic() - self._changed_at
+                if idle >= HARD_SETTLE_SECONDS:
+                    logger.info("Settling turn: transcript idle %.1fs", idle)
+                    await self._flush()
+                elif idle >= SETTLE_SECONDS and self._caller_is_quiet():
+                    logger.info("Settling turn: transcript idle %.1fs, caller quiet", idle)
                     await self._flush()
         except asyncio.CancelledError:
             pass
@@ -246,6 +277,39 @@ class DeepgramStream:
         if utterance:
             self._delivered = utterance
             await self._queue.put(utterance)
+
+    def note_audio(self, frame: bytes) -> None:
+        """
+        Track whether the caller is still speaking, from the audio itself.
+
+        Deepgram's transcript timing is not a reliable indicator — its interims
+        can stall for well over a second mid-sentence — so the settle timer also
+        needs to know, independently, when the line has actually gone quiet.
+
+        The threshold rides on a slow noise floor rather than being fixed, so a
+        hissy line does not read as continuous speech.
+        """
+        if not frame:
+            return
+        peak = 0
+        for byte in frame:
+            sample = _ULAW[byte]
+            if sample < 0:
+                sample = -sample
+            if sample > peak:
+                peak = sample
+
+        # Decay the floor upward slowly and pull it down instantly, so it tracks
+        # the quietest recent audio rather than being dragged up by speech.
+        self._noise_floor = min(peak, self._noise_floor * 1.02 + 1.0)
+        if peak > max(self._noise_floor * 4.0, 900):
+            self._last_voice_at = time.monotonic()
+
+    def _caller_is_quiet(self) -> bool:
+        # Nothing measured yet (no audio fed) — don't hold the turn hostage.
+        if not self._last_voice_at:
+            return True
+        return time.monotonic() - self._last_voice_at >= SILENCE_SECONDS
 
     async def send(self, audio: bytes) -> None:
         """Forward one raw mulaw frame from Twilio."""
