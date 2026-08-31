@@ -25,6 +25,23 @@ class BotBlockMiddleware(BaseHTTPMiddleware):
 from app.config import get_settings
 from app.dependencies import get_qdrant, ensure_collection
 
+# Nothing configured the logging system, so the root logger sat at WARNING with
+# no handler and every logger.info in the codebase was silently discarded. On
+# Railway that meant the phone pipeline emitted nothing at all — not the stream
+# start, not a single transcribed caller turn — which is why a call that was
+# being transcribed perfectly and never answered looked identical in the logs to
+# a call that was never received. uvicorn only configures its own loggers, so
+# this has to be done here.
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+    force=True,   # uvicorn has already installed its handlers by this point
+)
+logging.getLogger("nexadesk").setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
+# These two are chatty at INFO and drown out everything else.
+logging.getLogger("websockets.client").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 logger = logging.getLogger("nexadesk")
 
 from app.voice.router import router as voice_router

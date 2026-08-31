@@ -9,6 +9,7 @@ import base64
 import hashlib
 import json
 import logging
+import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, Depends
@@ -172,6 +173,15 @@ async def media_stream(websocket: WebSocket, call_sid: str):
                         )
                     await save_session(session, redis)
 
+            async def _greet(sid: str | None) -> None:
+                try:
+                    greeting = await _build_greeting(session.company_id)
+                    async with speaking:
+                        await _speak_greeting(websocket, sid, greeting, redis)
+                except Exception as exc:
+                    logger.error("Greeting failed for %s: %s", call_sid, exc, exc_info=True)
+
+            greet_task: asyncio.Task | None = None
             turn_task = asyncio.create_task(_pump_turns())
 
             try:
@@ -183,10 +193,12 @@ async def media_stream(websocket: WebSocket, call_sid: str):
                     if event_type == "start":
                         stream_sid = msg.get("start", {}).get("streamSid") or msg.get("streamSid")
                         logger.info("Media stream started: call=%s stream=%s", call_sid, stream_sid)
-                        # Greet only once we know where to send audio.
-                        greeting = await _build_greeting(session.company_id)
-                        async with speaking:
-                            await _speak_greeting(websocket, stream_sid, greeting, redis)
+                        # Greet in a task, not inline. Building the greeting hits
+                        # the database and then the TTS socket, and awaiting that
+                        # here stops this loop reading media frames — so every
+                        # word the caller says while being greeted sat in the
+                        # socket buffer and arrived afterwards in one burst.
+                        greet_task = asyncio.create_task(_greet(stream_sid))
 
                     elif event_type == "media":
                         await stt.send(base64.b64decode(msg["media"]["payload"]))
@@ -195,6 +207,8 @@ async def media_stream(websocket: WebSocket, call_sid: str):
                         break
 
             finally:
+                if greet_task:
+                    greet_task.cancel()
                 await stt.close()
                 # Let any in-flight turn finish writing to the session.
                 try:
@@ -235,9 +249,12 @@ async def _speak_stream(
     if stt is not None:
         stt.speech_started.clear()
 
+    started = time.monotonic()
     interrupted = False
     async for audio in speak_tokens(token_iter):
-        if stt is not None and stt.speech_started.is_set():
+        if (stt is not None
+                and stt.speech_started.is_set()
+                and time.monotonic() - started > BARGE_IN_GRACE):
             interrupted = True
             break
         await _send_media(websocket, stream_sid, audio)
@@ -260,6 +277,12 @@ async def _send_media(websocket: WebSocket, stream_sid: str, audio: bytes) -> No
         "media": {"payload": base64.b64encode(audio).decode()},
     }))
 
+
+# Deepgram's VAD can report speech in the moment right after the caller's own
+# turn ends — the tail of what they just said, a breath, line noise. Without a
+# grace window that reads as a barge-in the instant the reply starts, so the
+# assistant says two words and stops dead, which is worse than not stopping.
+BARGE_IN_GRACE = 0.5
 
 GREETING_CACHE_TTL = 60 * 60 * 24  # a day; the key changes if the text does
 
