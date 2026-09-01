@@ -22,6 +22,7 @@ from app.dependencies import get_redis, get_supabase_admin
 from app.voice.telephony import build_stream_twiml, build_fallback_twiml, twilio_client
 from app.voice.call_session import create_session, load_session, save_session, delete_session
 from app.voice.stt_stream import DeepgramStream
+from app.voice.turn_taking import SpokenLog, collect_turn
 from app.voice.tts import synthesize_to_mulaw
 from app.voice.tts_live import speak_tokens
 from app.voice.conversation import stream_voice_turn
@@ -151,6 +152,8 @@ async def media_stream(websocket: WebSocket, call_sid: str):
     # our audio and the caller heard nothing (AUDIT.md H2).
     stream_sid: str | None = None
     speaking = asyncio.Lock()
+    # What the assistant has said, so it can recognise itself coming back.
+    spoken = SpokenLog()
 
     stt_language = session.language if session.language_confirmed else None
 
@@ -158,26 +161,46 @@ async def media_stream(websocket: WebSocket, call_sid: str):
         async with DeepgramStream(language=stt_language) as stt:
 
             async def _pump_turns() -> None:
-                """Run a full turn for each finalised caller utterance."""
-                async for utterance in stt.utterances():
+                """Run a turn for each thing the caller actually says."""
+                while True:
+                    try:
+                        utterance = await collect_turn(stt)
+                    except asyncio.TimeoutError:
+                        logger.info("Caller silent — ending turn pump")
+                        return
+                    if utterance is None:
+                        return
                     if not utterance.strip():
                         continue
+
+                    # Attribution: the line echoes, and Deepgram cannot tell our
+                    # voice from theirs. Without this the assistant answers its
+                    # own last sentence, which is the single most damning thing
+                    # a demo can do.
+                    score = spoken.echo_score(utterance)
+                    if score >= 0.62:
+                        spoken.suppressed += 1
+                        logger.info("Ignored own speech (echo %.2f): %s", score, utterance)
+                        continue
+
                     logger.info("Caller (%s): %s", call_sid, utterance)
                     # Serialise turns: overlapping replies would interleave audio.
                     async with speaking:
                         await _speak_stream(
                             websocket,
                             stream_sid,
-                            stream_voice_turn(utterance, session),
+                            _record_spoken(stream_voice_turn(utterance, session), spoken),
                             stt=stt,
+                            spoken=spoken,
                         )
                     await save_session(session, redis)
 
             async def _greet(sid: str | None) -> None:
                 try:
                     greeting = await _build_greeting(session.company_id)
+                    spoken.note_spoken(greeting)
                     async with speaking:
-                        await _speak_greeting(websocket, sid, greeting, redis)
+                        await _speak_greeting(websocket, sid, greeting, redis, spoken)
                 except Exception as exc:
                     logger.error("Greeting failed for %s: %s", call_sid, exc, exc_info=True)
 
@@ -229,11 +252,44 @@ async def media_stream(websocket: WebSocket, call_sid: str):
         await save_session(session, redis)
 
 
+async def _record_spoken(tokens, spoken: SpokenLog):
+    """Tee the reply's tokens into the spoken log on their way to synthesis."""
+    async for token in tokens:
+        if token:
+            spoken.note_spoken(token)
+        yield token
+
+
+def _caller_is_interrupting(stt, spoken: SpokenLog | None) -> bool:
+    """
+    Is somebody talking over us, or are we hearing ourselves?
+
+    Deepgram's voice activity flag cannot tell the difference — an echo of the
+    assistant trips it exactly like a person does — and acting on the flag
+    alone means the assistant stops dead two words into its own sentence for no
+    reason anyone on the call can see.
+
+    So while we are speaking, an interruption has to be backed by words, and
+    the words have to not be ours. That costs the time it takes Deepgram to
+    produce an interim, which is roughly how long a person waits before
+    yielding anyway.
+    """
+    if stt is None or not stt.speech_started.is_set():
+        return False
+    if spoken is None:
+        return True                      # nothing to compare against
+    heard = stt.live_text()
+    if not heard:
+        return False                     # voice activity with no words yet
+    return not spoken.is_echo(heard)
+
+
 async def _speak_stream(
     websocket: WebSocket,
     stream_sid: str | None,
     token_iter,
     stt=None,
+    spoken: SpokenLog | None = None,
 ) -> None:
     """
     Speak a streamed reply, and stop the moment the caller talks over it.
@@ -257,11 +313,12 @@ async def _speak_stream(
     started = time.monotonic()
     interrupted = False
     async for audio in speak_tokens(token_iter):
-        if (stt is not None
-                and stt.speech_started.is_set()
-                and time.monotonic() - started > BARGE_IN_GRACE):
+        if (time.monotonic() - started > BARGE_IN_GRACE
+                and _caller_is_interrupting(stt, spoken)):
             interrupted = True
             break
+        if spoken is not None:
+            spoken.mark_audio_sent()
         await _send_media(websocket, stream_sid, audio)
 
     if interrupted:
@@ -288,6 +345,7 @@ async def _send_media(websocket: WebSocket, stream_sid: str, audio: bytes) -> No
 # grace window that reads as a barge-in the instant the reply starts, so the
 # assistant says two words and stops dead, which is worse than not stopping.
 BARGE_IN_GRACE = 0.5
+
 
 GREETING_CACHE_TTL = 60 * 60 * 24  # a day; the key changes if the text does
 
@@ -338,7 +396,8 @@ async def _build_greeting(company_id: str) -> str:
     return CALL_GREETING.format(ai_name=ai_name, places=places).strip()
 
 
-async def _speak_greeting(websocket, stream_sid, text: str, redis) -> None:
+async def _speak_greeting(websocket, stream_sid, text: str, redis,
+                          spoken: SpokenLog | None = None) -> None:
     """
     Say the greeting, fast on every call including the first.
 
@@ -357,6 +416,8 @@ async def _speak_greeting(websocket, stream_sid, text: str, redis) -> None:
     try:
         cached = await redis.get(key)
         if cached:
+            if spoken is not None:
+                spoken.mark_audio_sent()
             await _send_media(websocket, stream_sid, base64.b64decode(cached))
             return
     except Exception as exc:
@@ -369,6 +430,8 @@ async def _speak_greeting(websocket, stream_sid, text: str, redis) -> None:
     try:
         async for chunk in speak_tokens(_one()):
             collected.extend(chunk)
+            if spoken is not None:
+                spoken.mark_audio_sent()
             await _send_media(websocket, stream_sid, chunk)
     except Exception as exc:
         logger.error("Greeting synthesis failed: %s", exc)

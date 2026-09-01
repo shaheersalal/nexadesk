@@ -339,15 +339,40 @@ class DeepgramStream:
         except websockets.ConnectionClosed:
             self._closed = True
 
+    def live_text(self) -> str:
+        """
+        What the caller is saying *right now*, before the turn is finalised.
+
+        Used to tell a real interruption from the assistant hearing itself:
+        Deepgram's voice activity flag alone cannot, because an echo trips it
+        exactly like a person does.
+        """
+        parts = [*self._final]
+        if self._interim:
+            parts.append(self._interim)
+        return " ".join(p for p in parts if p).strip()
+
+    async def next_utterance(self, timeout: float | None = None) -> str | None:
+        """
+        One finalised utterance. None once the stream is finished.
+
+        Raises asyncio.TimeoutError if nothing arrives in `timeout` — which is
+        how the caller of this distinguishes "they have stopped for now" from
+        "the call is over", and is what lets turns be coalesced.
+        """
+        item = await asyncio.wait_for(self._queue.get(),
+                                      timeout=IDLE_TIMEOUT if timeout is None else timeout)
+        return None if item == "" else item
+
     async def utterances(self) -> AsyncIterator[str]:
         """Yield complete caller utterances as Deepgram finalises them."""
         while True:
             try:
-                item = await asyncio.wait_for(self._queue.get(), timeout=IDLE_TIMEOUT)
+                item = await self.next_utterance()
             except asyncio.TimeoutError:
                 logger.info("STT stream idle for %ss — ending", IDLE_TIMEOUT)
                 return
-            if item == "":
+            if item is None:
                 return
             yield item
 
