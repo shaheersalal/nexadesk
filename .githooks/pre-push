@@ -1,0 +1,13 @@
+#!/bin/sh
+#
+# Committed rather than left in .git/hooks, which is not versioned — a hook
+# only I have is a hook nobody else on the project gets. Enable it with:
+#
+#   git config core.hooksPath .githooks
+#
+# Deliberately a thin wrapper: the checks themselves live in scripts/check.sh
+# so that they can be run by hand, and so there is one place to keep them in
+# step with .github/workflows/ci.yml.
+#
+# Use `git push --no-verify` to skip it.
+exec sh "$(git rev-parse --show-toplevel)/scripts/check.sh"
