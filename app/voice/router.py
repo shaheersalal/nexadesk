@@ -325,11 +325,20 @@ async def _speak_stream(
 
 async def _send_media(websocket: WebSocket, stream_sid: str, audio: bytes) -> None:
     """Send one mulaw payload to Twilio on the active stream."""
-    await websocket.send_text(json.dumps({
-        "event": "media",
-        "streamSid": stream_sid,
-        "media": {"payload": base64.b64encode(audio).decode()},
-    }))
+    try:
+        await websocket.send_text(json.dumps({
+            "event": "media",
+            "streamSid": stream_sid,
+            "media": {"payload": base64.b64encode(audio).decode()},
+        }))
+    except RuntimeError as exc:
+        # Hanging up mid-reply is the normal end of a call, not a fault. Starlette
+        # raises a bare RuntimeError for a send after close, which was surfacing
+        # as "Media stream error ... Unexpected ASGI message" at ERROR on calls
+        # that had simply ended.
+        if "after sending" in str(exc) or "close" in str(exc).lower():
+            raise WebSocketDisconnect(code=1000) from None
+        raise
 
 
 # Deepgram's VAD can report speech in the moment right after the caller's own
