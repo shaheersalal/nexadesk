@@ -233,6 +233,11 @@ async def collect_turn(stt, spoken: "SpokenLog | None" = None) -> str | None:
                 spoken.suppressed += 1
                 logger.info("Ignored own speech (echo %.2f): %s", score, item)
                 continue
+            # Logged for every accepted turn too, not only rejections: without
+            # the score for the ones that got through there is no way to tell a
+            # working suppressor from one that never ran.
+            logger.info("Accepted turn (echo %.2f, playing=%s): %s",
+                        score, spoken.is_speaking(), item)
 
         if not parts:
             deadline = time.monotonic() + COALESCE_MAX

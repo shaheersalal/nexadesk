@@ -44,6 +44,12 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger("nexadesk")
 
+# Which build is actually serving. Without this, "is my fix live yet?" can only
+# be answered by inferring it from behaviour, which is exactly the moment the
+# behaviour is in question.
+_BUILD = (os.getenv("RAILWAY_GIT_COMMIT_SHA") or "unknown")[:12]
+logger.info("NexaDesk API starting — build %s", _BUILD)
+
 from app.voice.router import router as voice_router
 from app.chat.router import router as chat_router
 from app.rag.router import router as rag_router
