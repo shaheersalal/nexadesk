@@ -87,6 +87,11 @@ def _build_ulaw_table() -> list[int]:
 _ULAW = _build_ulaw_table()
 
 
+def _normalise(text: str) -> str:
+    """Compare transcripts without being thrown by spacing or final punctuation."""
+    return " ".join(text.split()).casefold().rstrip(".?!,")
+
+
 def _configured_default_language() -> str | None:
     """
     The language to ask for when the caller's is not yet known.
@@ -276,8 +281,7 @@ class DeepgramStream:
         self._changed_at = time.monotonic()
 
     def _matches_delivered(self, text: str) -> bool:
-        norm = lambda s: " ".join(s.split()).casefold().rstrip(".?!,")
-        return bool(self._delivered) and norm(text) == norm(self._delivered)
+        return bool(self._delivered) and _normalise(text) == _normalise(self._delivered)
 
     async def _flush(self) -> None:
         """Hand whatever we are holding to the turn pump, as one utterance."""
@@ -352,24 +356,24 @@ class DeepgramStream:
             parts.append(self._interim)
         return " ".join(p for p in parts if p).strip()
 
-    async def next_utterance(self, timeout: float | None = None) -> str | None:
+    async def next_utterance(self) -> str | None:
         """
-        One finalised utterance. None once the stream is finished.
+        Wait for one finalised utterance. None once the stream is finished.
 
-        Raises asyncio.TimeoutError if nothing arrives in `timeout` — which is
-        how the caller of this distinguishes "they have stopped for now" from
-        "the call is over", and is what lets turns be coalesced.
+        Deliberately unbounded: a deadline is the caller's business, and
+        callers want different ones — a short window while coalescing a turn,
+        a long one deciding the call is over. Wrap it in `asyncio.timeout`.
         """
-        item = await asyncio.wait_for(self._queue.get(),
-                                      timeout=IDLE_TIMEOUT if timeout is None else timeout)
+        item = await self._queue.get()
         return None if item == "" else item
 
     async def utterances(self) -> AsyncIterator[str]:
         """Yield complete caller utterances as Deepgram finalises them."""
         while True:
             try:
-                item = await self.next_utterance()
-            except asyncio.TimeoutError:
+                async with asyncio.timeout(IDLE_TIMEOUT):
+                    item = await self.next_utterance()
+            except TimeoutError:
                 logger.info("STT stream idle for %ss — ending", IDLE_TIMEOUT)
                 return
             if item is None:

@@ -28,6 +28,8 @@ import time
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 
+from app.voice.stt_stream import IDLE_TIMEOUT
+
 # How long spoken text stays worth comparing against. Generous, because the
 # window check below is what actually bounds it.
 RETENTION_SECONDS = 20.0
@@ -218,11 +220,15 @@ async def collect_turn(stt, spoken: "SpokenLog | None" = None) -> str | None:
             if window <= 0:
                 break
             try:
-                item = await stt.next_utterance(timeout=window)
-            except asyncio.TimeoutError:
+                async with asyncio.timeout(window):
+                    item = await stt.next_utterance()
+            except TimeoutError:
                 break
         else:
-            item = await stt.next_utterance()
+            # No turn started yet, so this wait is "has the call gone quiet for
+            # good", not "is there more of this sentence coming".
+            async with asyncio.timeout(IDLE_TIMEOUT):
+                item = await stt.next_utterance()
 
         if item is None:
             return merge_utterances(parts) if parts else None

@@ -8,6 +8,7 @@ coming back down the line for the caller, and not turning one question into two
 answers.
 """
 import asyncio
+import time
 
 import pytest
 
@@ -131,22 +132,30 @@ def test_blank_utterances_are_dropped():
 # --- coalescing -------------------------------------------------------------
 
 class FakeStt:
-    """Hands out utterances on a schedule, like the real stream does."""
+    """
+    Hands out utterances on a schedule, like the real stream does.
+
+    Due times are absolute so that a wait cancelled by `asyncio.timeout` leaves
+    the pending utterance where it was, arriving when it always would have —
+    which is what the real queue does, and what makes the coalescing windows
+    under test mean anything.
+    """
 
     def __init__(self, schedule):
-        self._schedule = list(schedule)     # (delay_before, text|None)
+        due = time.monotonic()
+        self._items = []
+        for delay, text in schedule:      # (delay_before, text|None)
+            due += delay
+            self._items.append((due, text))
 
-    async def next_utterance(self, timeout=None):
-        if not self._schedule:
-            await asyncio.sleep(timeout if timeout is not None else 10)
-            raise asyncio.TimeoutError
-        delay, text = self._schedule[0]
-        if timeout is not None and delay > timeout:
-            await asyncio.sleep(timeout)
-            self._schedule[0] = (delay - timeout, text)
-            raise asyncio.TimeoutError
-        await asyncio.sleep(delay)
-        self._schedule.pop(0)
+    async def next_utterance(self):
+        if not self._items:
+            await asyncio.sleep(3600)     # nothing more is coming
+        due, text = self._items[0]
+        remaining = due - time.monotonic()
+        if remaining > 0:
+            await asyncio.sleep(remaining)
+        self._items.pop(0)
         return text
 
 
