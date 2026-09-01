@@ -164,23 +164,13 @@ async def media_stream(websocket: WebSocket, call_sid: str):
                 """Run a turn for each thing the caller actually says."""
                 while True:
                     try:
-                        utterance = await collect_turn(stt)
+                        utterance = await collect_turn(stt, spoken)
                     except asyncio.TimeoutError:
                         logger.info("Caller silent — ending turn pump")
                         return
                     if utterance is None:
                         return
                     if not utterance.strip():
-                        continue
-
-                    # Attribution: the line echoes, and Deepgram cannot tell our
-                    # voice from theirs. Without this the assistant answers its
-                    # own last sentence, which is the single most damning thing
-                    # a demo can do.
-                    score = spoken.echo_score(utterance)
-                    if score >= 0.62:
-                        spoken.suppressed += 1
-                        logger.info("Ignored own speech (echo %.2f): %s", score, utterance)
                         continue
 
                     logger.info("Caller (%s): %s", call_sid, utterance)
@@ -318,11 +308,13 @@ async def _speak_stream(
             interrupted = True
             break
         if spoken is not None:
-            spoken.mark_audio_sent()
+            spoken.note_audio_sent(len(audio))
         await _send_media(websocket, stream_sid, audio)
 
     if interrupted:
         logger.info("Caller barged in — clearing queued audio")
+        if spoken is not None:
+            spoken.notify_cleared()
         try:
             await websocket.send_text(json.dumps({
                 "event": "clear", "streamSid": stream_sid,
@@ -416,9 +408,10 @@ async def _speak_greeting(websocket, stream_sid, text: str, redis,
     try:
         cached = await redis.get(key)
         if cached:
+            audio = base64.b64decode(cached)
             if spoken is not None:
-                spoken.mark_audio_sent()
-            await _send_media(websocket, stream_sid, base64.b64decode(cached))
+                spoken.note_audio_sent(len(audio))
+            await _send_media(websocket, stream_sid, audio)
             return
     except Exception as exc:
         logger.warning("Greeting cache read failed (%s)", exc)
@@ -431,7 +424,7 @@ async def _speak_greeting(websocket, stream_sid, text: str, redis,
         async for chunk in speak_tokens(_one()):
             collected.extend(chunk)
             if spoken is not None:
-                spoken.mark_audio_sent()
+                spoken.note_audio_sent(len(chunk))
             await _send_media(websocket, stream_sid, chunk)
     except Exception as exc:
         logger.error("Greeting synthesis failed: %s", exc)

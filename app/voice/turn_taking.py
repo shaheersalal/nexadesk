@@ -82,7 +82,7 @@ class SpokenLog:
     """
 
     _recent: list[_Spoken] = field(default_factory=list)
-    _speaking_until: float = 0.0
+    _playing_until: float = 0.0
     suppressed: int = 0
 
     # -- recording ---------------------------------------------------------
@@ -93,12 +93,29 @@ class SpokenLog:
             self._recent.append(_Spoken(time.monotonic(), words))
             self._prune()
 
-    def mark_audio_sent(self) -> None:
-        """Called as each audio chunk goes out, to track when we were speaking."""
-        self._speaking_until = time.monotonic()
+    def note_audio_sent(self, n_bytes: int) -> None:
+        """
+        Account for audio handed to Twilio, in *playback* time.
+
+        Not the same as send time, and the difference is the whole bug this
+        replaced: we push synthesis to Twilio as fast as it is produced, but it
+        plays out at 8 kHz. Tracking when we sent audio had the assistant
+        believing it had stopped speaking seconds before the caller had
+        finished hearing it — so the echo of its own greeting arrived outside
+        the window, was taken for the caller, and was answered.
+
+        Modelled as a playout queue: extend the end if audio is still playing,
+        otherwise start from now.
+        """
+        now = time.monotonic()
+        self._playing_until = max(self._playing_until, now) + n_bytes / 8000.0
+
+    def notify_cleared(self) -> None:
+        """Twilio dropped the queued audio on a barge-in; playback stops now."""
+        self._playing_until = time.monotonic()
 
     def is_speaking(self) -> bool:
-        return time.monotonic() - self._speaking_until < 0.4
+        return time.monotonic() < self._playing_until
 
     def _prune(self) -> None:
         cutoff = time.monotonic() - RETENTION_SECONDS
@@ -113,7 +130,10 @@ class SpokenLog:
         possible, so a caller quoting us later is still heard.
         """
         now = time.monotonic() if now is None else now
-        if now - self._speaking_until > ECHO_TAIL_SECONDS:
+        # Echo can arrive while we are playing, and for a while after: the
+        # round trip through the carrier, plus the time Deepgram takes to
+        # transcribe it and the settle window before it is delivered.
+        if now - self._playing_until > ECHO_TAIL_SECONDS:
             return 0.0
 
         heard = _words(text)
@@ -167,7 +187,7 @@ def merge_utterances(parts: list[str]) -> str:
     return " ".join(seen).strip()
 
 
-async def collect_turn(stt) -> str | None:
+async def collect_turn(stt, spoken: "SpokenLog | None" = None) -> str | None:
     """
     Gather one turn's worth of speech from the transcription stream.
 
@@ -177,26 +197,46 @@ async def collect_turn(stt) -> str | None:
     once, with everything in it — which is the whole point of listening through
     the assistant's own speech.
 
+    Attribution is applied per utterance, before merging, not after. Merging
+    first and testing the result dilutes the score with the caller's real words
+    and lets the assistant's own voice ride into the turn on the back of them:
+
+      Caller: Do you have anything with three bedrooms in Austin? Hello? I
+              think there might be a mix up I'm actually Shahir's assistant...
+
+    An utterance that is our own echo neither starts a turn nor extends one.
+
     Returns None when the stream is finished. Propagates asyncio.TimeoutError
     from the initial wait, which is the caller falling silent for good.
     """
-    first = await stt.next_utterance()
-    if first is None:
-        return None
+    parts: list[str] = []
+    deadline = 0.0
 
-    parts = [first]
-    deadline = time.monotonic() + COALESCE_MAX
     while True:
-        window = min(COALESCE_WINDOW, deadline - time.monotonic())
-        if window <= 0:
-            break
-        try:
-            nxt = await stt.next_utterance(timeout=window)
-        except asyncio.TimeoutError:
-            break
-        if nxt is None:
-            break
-        parts.append(nxt)
+        if parts:
+            window = min(COALESCE_WINDOW, deadline - time.monotonic())
+            if window <= 0:
+                break
+            try:
+                item = await stt.next_utterance(timeout=window)
+            except asyncio.TimeoutError:
+                break
+        else:
+            item = await stt.next_utterance()
+
+        if item is None:
+            return merge_utterances(parts) if parts else None
+
+        if spoken is not None:
+            score = spoken.echo_score(item)
+            if score >= ECHO_MATCH_RATIO:
+                spoken.suppressed += 1
+                logger.info("Ignored own speech (echo %.2f): %s", score, item)
+                continue
+
+        if not parts:
+            deadline = time.monotonic() + COALESCE_MAX
+        parts.append(item)
 
     if len(parts) > 1:
         logger.info("Coalesced %d utterances into one turn", len(parts))
