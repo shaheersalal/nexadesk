@@ -6,6 +6,7 @@ import json
 from typing import Optional
 
 from app.dependencies import get_supabase_admin
+from app.shared.verticals import get_vertical
 
 
 async def capture_lead_fields(
@@ -21,6 +22,11 @@ async def capture_lead_fields(
     bedrooms_needed: Optional[int] = None,
     timeline: Optional[str] = None,
     intent: Optional[str] = None,
+    # ai_studio-vertical fields (migration 0006_leads_studio_fields.sql) —
+    # unset for real_estate leads, which keep using the fields above.
+    client_company: Optional[str] = None,
+    project_type: Optional[str] = None,
+    budget_text: Optional[str] = None,
 ) -> Optional[str]:
     """
     Upsert structured lead fields into Supabase.
@@ -37,6 +43,9 @@ async def capture_lead_fields(
         "bedrooms_needed": bedrooms_needed,
         "timeline": timeline,
         "intent": intent,
+        "client_company": client_company,
+        "project_type": project_type,
+        "budget_text": budget_text,
     }.items() if v is not None}
 
     if not updates:
@@ -69,21 +78,19 @@ async def flag_escalation(lead_id: Optional[str], company_id: str) -> None:
         pass
 
 
-async def extract_fields_from_message(query: str, llm_complete_fn) -> dict:
+async def extract_fields_from_message(
+    query: str,
+    llm_complete_fn,
+    vertical_key: Optional[str] = None,
+) -> dict:
     """
     Fast gpt-4o-mini call to pull structured facts from a single user message.
-    Returns a dict with nulls for anything not mentioned.
+    Returns a dict with nulls for anything not mentioned. The fields extracted
+    depend on the company's vertical (app/shared/verticals.py) — real_estate
+    pulls budget_min/max + bedrooms, ai_studio pulls client_company +
+    project_type, etc. Falls back to real_estate for anything unset.
     """
-    prompt = (
-        f'Extract real estate preference facts the user explicitly stated.\n'
-        f'Message: "{query}"\n\n'
-        'Return JSON only (no markdown):\n'
-        '{"name":null,"phone":null,"email":null,"budget_min":null,"budget_max":null,'
-        '"area_preference":null,"bedrooms_needed":null,"timeline":null,"intent":null}\n'
-        'intent must be one of: buy | rent | invest | null\n'
-        'budget_min/budget_max as integers in AED, bedrooms_needed as integer, everything else string or null.\n'
-        'Only include facts explicitly stated — do not infer.'
-    )
+    prompt = get_vertical(vertical_key)["extract_prompt"].format(query=query)
     raw = await llm_complete_fn(
         system="Extract facts from a message. Return only valid JSON.",
         messages=[{"role": "user", "content": prompt}],

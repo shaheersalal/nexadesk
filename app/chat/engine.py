@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.chat.lead_scoring import score_message, compute_total_delta
 from app.dependencies import get_supabase_admin
 from app.agents import orchestrator
+from app.rag.live_fetch import get_live_context
 
 settings = get_settings()
 
@@ -42,6 +43,7 @@ async def chat_turn(
       }
     """
     company = await get_company_context(company_id)
+    live_fetch_context = await get_live_context(session_id)
 
     result = await orchestrator.run(
         user_message=user_message,
@@ -49,6 +51,7 @@ async def chat_turn(
         history=history,
         company=company,
         lead_id=lead_id,
+        live_fetch_context=live_fetch_context,
     )
 
     # Lead scoring (rule-based, no extra LLM call)

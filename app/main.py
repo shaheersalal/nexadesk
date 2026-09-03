@@ -60,6 +60,7 @@ from app.public.router import router as public_router
 from app.assistant.router import router as assistant_router
 from app.onboarding.router import router as onboarding_router
 from app.admin.router import router as admin_router
+from app.analytics.router import router as analytics_router
 from app.companies.router import router as companies_router
 from app.pricing.router import router as pricing_router
 from app.integrations.router import router as integrations_router
@@ -169,6 +170,14 @@ app.add_middleware(
         # Standalone demo app on Vercel — calls /demo/chat and /demo/voice
         # cross-origin now that it no longer proxies through its own API routes.
         "https://nexadesk-1j2y.vercel.app",
+        # shaheer.dev — its own company/tenant now (ai_studio vertical), calls
+        # /chat/message, /chat/live-context, /analytics/track directly.
+        "https://shaheer.dev",
+        "https://www.shaheer.dev",
+        # Pre-cutover Vercel preview for the shaheer.dev Next.js rebuild —
+        # remove once DNS actually points shaheer.dev at Vercel and this
+        # origin is retired.
+        "https://shaheer-dev-next.vercel.app",
         "http://localhost:5173",
         "http://localhost:8000",
         "http://localhost:3000",
@@ -202,6 +211,7 @@ app.include_router(inbound_email_router, prefix="/rag", tags=["rag"])
 app.include_router(leads_router, prefix="/leads", tags=["leads"])
 app.include_router(properties_router, prefix="/properties", tags=["properties"])
 app.include_router(admin_router, prefix="/admin", tags=["admin"])
+app.include_router(analytics_router, prefix="/analytics", tags=["analytics"])
 app.include_router(companies_router, prefix="/companies", tags=["companies"])
 app.include_router(pricing_router, prefix="/pricing", tags=["pricing"])
 app.include_router(integrations_router, prefix="/integrations", tags=["integrations"])

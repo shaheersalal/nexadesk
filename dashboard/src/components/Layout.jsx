@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import {
   LayoutDashboard, Building2, BookOpen, Users, Calendar, Bot,
   Settings, LogOut, Menu, X, Sparkles, ShieldCheck, MessageSquare, LifeBuoy, BarChart3,
-  ChevronsUpDown, ChevronLeft, ChevronRight, Plug,
+  ChevronsUpDown, ChevronLeft, ChevronRight, Plug, Globe,
 } from 'lucide-react'
 import PlaneMark from './PlaneMark'
 import { getAccessibleCompanies, getSelectedCompanyId, setSelectedCompanyId } from '../lib/api'
@@ -179,6 +179,15 @@ export default function Layout({ session }) {
             >
               <ShieldCheck className="w-4 h-4 flex-shrink-0" />
               <span className={sidebarCollapsed ? 'md:hidden' : ''}>Admin Panel</span>
+            </Link>
+            <Link
+              to="/dashboard/site-analytics"
+              onClick={closeSidebar}
+              title={sidebarCollapsed ? 'Site Analytics' : undefined}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-amber-400 hover:bg-navy-700 hover:text-amber-300 transition-colors ${sidebarCollapsed ? 'md:justify-center md:px-2' : ''}`}
+            >
+              <Globe className="w-4 h-4 flex-shrink-0" />
+              <span className={sidebarCollapsed ? 'md:hidden' : ''}>Site Analytics</span>
             </Link>
           </div>
         )}

@@ -16,34 +16,15 @@ from app.dependencies import get_supabase_admin, get_redis
 from app.shared.demo_prompt import DEMO_KNOWLEDGE_PROMPT
 from app.shared.language import anormalize_for_llm, atranslate_from_english
 from app.shared.llm import complete
+# Shared with app/chat/router.py's live-context endpoint so both trust
+# proxy headers under the exact same TRUST_PROXY_HEADERS gate — see
+# AUDIT.md M5 for why that gate matters — instead of re-implementing it.
+from app.shared.net import get_client_ip as _get_client_ip
 from app.voice.stt_file import transcribe_file
 from app.voice.tts import synthesize_browser
 
 logger = logging.getLogger("nexadesk.public")
 router = APIRouter()
-
-
-def _get_client_ip(request: Request) -> str:
-    """
-    Best-effort client IP for rate limiting.
-
-    Forwarded headers are only honoured when TRUST_PROXY_HEADERS is set, because
-    they are trivially forged otherwise: `curl -H "CF-Connecting-IP: <random>"`
-    yields a fresh throttle bucket on every request, which nullified every rate
-    limit in this module (AUDIT.md M5).
-
-    Enable it only when the app genuinely sits behind a proxy that overwrites
-    these headers. Railway's edge does not, so the default is off and we use the
-    real socket peer.
-    """
-    if get_settings().TRUST_PROXY_HEADERS:
-        cf = request.headers.get("CF-Connecting-IP")
-        if cf:
-            return cf.strip()
-        xff = request.headers.get("X-Forwarded-For")
-        if xff:
-            return xff.split(",")[0].strip()
-    return (request.client.host if request.client else None) or "unknown"
 
 
 async def _verify_recaptcha(token: str | None, settings) -> bool:

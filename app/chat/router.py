@@ -1,19 +1,27 @@
 from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.auth.middleware import CurrentUser
 from app.dependencies import RlsDb
 from app.chat.engine import chat_turn
 from app.dependencies import get_supabase_admin
-from app.shared.prompts import CHAT_GREETING
+from app.shared.verticals import get_vertical
 from app.shared import session_store
+from app.shared.net import get_client_ip
+from app.rag.live_fetch import fetch_page_text, store_live_context, clear_live_context, LiveFetchError
 from app.config import get_settings
 
 router = APIRouter()
 settings = get_settings()
+
+# Per-IP budget for the live-context fetch — it makes an outbound HTTP
+# request per call, so it gets its own tighter limit rather than riding on
+# chat's own per-session throttle.
+LIVE_CONTEXT_RATE_WINDOW = 60   # seconds
+LIVE_CONTEXT_RATE_MAX = 6       # fetches per IP per window
 
 # Session history cache lives in Redis (shared across all uvicorn workers).
 # On cache miss (TTL expiry, restart) we reload from Supabase conversations table.
@@ -103,17 +111,64 @@ async def get_history(session_id: str, db: RlsDb, current_user: CurrentUser):
 async def get_greeting(company_id: str):
     """Return greeting for the embedded chat widget (public endpoint)."""
     sb = get_supabase_admin()
-    result = sb.table("companies").select("name, ai_persona").eq("id", company_id).single().execute()
+    result = (
+        sb.table("companies")
+        .select("name, ai_persona, receptionist_name, vertical")
+        .eq("id", company_id).single().execute()
+    )
     if not result.data:
         raise HTTPException(status_code=404, detail="Company not found")
     company = result.data
     company_name = company.get("name", settings.APP_NAME)
-    ai_name = settings.APP_NAME
+    ai_name = company.get("receptionist_name") or settings.APP_NAME
+    vertical = get_vertical(company.get("vertical"))
 
     return {
-        "greeting": CHAT_GREETING.format(ai_name=ai_name, company_name=company_name),
+        "greeting": vertical["chat_greeting"].format(ai_name=ai_name, company_name=company_name),
         "company_name": company_name,
     }
+
+
+class LiveContextRequest(BaseModel):
+    key: str = Field(..., min_length=1, max_length=200)
+    url: str = Field(..., min_length=3, max_length=2048)
+
+
+class LiveContextClearRequest(BaseModel):
+    key: str = Field(..., min_length=1, max_length=200)
+
+
+@router.post("/live-context")
+async def set_live_context(body: LiveContextRequest, request: Request):
+    """
+    Fetch a visitor-supplied URL and stash its text for this session/caller
+    only (app/rag/live_fetch.py) — Part 2 of the ai_studio knowledge base.
+    Public and rate-limited: it makes an outbound fetch on the caller's say-so.
+    """
+    ip = get_client_ip(request)
+    count = await session_store.incr(f"live_ctx_rate:{ip}", LIVE_CONTEXT_RATE_WINDOW)
+    if count > LIVE_CONTEXT_RATE_MAX:
+        raise HTTPException(status_code=429, detail="Too many page fetches — please wait a minute.")
+
+    try:
+        final_url, text = await fetch_page_text(body.url)
+    except LiveFetchError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    await store_live_context(body.key, final_url, text)
+    return {"url": final_url, "chars": len(text)}
+
+
+@router.post("/live-context/clear")
+async def clear_live_context_route(body: LiveContextClearRequest):
+    """
+    Explicit deletion point for the ai_studio live-fetch context, called by
+    the frontend on tab close / call end (navigator.sendBeacon). The Redis
+    entry also carries a short TTL as a backstop, but this is the primary
+    path — the content should not outlive the conversation that used it.
+    """
+    await clear_live_context(body.key)
+    return {"cleared": True}
 
 
 async def _load_history_from_db(session_id: str) -> list[dict]:

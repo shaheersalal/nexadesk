@@ -25,7 +25,7 @@ from typing import AsyncGenerator, Optional
 from app.config import get_settings
 from app.shared import llm
 from app.shared.language import anormalize_for_llm, atranslate_from_english
-from app.shared.prompts import RECEPTIONIST_SYSTEM_PROMPT
+from app.shared.verticals import get_vertical, build_knowledge_system_prompt
 from app.rag.store import query_with_confidence
 from app.agents.tools import capture_lead_fields, flag_escalation, extract_fields_from_message
 
@@ -78,24 +78,25 @@ async def _rewrite_query(english_query: str, history_tail: str) -> str:
 
 # ── Router ────────────────────────────────────────────────────────────────────
 
-async def _route(user_message: str, history_tail: str, company_name: str) -> str:
+async def _route(user_message: str, history_tail: str, company: dict) -> str:
+    vertical = get_vertical(company.get("vertical"))
+    domain = vertical["router_domain"].format(company_name=company.get("name", "the company"))
     prompt = (
-        f"Classify this inbound message for a real estate AI receptionist at {company_name}.\n"
+        f"Classify this inbound message for {domain}.\n"
         f"Recent context: {history_tail}\n"
         f'Message: "{user_message}"\n\n'
         "Return JSON only: {\"intent\": \"<one of: knowledge|qualify|appointment|escalate>\"}\n"
-        "knowledge   = ANY question seeking information rather than offering it: a\n"
-        "              specific property (price, availability, features, location), the\n"
-        "              wider market, how buying or renting works, or this AI service\n"
-        "              itself - how it works, what model it uses, latency, security,\n"
-        "              limitations. A question about the assistant is a knowledge\n"
-        "              question, never a qualification opportunity.\n"
-        "qualify     = the client is expressing interest or sharing requirements and\n"
+        "knowledge   = ANY question seeking information rather than offering it: specifics\n"
+        "              about what's on offer, the wider context/market, or this AI\n"
+        "              service itself - how it works, what model it uses, latency,\n"
+        "              security, limitations. A question about the assistant is a\n"
+        "              knowledge question, never a qualification opportunity.\n"
+        "qualify     = the visitor is expressing interest or sharing requirements and\n"
         "              has not asked anything. Only when there is no question.\n"
-        "appointment = explicitly wants to book/schedule a viewing or meeting\n"
+        "appointment = explicitly wants to book/schedule a call, viewing, or meeting\n"
         "escalate    = angry, wants to speak to a human, or complex complaint\n\n"
         "If the message contains a question it is almost never qualify. Answering a\n"
-        "question by asking for the caller budget is the worst possible outcome."
+        "question by demanding the visitor's details first is the worst possible outcome."
     )
     raw = await llm.complete(
         system="You are a routing classifier. Return only valid JSON.",
@@ -112,43 +113,27 @@ async def _route(user_message: str, history_tail: str, company_name: str) -> str
 
 # ── System prompt builders ────────────────────────────────────────────────────
 
-def _knowledge_system(company: dict, rag_context: str, voice: bool = False) -> str:
-    working_hours = company.get("working_hours", {"Mon–Fri": "9:00–17:00"})
-    hours_str = (
-        ", ".join(f"{k}: {v}" for k, v in working_hours.items())
-        if isinstance(working_hours, dict)
-        else str(working_hours)
-    )
-    company_info = (
-        f"Address: {company.get('address', 'N/A')} | "
-        f"Phone: {company.get('phone', 'N/A')} | "
-        f"Email: {company.get('email', 'N/A')}"
-    )
-    system = RECEPTIONIST_SYSTEM_PROMPT.format(
-        ai_persona=company.get("ai_persona", "a professional real estate receptionist"),
-        company_name=company.get("name", settings.APP_NAME),
-        company_info=company_info,
-        working_hours=hours_str,
-        rag_context=rag_context or "No property information uploaded yet.",
-    )
-    if not rag_context:
-        system += (
-            "\n\n[SYSTEM NOTE: No knowledge base context was retrieved. "
-            "Do NOT invent property details. Capture the lead instead.]"
-        )
+def _knowledge_system(
+    company: dict,
+    rag_context: str,
+    voice: bool = False,
+    live_fetch_context: Optional[str] = None,
+) -> str:
+    system = build_knowledge_system_prompt(company, rag_context, live_fetch_context)
     if voice:
         system += "\n\nIMPORTANT: Voice call — reply in 1–2 short sentences only. No lists."
     return system
 
 
 def _qualifier_system(company: dict, voice: bool = False) -> str:
+    vertical = get_vertical(company.get("vertical"))
     system = (
-        f"You are {company.get('ai_persona', 'a real estate receptionist')} "
+        f"You are {company.get('ai_persona', 'a receptionist')} "
         f"for {company.get('name', settings.APP_NAME)}.\n"
-        "Your goal: understand what the client is looking for and naturally collect their details.\n"
-        "Ask ONE qualifying question per reply (budget, area, bedrooms, timeline, name, or phone).\n"
+        "Your goal: understand what the visitor is looking for and naturally collect their details.\n"
+        f"{vertical['qualifier_extra']}\n"
         "Keep replies to 2–3 sentences. Sound like a warm, human agent — not a form.\n"
-        "If they mention a specific property, confirm interest and ask for their contact details."
+        "If they raise something specific, confirm interest and ask for their contact details."
     )
     if voice:
         system += "\n\nIMPORTANT: Voice call — reply in 1–2 short sentences only."
@@ -176,8 +161,9 @@ async def _knowledge_agent(
     company: dict,
     rag_context: str,
     voice: bool = False,
+    live_fetch_context: Optional[str] = None,
 ) -> str:
-    system = _knowledge_system(company, rag_context, voice)
+    system = _knowledge_system(company, rag_context, voice, live_fetch_context)
     messages = history[-10:] + [{"role": "user", "content": user_message}]
     max_tokens = 150 if voice else 300
     return await llm.complete(system=system, messages=messages, max_tokens=max_tokens, temperature=0.3)
@@ -214,9 +200,14 @@ async def run(
     history: list[dict],
     company: dict,
     lead_id: Optional[str] = None,
+    live_fetch_context: Optional[str] = None,
 ) -> dict:
     """
     Execute one multi-agent chat turn.
+
+    `live_fetch_context` is an optional visitor-supplied page fetched for
+    this session only (app/rag/live_fetch.py) — passed straight through to
+    the knowledge agent, never persisted, never treated as instructions.
 
     Returns:
       {
@@ -229,7 +220,6 @@ async def run(
       }
     """
     english_query, detected_lang = await anormalize_for_llm(user_message)
-    company_name = company.get("name", settings.APP_NAME)
 
     recent_tail = " | ".join(
         f"{m['role']}: {m['content'][:60]}" for m in history[-2:]
@@ -238,7 +228,7 @@ async def run(
     # Router + query rewrite in parallel — both are cheap fast LLM calls.
     # The rewritten query is used only for vector search; all agent calls
     # still receive the original english_query so the conversation stays natural.
-    intent_task  = asyncio.create_task(_route(english_query, recent_tail, company_name))
+    intent_task  = asyncio.create_task(_route(english_query, recent_tail, company))
     rewrite_task = asyncio.create_task(_rewrite_query(english_query, recent_tail))
     intent, rag_query = await asyncio.gather(intent_task, rewrite_task)
 
@@ -251,13 +241,13 @@ async def run(
         reply_task = asyncio.create_task(_escalation_agent(english_query, company))
     elif intent == "knowledge":
         reply_task = asyncio.create_task(
-            _knowledge_agent(english_query, history, company, rag_context)
+            _knowledge_agent(english_query, history, company, rag_context, live_fetch_context=live_fetch_context)
         )
     else:
         reply_task = asyncio.create_task(_qualifier_agent(english_query, history, company))
 
     extract_task = asyncio.create_task(
-        extract_fields_from_message(english_query, llm.complete)
+        extract_fields_from_message(english_query, llm.complete, company.get("vertical"))
     )
 
     reply_english, extracted = await asyncio.gather(reply_task, extract_task)
@@ -272,6 +262,9 @@ async def run(
             budget_min=extracted.get("budget_min"),
             budget_max=extracted.get("budget_max"),
             area_preference=extracted.get("area_preference"),
+            client_company=extracted.get("client_company"),
+            project_type=extracted.get("project_type"),
+            budget_text=extracted.get("budget_text"),
             bedrooms_needed=extracted.get("bedrooms_needed"),
             timeline=extracted.get("timeline"),
             intent=extracted.get("intent"),
@@ -279,6 +272,16 @@ async def run(
 
     if intent == "escalate":
         await flag_escalation(new_lead_id, company_id)
+
+    # ai_studio only: email Shaheer the moment a brand-new lead is captured,
+    # on top of the dashboard. Real-estate tenants rely on their dashboard
+    # alone — this was never asked for there and stays scoped to his own
+    # site. Fire-and-forget so a slow/failed send never adds latency here.
+    if company.get("vertical") == "ai_studio" and new_lead_id and not lead_id:
+        from app.shared.notify import send_lead_email
+        asyncio.create_task(
+            send_lead_email(extracted, company.get("name", "shaheer.dev"), channel="chat")
+        )
 
     reply = await atranslate_from_english(reply_english, detected_lang)
 
@@ -313,14 +316,13 @@ async def run_voice_streaming(
       ("done", dict)    — final metadata: reply, reply_english, lead_id, intent, confidence
     """
     english_query, detected_lang = await anormalize_for_llm(user_message)
-    company_name = company.get("name", settings.APP_NAME)
 
     recent_tail = " | ".join(
         f"{m['role']}: {m['content'][:60]}" for m in history[-2:]
     ) or "start of conversation"
 
     # Router + query rewrite in parallel — RAG waits for rewritten query.
-    intent_task  = asyncio.create_task(_route(english_query, recent_tail, company_name))
+    intent_task  = asyncio.create_task(_route(english_query, recent_tail, company))
     rewrite_task = asyncio.create_task(_rewrite_query(english_query, recent_tail))
     intent, rag_query = await asyncio.gather(intent_task, rewrite_task)
 
@@ -331,7 +333,7 @@ async def run_voice_streaming(
 
     # Field extraction fires now, we await it after streaming finishes
     extract_task = asyncio.create_task(
-        extract_fields_from_message(english_query, llm.complete)
+        extract_fields_from_message(english_query, llm.complete, company.get("vertical"))
     )
 
     # Build system + messages for this intent (voice-brief)
@@ -372,10 +374,19 @@ async def run_voice_streaming(
             bedrooms_needed=extracted.get("bedrooms_needed"),
             timeline=extracted.get("timeline"),
             intent=extracted.get("intent"),
+            client_company=extracted.get("client_company"),
+            project_type=extracted.get("project_type"),
+            budget_text=extracted.get("budget_text"),
         )
 
     if intent == "escalate":
         await flag_escalation(new_lead_id, company_id)
+
+    if company.get("vertical") == "ai_studio" and new_lead_id and not lead_id:
+        from app.shared.notify import send_lead_email
+        asyncio.create_task(
+            send_lead_email(extracted, company.get("name", "shaheer.dev"), channel="voice")
+        )
 
     yield ("done", {
         "reply": reply,

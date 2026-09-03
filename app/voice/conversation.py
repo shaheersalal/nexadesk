@@ -9,9 +9,11 @@ from starlette.concurrency import run_in_threadpool
 
 from app.config import get_settings
 from app.dependencies import get_redis
-from app.shared import llm, prompts
+from app.shared import llm
+from app.shared.verticals import build_knowledge_system_prompt
 from app.shared.language import anormalize_for_llm, atranslate_from_english
 from app.rag.store import query_with_confidence
+from app.rag.live_fetch import get_live_context
 from app.chat.lead_scoring import score_message, compute_total_delta
 from app.voice.call_session import CallSession
 from app.dependencies import get_supabase_admin
@@ -66,87 +68,9 @@ VOICE_SYSTEM_SUFFIX = (
 )
 
 
-async def process_voice_turn(
-    user_text: str,
-    session: CallSession,
-) -> tuple[str, int]:
-    """
-    Process one voice turn.
-    Returns (assistant_reply, score_delta).
-    """
-    english_query, detected_lang = await anormalize_for_llm(user_text)
-    session.language = detected_lang
-    session.language_confirmed = True
-
-    # RAG retrieval
-    rag_result = await query_with_confidence(
-        query=english_query,
-        company_id=session.company_id,
-        top_k=4,  # fewer chunks for voice (shorter context)
-    )
-    confidence = rag_result["confidence"]
-    context_text = rag_result["context_text"]
-
-    # Load company (cached — see _get_company)
-    company = await _get_company(session.company_id)
-
-    working_hours = company.get("working_hours", {"Mon-Fri": "9:00-17:00"})
-    hours_str = ", ".join(f"{k}: {v}" for k, v in working_hours.items()) if isinstance(working_hours, dict) else str(working_hours)
-    company_info = f"Phone: {company.get('phone', 'N/A')} | Email: {company.get('email', 'N/A')}"
-
-    system = prompts.RECEPTIONIST_SYSTEM_PROMPT.format(
-        ai_persona=company.get("ai_persona", "a friendly and professional real estate receptionist"),
-        company_name=company.get("name", settings.APP_NAME),
-        company_info=company_info,
-        working_hours=hours_str,
-        rag_context=context_text or "No property information loaded yet.",
-    ) + VOICE_SYSTEM_SUFFIX
-
-    if confidence in ("PARTIAL", "NO_MATCH"):
-        system += (
-            "\n[Retrieval confidence LOW. Do not state any specific price, size, "
-            "address or availability - nothing matched well enough. You may still "
-            "answer general market questions and questions about this service from "
-            "what you know. Do not stall: answer what you can, then offer to take a "
-            "name and number for the specifics.]"
-        )
-
-    messages = session.conversation_history[-8:] + [
-        {"role": "user", "content": english_query}
-    ]
-
-    reply_english = await llm.complete(
-        system=system,
-        messages=messages,
-        max_tokens=150,  # short for voice
-        temperature=0.5,
-    )
-
-    reply = await atranslate_from_english(reply_english, detected_lang)
-
-    # Score
-    events = score_message(user_text, reply_english)
-    score_delta = compute_total_delta(events)
-
-    # Update session
-    session.add_turn("user", user_text)
-    session.add_turn("assistant", reply)
-    session.score += score_delta
-    session.transcript_parts.append(f"Caller: {user_text}")
-    session.transcript_parts.append(f"AI: {reply}")
-
-    # Update lead data from scoring events. Matched against the English-normalized
-    # text (not the caller's raw words) since the name-capture regex only knows
-    # English phrasing ("my name is...") — translate_to_english preserves digits
-    # and email addresses verbatim, so phone/email extraction still works either way.
-    _update_lead_data(session, events, english_query)
-
-    return reply, score_delta
-
-
 async def _build_turn_context(user_text: str, session: CallSession) -> tuple[str, str, str]:
     """
-    Shared prologue for both the batch and streaming turn paths.
+    Shared prologue for the streaming voice turn path.
     Returns (system_prompt, english_query, detected_language).
     """
     english_query, detected_lang = await anormalize_for_llm(user_text)
@@ -160,16 +84,16 @@ async def _build_turn_context(user_text: str, session: CallSession) -> tuple[str
     )
     company = await _get_company(session.company_id)
 
-    working_hours = company.get("working_hours", {"Mon-Fri": "9:00-17:00"})
-    hours_str = ", ".join(f"{k}: {v}" for k, v in working_hours.items()) if isinstance(working_hours, dict) else str(working_hours)
-    company_info = f"Phone: {company.get('phone', 'N/A')} | Email: {company.get('email', 'N/A')}"
+    # ai_studio audition flow: a visitor pastes a URL on the web step before
+    # dialling in, keyed by the number they said they'd call from. Real
+    # estate companies never have anything stored under this key, so this is
+    # a no-op for them. See app/rag/live_fetch.py.
+    live_fetch_context = None
+    if session.caller_number:
+        live_fetch_context = await get_live_context(session.caller_number)
 
-    system = prompts.RECEPTIONIST_SYSTEM_PROMPT.format(
-        ai_persona=company.get("ai_persona", "a friendly and professional real estate receptionist"),
-        company_name=company.get("name", settings.APP_NAME),
-        company_info=company_info,
-        working_hours=hours_str,
-        rag_context=rag_result["context_text"] or "No property information loaded yet.",
+    system = build_knowledge_system_prompt(
+        company, rag_result["context_text"], live_fetch_context,
     ) + VOICE_SYSTEM_SUFFIX
 
     if rag_result["confidence"] in ("PARTIAL", "NO_MATCH"):

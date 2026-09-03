@@ -27,7 +27,7 @@ from app.voice.tts import synthesize_to_mulaw
 from app.voice.tts_live import speak_tokens
 from app.voice.conversation import stream_voice_turn
 from app.shared.llm import complete as llm_complete
-from app.shared.prompts import CALL_GREETING, CALL_GREETING_NO_STOCK, LEAD_SUMMARY_PROMPT
+from app.shared.verticals import get_vertical
 
 router = APIRouter()
 settings = get_settings()
@@ -366,7 +366,7 @@ async def _build_greeting(company_id: str) -> str:
         sb = get_supabase_admin()
         company = (
             sb.table("companies")
-            .select("name, receptionist_name")
+            .select("name, receptionist_name, vertical")
             .eq("id", company_id).maybe_single().execute()
         )
         cities = (
@@ -383,6 +383,8 @@ async def _build_greeting(company_id: str) -> str:
 
     company = (company_res.data if company_res else None) or {}
     ai_name = company.get("receptionist_name") or settings.APP_NAME
+    company_name = company.get("name", settings.APP_NAME)
+    vertical = get_vertical(company.get("vertical"))
     counts: dict[str, int] = {}
     for row in (cities_res.data or []):
         city = (row.get("city") or "").strip()
@@ -391,10 +393,10 @@ async def _build_greeting(company_id: str) -> str:
     top = [c for c, _ in sorted(counts.items(), key=lambda kv: -kv[1])[:3]]
 
     if not top:
-        return CALL_GREETING_NO_STOCK.format(ai_name=ai_name).strip()
+        return vertical["call_greeting_no_stock"].format(ai_name=ai_name, company_name=company_name).strip()
 
     places = top[0] if len(top) == 1 else ", ".join(top[:-1]) + f" and {top[-1]}"
-    return CALL_GREETING.format(ai_name=ai_name, places=places).strip()
+    return vertical["call_greeting"].format(ai_name=ai_name, company_name=company_name, places=places).strip()
 
 
 async def _speak_greeting(websocket, stream_sid, text: str, redis,
@@ -473,12 +475,32 @@ async def _finalize_call(session, duration: int) -> None:
     """After call ends: create/update lead + save conversation."""
     sb = get_supabase_admin()
 
+    # Best-effort: drop any per-call fetched-page context (app/rag/live_fetch.py)
+    # now that the call is over. Voice has no way to type a URL mid-call, so
+    # the ai_studio audition flow keys this by the caller's own number
+    # (captured on the web step before they dial in) rather than call_sid,
+    # which doesn't exist until Twilio answers. Also TTL-bound in Redis as a
+    # backstop, but this is the deliberate deletion point.
+    if session.caller_number:
+        try:
+            from app.rag.live_fetch import clear_live_context
+            await clear_live_context(session.caller_number)
+        except Exception:
+            pass
+
+    company_res = (
+        sb.table("companies").select("name, vertical").eq("id", session.company_id).maybe_single().execute()
+    )
+    company_row = (company_res.data if company_res else None) or {}
+    vertical_key = company_row.get("vertical")
+    vertical = get_vertical(vertical_key)
+
     # Generate a summary of lead_data using LLM
     if session.transcript_parts:
         transcript_text = "\n".join(session.transcript_parts)
         summary_json = await llm_complete(
             system="You extract lead information from call transcripts. Return only valid JSON.",
-            messages=[{"role": "user", "content": LEAD_SUMMARY_PROMPT.format(transcript=transcript_text)}],
+            messages=[{"role": "user", "content": vertical["lead_summary_prompt"].format(transcript=transcript_text)}],
             max_tokens=400,
             temperature=0.0,
         )
@@ -529,6 +551,16 @@ async def _finalize_call(session, duration: int) -> None:
         lead_payload["status"] = "new"
         lead_result = sb.table("leads").insert(lead_payload).execute()
         lead_id = lead_result.data[0]["id"] if lead_result.data else None
+
+        # ai_studio only — email Shaheer the moment a call produces a new
+        # lead, on top of the dashboard. Real-estate tenants rely on their
+        # dashboard alone; this was never asked for there. See
+        # app/agents/orchestrator.py::run for the matching chat-path hook.
+        if lead_id and vertical_key == "ai_studio":
+            from app.shared.notify import send_lead_email
+            asyncio.create_task(
+                send_lead_email(lead_data, company_row.get("name", "shaheer.dev"), channel="voice")
+            )
 
     # Save conversation.
     #

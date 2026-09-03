@@ -235,4 +235,13 @@ export const api = {
   // Admin
   getAdminRequests: ()     => request('GET', '/admin/requests'),
   inviteUser:       (data) => request('POST', '/admin/invite', data),
+
+  // Site analytics — owner-only (ADMIN_UID-gated server-side, see
+  // app/analytics/router.py). Server-ingested events, not RLS-scoped rows,
+  // so this goes through the HF API like a write, even though it's a GET.
+  getSiteAnalytics: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request('GET', `/analytics/site${qs ? `?${qs}` : ''}`)
+  },
+  getSiteSessionDetail: (sessionId) => request('GET', `/analytics/site/${sessionId}`),
 }

@@ -236,6 +236,11 @@ SERVICE_ROLE_ALLOWED = {
     ("app/admin/router.py", "list_requests"),
     ("app/admin/router.py", "invite_user"),
     ("app/admin/router.py", "invite_quick"),
+    # site_visits has no RLS and no company_id at all — it's owner-only
+    # first-party analytics for shaheer.dev/nexadesk.site, not tenant data,
+    # gated purely by the same ADMIN_UID check as the routes above.
+    ("app/analytics/router.py", "site_summary"),
+    ("app/analytics/router.py", "site_session_detail"),
 }
 
 

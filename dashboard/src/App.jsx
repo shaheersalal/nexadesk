@@ -7,6 +7,7 @@ import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Analytics from './pages/Analytics'
+import SiteAnalytics from './pages/SiteAnalytics'
 import Leads from './pages/Leads'
 import LeadDetail from './pages/LeadDetail'
 import Properties from './pages/Properties'
@@ -76,6 +77,11 @@ export default function App() {
           <Route path="support" element={
             session?.user?.id === ADMIN_UID
               ? <SupportInbox />
+              : <Navigate to="/dashboard" replace />
+          } />
+          <Route path="site-analytics" element={
+            session?.user?.id === ADMIN_UID
+              ? <SiteAnalytics />
               : <Navigate to="/dashboard" replace />
           } />
         </Route>

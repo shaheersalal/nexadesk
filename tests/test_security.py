@@ -237,11 +237,17 @@ def test_forwarded_ip_headers_ignored_by_default(monkeypatch):
     Spoofing CF-Connecting-IP must not create a fresh rate-limit bucket.
 
     Trusting it unconditionally made every per-IP throttle a no-op.
+
+    get_client_ip now lives in app.shared.net (shared with app/chat/router.py's
+    live-context endpoint), so that's the module whose get_settings needs
+    patching — public_router.get_settings is just an unrelated name in a
+    different module's namespace and patching it does nothing.
     """
     from app.public import router as public_router
+    from app.shared import net as shared_net
 
     monkeypatch.setattr(
-        public_router, "get_settings",
+        shared_net, "get_settings",
         lambda: type("S", (), {"TRUST_PROXY_HEADERS": False})(),
     )
 
@@ -255,9 +261,10 @@ def test_forwarded_ip_headers_ignored_by_default(monkeypatch):
 
 def test_forwarded_ip_used_when_explicitly_trusted(monkeypatch):
     from app.public import router as public_router
+    from app.shared import net as shared_net
 
     monkeypatch.setattr(
-        public_router, "get_settings",
+        shared_net, "get_settings",
         lambda: type("S", (), {"TRUST_PROXY_HEADERS": True})(),
     )
 
