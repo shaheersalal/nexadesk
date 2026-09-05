@@ -172,12 +172,11 @@ app.add_middleware(
         "https://nexadesk-1j2y.vercel.app",
         # shaheer.dev — its own company/tenant now (ai_studio vertical), calls
         # /chat/message, /chat/live-context, /analytics/track directly.
+        # DNS cut over to Vercel 2026-09-05 — the old Vercel preview alias
+        # this comment used to also list is gone now that the real domain
+        # resolves there directly.
         "https://shaheer.dev",
         "https://www.shaheer.dev",
-        # Pre-cutover Vercel preview for the shaheer.dev Next.js rebuild —
-        # remove once DNS actually points shaheer.dev at Vercel and this
-        # origin is retired.
-        "https://shaheer-dev-next.vercel.app",
         "http://localhost:5173",
         "http://localhost:8000",
         "http://localhost:3000",
