@@ -1,4 +1,5 @@
 import './globals.css'
+import AnalyticsBeacon from '@/components/AnalyticsBeacon'
 
 export const metadata = {
   title: 'NexaDesk — AI Property Receptionist Demo',
@@ -15,7 +16,10 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className="bg-gray-50 min-h-screen text-gray-900 antialiased">{children}</body>
+      <body className="bg-gray-50 min-h-screen text-gray-900 antialiased">
+        {children}
+        <AnalyticsBeacon />
+      </body>
     </html>
   )
 }

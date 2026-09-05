@@ -181,6 +181,7 @@ export default function VoiceWidget() {
       <button
         onClick={handleClick}
         disabled={isBusy && stage !== 'recording'}
+        data-track="demo_voice_mic"
         className={`w-20 h-20 rounded-full flex items-center justify-center text-white text-3xl transition-all select-none shadow-lg ${
           stage === 'recording'
             ? 'bg-red-500 hover:bg-red-600 animate-pulse'

@@ -20,33 +20,78 @@ not a bolted-on side system. His instruction: "whole pipeline should be same
 totally so I get a client no matter where he calls, on nexadesk or
 shaheer.dev." That ruled out a forked second orchestrator — see below.
 
-**Not yet done — needs Shaheer or an authorized Supabase MCP session:**
+**Correction to this plan's original assumption — read before touching the
+phone number again:** there was never a "Pinnacle Property Management"
+company on the live database. `+17813655768` had belonged, since 2026-05-25,
+to a company literally named **"Shaheer's AI Agency"** — Shaheer's own
+NexaDesk real-estate self-demo (the one referenced in his 2026-09-02 LinkedIn
+post: "Call this number... that's my AI receptionist"), with ~30+ real
+inbound leads and ~70 real conversations attached. Not synthetic seed data.
+`create_shaheer_company.py`'s same-phone-different-name guard correctly
+refused to touch it. Shaheer chose to **repurpose that row in place** rather
+than provision a second number — the old real-estate demo persona on that
+number is gone as of this session; anyone calling from the LinkedIn post now
+reaches the studio assistant instead.
 
-1. Apply `migrations/0005_company_vertical.sql` and
-   `migrations/0006_leads_studio_fields.sql` to live Supabase. Both are
-   additive/idempotent — safe before or after the code that reads them; the
-   code defaults everything to `real_estate` when the column is missing, so
-   nothing regresses if applied late.
-2. Run `python scripts/create_shaheer_company.py` — creates the studio
-   company row (`vertical=ai_studio`, phone `+17813655768`,
-   `contact@shaheer.dev`) and attaches `ADMIN_UID` to it as owner.
-3. Run `python scripts/seed_shaheer_knowledge.py <company_id>` to ingest
-   `seed_knowledge_shaheer/*.md` (Part A of the two-part KB).
-4. **Decommission Pinnacle staged, not destructive-first** — this was
-   explicitly NOT done yet: `UPDATE companies SET phone = NULL WHERE name =
-   'Pinnacle Property Management'` re-routes the number (routing is a strict
-   1:1 `companies.phone` lookup, `app/voice/router.py::_resolve_company_id`).
-   Verify a real test call to +1 781 365 5768 answers as the studio
-   correctly BEFORE deleting Pinnacle's row (cascades to its
-   properties/leads/conversations/documents — export a JSON dump first).
-5. Frontend: shaheer.dev is still the old static site + its own FastAPI
-   backend (`C:\Users\DELL\AI_Dev\shaheer-dev\`) calling OpenAI directly —
-   untouched this session. It still needs the Next.js rebuild
-   (`nexa_demo_vercel/` conventions), the `/audition` URL-paste flow wired
-   to `POST /chat/live-context` + `POST /chat/message`, owner-only site
-   analytics (IP/clicks/scroll — not started), SEO metadata, and the DNS
-   cutover to Vercel. See the plan file this session wrote:
-   `C:\Users\DELL\AI_Dev\ClaudeData\config\plans\compressed-riding-shannon.md`.
+**Done this session, verified live (not just tested locally):**
+
+1. Applied `migrations/0005_company_vertical.sql`,
+   `0006_leads_studio_fields.sql`, `0007_site_visits.sql` to live Supabase
+   via the `apply_migration` MCP tool — all three idempotent, all succeeded.
+2. Updated the existing company row (`id = ae14c9eb-e18c-4ec3-bce8-cd4a57db3bb4`,
+   the former "Shaheer's AI Agency") in place: `name = "Shaheer Salal — AI
+   Product Studio"`, `email = contact@shaheer.dev`, `vertical = ai_studio`,
+   `ai_persona`/`receptionist_name`/`working_hours` set per
+   `create_shaheer_company.py`'s intended values. `ADMIN_UID` was already
+   attached as `owner` on this row from before — no `users` change needed.
+   **This is the permanent company_id for shaheer.dev's `NEXT_PUBLIC_COMPANY_ID`.**
+3. Ran `scripts/seed_shaheer_knowledge.py ae14c9eb-e18c-4ec3-bce8-cd4a57db3bb4`
+   — 2 docs, 14 chunks ingested into Qdrant.
+4. Verified live against the real Railway backend (not local): greeting,
+   a factual-honesty probe ("is AskTax live?" → correctly says offline), a
+   jailbreak/prompt-injection attempt (refused, prompt not leaked), a
+   hallucination probe on a made-up product (correctly said it didn't know
+   rather than inventing pricing), the `/chat/live-context` SSRF guard
+   (rejected `169.254.169.254`), a real URL fetch, and opportunistic lead
+   capture from a single natural sentence (name + email + "small business"
+   extracted without a checklist prompt — see `leads.id =
+   87aa4c51-c7bf-471c-8e90-a7d950c75389` for the recorded example).
+   **Not done: an actual inbound phone call to +17813655768.** Shaheer opted
+   to trust the text-path verification instead, since voice reuses the same
+   orchestrator/vertical config — if voice behaves unexpectedly, check there
+   first before assuming the company data is wrong.
+
+**Still not done:**
+
+- Frontend: `shaheer-dev-next/` (Next.js, App Router) already exists,
+  committed (`320c836`), and calls the real backend
+  (`lib/api.js` → `/chat/message`, `/chat/live-context`) instead of OpenAI
+  directly — but its `NEXT_PUBLIC_COMPANY_ID` env var is still unset locally
+  and not yet configured in Vercel. Needs: set that env var to
+  `ae14c9eb-e18c-4ec3-bce8-cd4a57db3bb4`, deploy to the linked Vercel
+  project's preview URL, full click-through + audition-flow test there.
+- Owner-only site analytics (`app/analytics/router.py`, `site_visits` table,
+  dashboard's `SiteAnalytics.jsx`) is built and the table now exists live,
+  but the frontend tracking beacon (pageview/click/scroll → `POST
+  /analytics/track`) has not been added to either `shaheer-dev-next/` or
+  nexadesk.site's frontend yet — so the table will stay empty until that's
+  wired in.
+- DNS cutover (shaheer.dev: Cloudflare Pages → Vercel) — deliberately last,
+  only after the Vercel preview is fully verified. Not started.
+- Retire old `shaheer-dev/` (static HTML + its FastAPI backend) once DNS
+  cuts over.
+- SEO: sitemap/robots/OG image exist in the Next.js app already; Search
+  Console / Bing Webmaster submission still needs doing post-DNS-cutover.
+- Old real-estate demo content that used to live in this company's
+  `ai_persona` (the "simulated sample data" listings pitch) is gone from the
+  row — if that self-demo experience still needs to exist somewhere for
+  NexaDesk marketing purposes, it needs its own company + phone number now,
+  since this one moved to `ai_studio`.
+
+See the full staged plan:
+`C:\Users\DELL\AI_Dev\ClaudeData\config\plans\compressed-riding-shannon.md`
+(written assuming "Pinnacle" existed — read company-id/phone specifics above
+as the corrected version of that plan's §1, not the file itself).
 
 **Done and verified this session (148/148 tests passing, ruff clean):**
 

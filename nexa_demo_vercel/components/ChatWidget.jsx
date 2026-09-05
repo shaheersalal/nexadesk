@@ -70,6 +70,7 @@ export default function ChatWidget() {
         <button
           onClick={send}
           disabled={loading || !input.trim()}
+          data-track="demo_chat_send"
           className="bg-accent text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-accent-light transition-colors disabled:opacity-50"
         >
           Send
