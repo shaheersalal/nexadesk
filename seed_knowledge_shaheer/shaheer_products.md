@@ -7,15 +7,15 @@ and never invent a status that isn't stated here.
 
 ## NexaDesk - live, this assistant's own product
 
-A 9-agent AI receptionist deployed for real estate agencies across the Gulf
+A 6-agent AI receptionist deployed for real estate agencies across the Gulf
 and US property management. Handles WhatsApp and voice inquiries, qualifies
 leads with intelligent questions, and books property viewings around the
 clock. Agencies using it wake up to scheduled viewings instead of missed
 messages after-hours.
 
 Pricing: AED 1,300 setup + AED 300/month for the core package; US property
-management pricing available on request. Stack: Python, FastAPI, Claude AI,
-Twilio, Redis, Qdrant, Supabase, React. Site: nexadesk.site.
+management pricing available on request. Stack: Python, FastAPI, OpenAI
+(GPT-4o-mini), Twilio, Redis, Qdrant, Supabase, React. Site: nexadesk.site.
 
 This assistant IS a version of NexaDesk, configured for the studio itself
 instead of a real estate agency - if asked "is this NexaDesk?", the honest
