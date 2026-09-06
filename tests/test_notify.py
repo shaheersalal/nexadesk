@@ -61,10 +61,20 @@ async def test_skips_silently_with_no_api_key(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_sends_to_contact_shaheer_dev_with_a_key(monkeypatch):
+async def test_sends_to_the_configured_recipient_with_a_key(monkeypatch):
+    """
+    The recipient comes from settings, not a hardcoded constant.
+
+    It used to be pinned to contact@shaheer.dev, which Resend's shared
+    onboarding@resend.dev sender is not allowed to deliver to - every lead
+    email and visitor digest 403'd and was swallowed as a warning.
+    """
     monkeypatch.setattr(
         notify, "get_settings",
-        lambda: type("S", (), {"RESEND_API_KEY": "re_test_key"})(),
+        lambda: type("S", (), {
+            "RESEND_API_KEY": "re_test_key",
+            "NOTIFY_EMAIL_TO": "owner@example.com",
+        })(),
     )
     monkeypatch.setattr(notify.httpx, "AsyncClient", _FakeAsyncClient)
     _FakeAsyncClient.last_call = None
@@ -77,8 +87,7 @@ async def test_sends_to_contact_shaheer_dev_with_a_key(monkeypatch):
 
     call = _FakeAsyncClient.last_call
     assert call is not None
-    assert call["json"]["to"] == [notify.NOTIFY_TO]
-    assert notify.NOTIFY_TO == "contact@shaheer.dev"
+    assert call["json"]["to"] == ["owner@example.com"]
     assert "Ada Lovelace" in call["json"]["subject"]
     assert "ada@example.com" in call["json"]["html"]
     assert "Analytical Engines Ltd" in call["json"]["html"]
@@ -89,7 +98,7 @@ async def test_sends_to_contact_shaheer_dev_with_a_key(monkeypatch):
 async def test_never_raises_on_network_failure(monkeypatch):
     monkeypatch.setattr(
         notify, "get_settings",
-        lambda: type("S", (), {"RESEND_API_KEY": "re_test_key"})(),
+        lambda: type("S", (), {"RESEND_API_KEY": "re_test_key", "NOTIFY_EMAIL_TO": "owner@example.com"})(),
     )
     monkeypatch.setattr(notify.httpx, "AsyncClient", _BoomAsyncClient)
 
