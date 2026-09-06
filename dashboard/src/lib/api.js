@@ -244,4 +244,8 @@ export const api = {
     return request('GET', `/analytics/site${qs ? `?${qs}` : ''}`)
   },
   getSiteSessionDetail: (sessionId) => request('GET', `/analytics/site/${sessionId}`),
+  getSiteVisitors: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request('GET', `/analytics/visitors${qs ? `?${qs}` : ''}`)
+  },
 }

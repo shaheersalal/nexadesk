@@ -241,6 +241,7 @@ SERVICE_ROLE_ALLOWED = {
     # gated purely by the same ADMIN_UID check as the routes above.
     ("app/analytics/router.py", "site_summary"),
     ("app/analytics/router.py", "site_session_detail"),
+    ("app/analytics/router.py", "visitors"),
 }
 
 

@@ -132,6 +132,9 @@ async def get_greeting(company_id: str):
 class LiveContextRequest(BaseModel):
     key: str = Field(..., min_length=1, max_length=200)
     url: str = Field(..., min_length=3, max_length=2048)
+    site: str = Field("shaheer_dev", pattern="^(shaheer_dev|nexadesk_site)$")
+    session_id: Optional[str] = Field(None, max_length=200)
+    phone: Optional[str] = Field(None, max_length=32)
 
 
 class LiveContextClearRequest(BaseModel):
@@ -156,6 +159,23 @@ async def set_live_context(body: LiveContextRequest, request: Request):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     await store_live_context(body.key, final_url, text)
+
+    # Durable log for the owner's own records (dashboard + session-end email
+    # digest) - separate from the Redis entry above, which stays ephemeral
+    # and is still deleted from the model's own working context as before.
+    try:
+        sb = get_supabase_admin()
+        sb.table("site_live_fetches").insert({
+            "site": body.site,
+            "session_id": body.session_id or body.key,
+            "phone": body.phone,
+            "ip_address": get_client_ip(request),
+            "url": final_url,
+            "scraped_excerpt": text[:4000],
+        }).execute()
+    except Exception:
+        pass  # never break the visitor's page over a logging failure
+
     return {"url": final_url, "chars": len(text)}
 
 

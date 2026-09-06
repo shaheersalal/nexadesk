@@ -72,6 +72,38 @@ function SessionDrawer({ sessionId, onClose }) {
               </div>
             </div>
 
+            {detail.live_fetches?.length > 0 && (
+              <div className="mb-6">
+                <p className="text-xs font-semibold text-gray-500 mb-2">Audition URL entered</p>
+                {detail.live_fetches.map((lf, i) => (
+                  <div key={i} className="mb-2 text-xs">
+                    <a href={lf.url} target="_blank" rel="noreferrer" className="text-accent-ink font-medium break-all">
+                      {lf.url}
+                    </a>
+                    {lf.phone && <span className="text-gray-400 ml-2">(call: {lf.phone})</span>}
+                    {lf.scraped_excerpt && (
+                      <pre className="mt-1 whitespace-pre-wrap bg-gray-50 rounded-lg p-2 max-h-32 overflow-y-auto text-gray-600">
+                        {lf.scraped_excerpt.slice(0, 600)}
+                      </pre>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {detail.reviews?.length > 0 && (
+              <div className="mb-6">
+                <p className="text-xs font-semibold text-gray-500 mb-2">Review / contact left</p>
+                {detail.reviews.map((r, i) => (
+                  <div key={i} className="text-xs mb-2 bg-yellow-50 rounded-lg p-2">
+                    {r.stars && <span className="text-yellow-500">{'★'.repeat(r.stars)}{'☆'.repeat(5 - r.stars)}</span>}
+                    {r.review_text && <p className="text-gray-700 mt-1">{r.review_text}</p>}
+                    {r.email && <p className="text-gray-500 mt-1">{r.email}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+
             {detail.conversation ? (
               <div>
                 <p className="text-xs font-semibold text-gray-500 mb-2">
@@ -100,8 +132,67 @@ function SessionDrawer({ sessionId, onClose }) {
   )
 }
 
+function VisitorsTable({ site }) {
+  const [visitors, setVisitors] = useState(null)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    setVisitors(null)
+    setError(null)
+    const params = site ? { site } : {}
+    api.getSiteVisitors(params).then((d) => setVisitors(d.visitors)).catch((e) => setError(e.message))
+  }, [site])
+
+  return (
+    <div className="card overflow-x-auto">
+      <h2 className="text-sm font-semibold text-gray-700 mb-1">Visitors by IP</h2>
+      <p className="text-xs text-gray-400 mb-4">One row per IP - a returning visitor accumulates dates instead of duplicating.</p>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {!visitors && !error && <p className="text-sm text-gray-400">Loading…</p>}
+      {visitors && visitors.length === 0 && <p className="text-sm text-gray-400">No visitors recorded yet.</p>}
+      {visitors && visitors.length > 0 && (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-gray-400 border-b border-gray-100">
+              <th className="pb-2 pr-4 font-medium">Site</th>
+              <th className="pb-2 pr-4 font-medium">IP</th>
+              <th className="pb-2 pr-4 font-medium">Visits</th>
+              <th className="pb-2 pr-4 font-medium">Dates seen</th>
+              <th className="pb-2 pr-4 font-medium">Last URL entered</th>
+              <th className="pb-2 pr-4 font-medium">Email</th>
+              <th className="pb-2 pr-4 font-medium">Review</th>
+              <th className="pb-2 font-medium">Last seen</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visitors.map((v) => (
+              <tr key={`${v.site}-${v.ip_address}`} className="border-b border-gray-50">
+                <td className="py-2 pr-4"><SiteBadge site={v.site} /></td>
+                <td className="py-2 pr-4 font-mono text-xs text-gray-600">{v.ip_address}</td>
+                <td className="py-2 pr-4 text-gray-700">{v.session_count}</td>
+                <td className="py-2 pr-4 text-gray-500 text-xs max-w-[220px] truncate" title={(v.visit_dates || []).join(', ')}>
+                  {(v.visit_dates || []).join(', ')}
+                </td>
+                <td className="py-2 pr-4 text-gray-500 text-xs max-w-[160px] truncate">{v.last_entered_url || '—'}</td>
+                <td className="py-2 pr-4 text-gray-500 text-xs">{v.email || '—'}</td>
+                <td className="py-2 pr-4 text-gray-500 text-xs">
+                  {v.last_review_stars ? '★'.repeat(v.last_review_stars) : '—'}
+                </td>
+                <td className="py-2 text-gray-500 text-xs whitespace-nowrap">
+                  {formatDistanceToNow(new Date(v.last_seen), { addSuffix: true })}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
 export default function SiteAnalytics() {
   const [site, setSite] = useState('')
+  const [view, setView] = useState('sessions') // sessions | visitors
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [selectedSession, setSelectedSession] = useState(null)
@@ -150,6 +241,26 @@ export default function SiteAnalytics() {
         <StatCard icon={ArrowDownWideNarrow} label="Scroll events" value={data?.totals.scroll_events ?? '—'} />
       </div>
 
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-4 w-fit">
+        {[
+          { key: 'sessions', label: 'Recent sessions' },
+          { key: 'visitors', label: 'Visitors by IP' },
+        ].map((opt) => (
+          <button
+            key={opt.key}
+            onClick={() => setView(opt.key)}
+            className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors ${
+              view === opt.key ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'visitors' && <VisitorsTable site={site} />}
+
+      {view === 'sessions' && (
       <div className="card overflow-x-auto">
         <h2 className="text-sm font-semibold text-gray-700 mb-4">Recent sessions</h2>
         {!data && !error && <p className="text-sm text-gray-400">Loading…</p>}
@@ -206,6 +317,7 @@ export default function SiteAnalytics() {
           </table>
         )}
       </div>
+      )}
 
       {selectedSession && (
         <SessionDrawer sessionId={selectedSession} onClose={() => setSelectedSession(null)} />

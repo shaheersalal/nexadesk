@@ -235,8 +235,8 @@ KNOWLEDGE BASE:
             'said verbatim (e.g. "$5k", "not sure yet"), not a parsed number.\n'
             'Only include facts explicitly stated - do not infer.'
         ),
-        "call_greeting": "Hi, I'm {ai_name} from {company_name}. What are you building, or what brought you here?",
-        "call_greeting_no_stock": "Hi, I'm {ai_name} from {company_name}. What brings you here today?",
+        "call_greeting": "This call may be recorded and transcribed. Hi, I'm {ai_name} from {company_name}. What are you building, or what brought you here?",
+        "call_greeting_no_stock": "This call may be recorded and transcribed. Hi, I'm {ai_name} from {company_name}. What brings you here today?",
         "chat_greeting": (
             "Hi there - I'm {ai_name}, {company_name}'s AI assistant, and this "
             "conversation is already a live demo of what we build. What brings "
