@@ -376,7 +376,10 @@ async def session_end(body: SessionEndRequest, request: Request):
     existing_row = None
     try:
         existing = (
-            sb.table("site_visitors").select("visit_dates, session_count, email")
+            # Whole row, not a subset: keep() below falls back to the stored
+            # value for every field it might otherwise null out, so anything
+            # left unselected here would silently fail to be preserved.
+            sb.table("site_visitors").select("*")
             .eq("site", body.site).eq("ip_address", ip).maybe_single().execute()
         )
         existing_row = existing.data if existing else None
