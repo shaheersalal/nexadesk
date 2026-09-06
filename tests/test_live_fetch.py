@@ -142,3 +142,56 @@ async def test_corrupt_payload_is_dropped_not_raised(monkeypatch, fake_redis):
 
     await fake_redis.set(f"{live_fetch._REDIS_PREFIX}session-x", "not valid json")
     assert await get_live_context("session-x") is None
+
+
+# ── Phone-key normalisation ──────────────────────────────────────────────────
+#
+# Regression cover for a live incident: a caller loaded their site on the web
+# form, saw "Loaded", then rang the number and the assistant knew nothing about
+# it. The browser had stored the page under what the visitor typed
+# ("0331 2228870") while the voice path looked it up under Twilio's E.164
+# `From` ("+923312228870"), so the exact-match lookup never hit and the call
+# silently behaved as though no URL had been given.
+
+
+def test_phone_key_agrees_across_every_format_a_visitor_might_type():
+    from app.rag.live_fetch import phone_key
+
+    typed_locally = phone_key("0331 2228870")
+    typed_international = phone_key("+92 331 2228870")
+    what_twilio_sends = phone_key("+923312228870")
+
+    assert typed_locally == typed_international == what_twilio_sends
+
+    # US, formatted the way a person writes it vs the way Twilio sends it.
+    assert phone_key("(781) 365-5768") == phone_key("+17813655768")
+
+
+def test_phone_key_separates_genuinely_different_numbers():
+    from app.rag.live_fetch import phone_key
+
+    assert phone_key("+923312228870") != phone_key("+17813655768")
+
+
+def test_phone_key_handles_empty_input():
+    from app.rag.live_fetch import phone_key
+
+    assert phone_key("") == "phone:unknown"
+    assert phone_key(None) == "phone:unknown"
+
+
+def test_session_ids_are_not_mistaken_for_phone_numbers():
+    """
+    The live-context endpoint derives a phone key from `key` when it looks like
+    a phone number, so a chat session id must never be misread as one - that
+    would write junk phone keys an inbound call could collide with.
+    """
+    from app.chat.router import _looks_like_phone
+
+    assert _looks_like_phone("03312228870")
+    assert _looks_like_phone("+92 331 2228870")
+    assert _looks_like_phone("(781) 365-5768")
+
+    assert not _looks_like_phone("f0c6455e-3420-49e9-8c60-b932465231f8")
+    assert not _looks_like_phone("form-cto-test-1")
+    assert not _looks_like_phone("audition-test-1788458945")

@@ -387,6 +387,20 @@ async def session_end(body: SessionEndRequest, request: Request):
     visit_dates = prior_dates if today in prior_dates else prior_dates + [today]
     session_count = ((existing_row or {}).get("session_count") or 0) + 1
 
+    prior = existing_row or {}
+
+    def keep(new_value, field: str):
+        """
+        Never let a later, emptier visit erase what an earlier one learned.
+
+        This row is a rolling summary per IP, so a returning visitor who just
+        bounces off the page would otherwise null out the URL they auditioned,
+        the review they left, and their email - i.e. exactly the lead detail
+        the dashboard exists to show. The per-session tables keep the full
+        history either way; this only governs the summary.
+        """
+        return new_value if new_value not in (None, "") else prior.get(field)
+
     visitor_row = {
         "site": body.site,
         "ip_address": ip,
@@ -394,11 +408,11 @@ async def session_end(body: SessionEndRequest, request: Request):
         "visit_dates": visit_dates,
         "session_count": session_count,
         "last_session_id": body.session_id,
-        "last_entered_url": (live_fetch or {}).get("url"),
-        "last_scraped_excerpt": (live_fetch or {}).get("scraped_excerpt"),
-        "email": (review or {}).get("email") or (existing_row or {}).get("email"),
-        "last_review_stars": (review or {}).get("stars"),
-        "last_review_text": (review or {}).get("review_text"),
+        "last_entered_url": keep((live_fetch or {}).get("url"), "last_entered_url"),
+        "last_scraped_excerpt": keep((live_fetch or {}).get("scraped_excerpt"), "last_scraped_excerpt"),
+        "email": keep((review or {}).get("email"), "email"),
+        "last_review_stars": keep((review or {}).get("stars"), "last_review_stars"),
+        "last_review_text": keep((review or {}).get("review_text"), "last_review_text"),
         "notified_at": now.isoformat(),
     }
     try:
