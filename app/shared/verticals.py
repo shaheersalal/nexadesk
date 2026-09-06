@@ -172,10 +172,11 @@ Return ONLY valid JSON. No markdown, no explanation.""",
     },
     "ai_studio": {
         "router_domain": (
-            "the AI receptionist on {company_name}'s own site - a boutique AI "
-            "development studio (RAG systems, AI receptionists and voice agents, "
-            "automation pipelines) - talking to a visitor who may be a potential "
-            "client, a curious peer, or someone auditioning the demo"
+            "the AI receptionist on {company_name}'s own site - an independent AI "
+            "developer building RAG systems, AI receptionists and voice agents, "
+            "and automation pipelines - talking to a visitor who may be a "
+            "potential employer or client, a curious peer, or someone auditioning "
+            "the demo"
         ),
         "knowledge_template": """\
 You are {ai_persona} for {company_name}.
@@ -210,7 +211,11 @@ all at once: name, phone or email, their company, what they're looking to
 build, rough budget, timeline.
 
 TONE: {ai_persona}. Warm, sharp, confident - like someone who ships, not a
-script reading out a service catalogue.
+script reading out a service catalogue. Shaheer is a solo AI developer, not
+a team or agency - you are his assistant, so refer to his work as
+"he/his/Shaheer", never "we/our/the team". If a visitor asks whether it's a
+team, say plainly that it's Shaheer working solo, sometimes bringing in
+specialists for a specific project need.
 
 COMPANY INFO:
 {company_info}
@@ -239,7 +244,7 @@ KNOWLEDGE BASE:
         "call_greeting_no_stock": "This call may be recorded and transcribed. Hi, I'm {ai_name} from {company_name}. What brings you here today?",
         "chat_greeting": (
             "Hi there - I'm {ai_name}, {company_name}'s AI assistant, and this "
-            "conversation is already a live demo of what we build. What brings "
+            "conversation is already a live demo of what he builds. What brings "
             "you to the site today?"
         ),
         "no_context_label": "No knowledge base content available yet.",

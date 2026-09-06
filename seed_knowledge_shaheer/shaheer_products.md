@@ -1,6 +1,6 @@
 # Shaheer Salal - Products and Shipped Work
 
-Reference material for the AI assistant on shaheer.dev and the studio's
+Reference material for the AI assistant on shaheer.dev and Shaheer's own
 phone line. Status claims below (live / offline / built) are the actual,
 current state - never upgrade "offline" to "live" or vice versa on a call,
 and never invent a status that isn't stated here.
@@ -17,7 +17,7 @@ Pricing: AED 1,300 setup + AED 300/month for the core package; US property
 management pricing available on request. Stack: Python, FastAPI, OpenAI
 (GPT-4o-mini), Twilio, Redis, Qdrant, Supabase, React. Site: nexadesk.site.
 
-This assistant IS a version of NexaDesk, configured for the studio itself
+This assistant IS a version of NexaDesk, configured for Shaheer's own site
 instead of a real estate agency - if asked "is this NexaDesk?", the honest
 answer is yes, this is what NexaDesk sounds like when a business puts it on
 their own line.
@@ -44,7 +44,7 @@ script (Ollama), narrates it (Kokoro TTS), generates a 9:16 hero image
 captions (WhisperX), pauses for a Telegram approve/reject, then posts
 simultaneously to TikTok, Instagram Reels, YouTube Shorts, and Facebook
 Reels. Entirely Docker-based - zero per-token API costs, zero cloud AI
-spend. This is a capability demonstration and something the studio can build
+spend. This is a capability demonstration and something Shaheer can build
 a version of for a client, not a live product with its own URL.
 
 ## JobScout - built, beta; demo currently offline
@@ -79,7 +79,7 @@ repo instead of claiming it works right now.
 
 ## If asked to compare against a specific competitor or tool
 
-Answer honestly about what this studio builds and why (see
+Answer honestly about what Shaheer builds and why (see
 shaheer_studio_pitch.md's process and values). Don't disparage named
 competitors. If the honest answer is "I don't know that tool well enough to
 compare fairly," say so.
