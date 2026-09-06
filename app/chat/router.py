@@ -14,16 +14,16 @@ from app.shared.net import get_client_ip
 from app.rag.live_fetch import (
     fetch_page_text, store_live_context, clear_live_context, phone_key, LiveFetchError,
 )
+from app.config import get_settings
+
+router = APIRouter()
+settings = get_settings()
 
 
 def _looks_like_phone(value: str) -> bool:
     """A live-context key that is mostly digits is a phone number, not a session id."""
     digits = "".join(ch for ch in value if ch.isdigit())
     return len(digits) >= 7 and len(digits) >= len(value.strip()) - 4
-from app.config import get_settings
-
-router = APIRouter()
-settings = get_settings()
 
 # Per-IP budget for the live-context fetch — it makes an outbound HTTP
 # request per call, so it gets its own tighter limit rather than riding on
@@ -159,7 +159,7 @@ async def set_live_context(body: LiveContextRequest, request: Request):
     ip = get_client_ip(request)
     count = await session_store.incr(f"live_ctx_rate:{ip}", LIVE_CONTEXT_RATE_WINDOW)
     if count > LIVE_CONTEXT_RATE_MAX:
-        raise HTTPException(status_code=429, detail="Too many page fetches — please wait a minute.")
+        raise HTTPException(status_code=429, detail="Too many page fetches - please wait a minute.")
 
     try:
         final_url, text = await fetch_page_text(body.url)

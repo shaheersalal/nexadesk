@@ -80,7 +80,7 @@ def _resolve_and_check(hostname: str) -> None:
     except socket.gaierror as exc:
         raise LiveFetchError("Couldn't resolve that domain.") from exc
     if any(_is_blocked_ip(info[4][0]) for info in infos):
-        raise LiveFetchError("That URL points somewhere internal — not supported.")
+        raise LiveFetchError("That URL points somewhere internal - not supported.")
 
 
 _SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
