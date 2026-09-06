@@ -89,6 +89,11 @@ class Settings(BaseSettings):
 
     # Email (Resend)
     RESEND_API_KEY: str = ""
+    # Where lead + visitor-digest notifications go. Defaults to the Resend
+    # account owner's address because the shared `onboarding@resend.dev`
+    # sender may only deliver there - see app/shared/notify.py. Point this at
+    # contact@shaheer.dev once shaheer.dev is a verified Resend domain.
+    NOTIFY_EMAIL_TO: str = "shaheersalal@gmail.com"
     RESEND_WEBHOOK_SECRET: str = ""  # Svix signing secret for inbound-email webhook verification; skipped if unset
     LISTINGS_INBOUND_DOMAIN: str = "listings.nexadesk.site"  # must be a verified Resend receiving domain
 

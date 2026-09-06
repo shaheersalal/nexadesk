@@ -1,12 +1,12 @@
 """
-Lead-capture email notification via Resend — same provider and HTTPS-API
+Lead-capture email notification via Resend - same provider and HTTPS-API
 pattern already used by app/assistant/router.py's in-app assistant notify,
 not raw SMTP, so it isn't affected by a cloud host blocking outbound SMTP
 ports (Railway's history with this exact class of problem is why this
 reuses Resend rather than reintroducing smtplib).
 
 Deliberately scoped to the ai_studio vertical only. NexaDesk's real
-real-estate tenants rely on their dashboard for leads — an email per lead
+real-estate tenants rely on their dashboard for leads - an email per lead
 was never asked for or built for them, and adding it unconditionally here
 would be a real, unwanted behaviour change to the actual paying product.
 This exists because Shaheer specifically wants email on top of the
@@ -20,16 +20,28 @@ from app.config import get_settings
 
 logger = logging.getLogger("nexadesk.notify")
 
-NOTIFY_TO = "contact@shaheer.dev"
+# Resend's shared `onboarding@resend.dev` sender is only permitted to deliver
+# to the account owner's own address. Addressing these to contact@shaheer.dev
+# meant every lead email and every visitor digest failed with a 403 that was
+# only ever logged as a warning, so the failure was invisible: leads landed in
+# the dashboard while the notification silently went nowhere.
+#
+# To send to contact@shaheer.dev instead, verify shaheer.dev at
+# resend.com/domains, change NOTIFY_FROM to an address on that domain, then
+# set NOTIFY_EMAIL_TO. Until then this must stay the account owner's address.
 NOTIFY_FROM = "shaheer.dev leads <onboarding@resend.dev>"
 
 
+def _notify_to() -> str:
+    return get_settings().NOTIFY_EMAIL_TO
+
+
 async def send_lead_email(fields: dict, company_name: str, channel: str) -> None:
-    """Best-effort — never raises. Call via asyncio.create_task so a slow or
+    """Best-effort - never raises. Call via asyncio.create_task so a slow or
     failed send never adds latency to the caller's actual reply."""
     settings = get_settings()
     if not settings.RESEND_API_KEY:
-        logger.info("RESEND_API_KEY not set — skipping lead email")
+        logger.info("RESEND_API_KEY not set - skipping lead email")
         return
 
     display_fields = [
@@ -57,8 +69,8 @@ async def send_lead_email(fields: dict, company_name: str, channel: str) -> None
                 headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
                 json={
                     "from": NOTIFY_FROM,
-                    "to": [NOTIFY_TO],
-                    "subject": f"New lead — {fields.get('name') or 'unnamed visitor'} ({company_name})",
+                    "to": [_notify_to()],
+                    "subject": f"New lead - {fields.get('name') or 'unnamed visitor'} ({company_name})",
                     "html": (
                         '<div style="font-family:sans-serif;max-width:600px;color:#1a1a1a">'
                         f'<h2 style="color:#1e3a5f">New lead on {company_name}</h2>'
@@ -82,7 +94,7 @@ async def send_visitor_digest_email(summary: dict) -> None:
     """
     settings = get_settings()
     if not settings.RESEND_API_KEY:
-        logger.info("RESEND_API_KEY not set — skipping visitor digest email")
+        logger.info("RESEND_API_KEY not set - skipping visitor digest email")
         return
 
     site_label = "shaheer.dev" if summary["site"] == "shaheer_dev" else "nexadesk.site"
@@ -101,7 +113,7 @@ async def send_visitor_digest_email(summary: dict) -> None:
         ("Referrer", summary.get("referrer")),
         ("User agent", summary.get("user_agent")),
         ("Entered URL", live_fetch.get("url")),
-        ("Review", f"{review.get('stars')}★ — {review.get('review_text')}" if review.get("stars") or review.get("review_text") else None),
+        ("Review", f"{review.get('stars')}★ - {review.get('review_text')}" if review.get("stars") or review.get("review_text") else None),
         ("Email left", review.get("email")),
     ]
     rows_html = "".join(
@@ -138,11 +150,11 @@ async def send_visitor_digest_email(summary: dict) -> None:
                 headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
                 json={
                     "from": NOTIFY_FROM,
-                    "to": [NOTIFY_TO],
-                    "subject": f"Visitor left {site_label} — {summary.get('ip')}",
+                    "to": [_notify_to()],
+                    "subject": f"Visitor left {site_label} - {summary.get('ip')}",
                     "html": (
                         '<div style="font-family:sans-serif;max-width:600px;color:#1a1a1a">'
-                        f'<h2 style="color:#1e3a5f">Visitor activity — {site_label}</h2>'
+                        f'<h2 style="color:#1e3a5f">Visitor activity - {site_label}</h2>'
                         f'<table style="border-collapse:collapse">{rows_html}</table>'
                         f'{excerpt_html}{transcript_html}'
                         '</div>'
