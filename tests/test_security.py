@@ -269,11 +269,46 @@ def test_forwarded_ip_used_when_explicitly_trusted(monkeypatch):
     )
 
     request = type("Req", (), {
-        "headers": {"CF-Connecting-IP": "1.2.3.4"},
+        "headers": {"X-Forwarded-For": "5.6.7.8"},
         "client": type("C", (), {"host": "10.0.0.1"})(),
     })()
 
-    assert public_router._get_client_ip(request) == "1.2.3.4"
+    assert public_router._get_client_ip(request) == "5.6.7.8"
+
+
+def test_cf_connecting_ip_never_trusted(monkeypatch):
+    """
+    CF-Connecting-IP must be ignored even with TRUST_PROXY_HEADERS on.
+
+    Railway overwrites X-Forwarded-For (so it can't be forged) but passes
+    CF-Connecting-IP straight through, and the API is reachable directly on
+    its railway.app origin rather than only via Cloudflare. Trusting it let
+    a forged header write an arbitrary IP into the visitor log and mint a
+    fresh rate-limit bucket - verified live against production before this
+    was closed.
+    """
+    from app.public import router as public_router
+    from app.shared import net as shared_net
+
+    monkeypatch.setattr(
+        shared_net, "get_settings",
+        lambda: type("S", (), {"TRUST_PROXY_HEADERS": True})(),
+    )
+
+    request = type("Req", (), {
+        "headers": {"CF-Connecting-IP": "203.0.113.77"},
+        "client": type("C", (), {"host": "10.0.0.1"})(),
+    })()
+
+    assert public_router._get_client_ip(request) == "10.0.0.1"
+
+    # And it must not win over a real forwarded chain either.
+    request2 = type("Req", (), {
+        "headers": {"CF-Connecting-IP": "203.0.113.77", "X-Forwarded-For": "5.6.7.8"},
+        "client": type("C", (), {"host": "10.0.0.1"})(),
+    })()
+
+    assert public_router._get_client_ip(request2) == "5.6.7.8"
 
 
 # ── M6: reCAPTCHA must fail closed once configured ───────────────────────────

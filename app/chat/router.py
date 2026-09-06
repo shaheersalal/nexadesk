@@ -11,7 +11,15 @@ from app.dependencies import get_supabase_admin
 from app.shared.verticals import get_vertical
 from app.shared import session_store
 from app.shared.net import get_client_ip
-from app.rag.live_fetch import fetch_page_text, store_live_context, clear_live_context, LiveFetchError
+from app.rag.live_fetch import (
+    fetch_page_text, store_live_context, clear_live_context, phone_key, LiveFetchError,
+)
+
+
+def _looks_like_phone(value: str) -> bool:
+    """A live-context key that is mostly digits is a phone number, not a session id."""
+    digits = "".join(ch for ch in value if ch.isdigit())
+    return len(digits) >= 7 and len(digits) >= len(value.strip()) - 4
 from app.config import get_settings
 
 router = APIRouter()
@@ -159,6 +167,15 @@ async def set_live_context(body: LiveContextRequest, request: Request):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     await store_live_context(body.key, final_url, text)
+
+    # Also store under the canonical phone key so an inbound call can find it.
+    # Twilio's `From` is E.164 while the visitor types whatever they like, so
+    # the raw `key` above will not match on the voice side - see phone_key().
+    # Applied whenever the key itself looks like a phone number too, so an
+    # older frontend that only sends `key` still works.
+    phone_source = body.phone or (body.key if _looks_like_phone(body.key) else None)
+    if phone_source:
+        await store_live_context(phone_key(phone_source), final_url, text)
 
     # Durable log for the owner's own records (dashboard + session-end email
     # digest) - separate from the Redis entry above, which stays ephemeral

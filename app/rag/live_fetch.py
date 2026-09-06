@@ -147,6 +147,26 @@ async def fetch_page_text(url: str) -> tuple[str, str]:
     return str(resp.url), text[:_MAX_CONTEXT_CHARS]
 
 
+def phone_key(raw: str) -> str:
+    """
+    Canonical Redis key for a phone-keyed live context.
+
+    The web form and Twilio never agree on formatting: a visitor types
+    "0331 2228870" (or "+92 331 2228870", or "(781) 365-5768") while Twilio's
+    `From` is always E.164 ("+923312228870"). Keying on the raw string meant
+    the call looked up a key the browser had never written, so the caller's
+    own site silently never reached the assistant - it just behaved as if no
+    URL had been entered.
+
+    Matching on the last 10 digits makes both sides agree regardless of
+    country code, leading zero, spaces, or punctuation. Ten digits is enough
+    to keep distinct callers apart in practice; shorter numbers fall back to
+    whatever digits they have.
+    """
+    digits = "".join(ch for ch in (raw or "") if ch.isdigit())
+    return f"phone:{digits[-10:]}" if digits else "phone:unknown"
+
+
 async def store_live_context(key: str, url: str, text: str) -> None:
     settings = get_settings()
     redis = await get_redis(settings)

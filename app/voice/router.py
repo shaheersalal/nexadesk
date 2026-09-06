@@ -483,7 +483,8 @@ async def _finalize_call(session, duration: int) -> None:
     # backstop, but this is the deliberate deletion point.
     if session.caller_number:
         try:
-            from app.rag.live_fetch import clear_live_context
+            from app.rag.live_fetch import clear_live_context, phone_key
+            await clear_live_context(phone_key(session.caller_number))
             await clear_live_context(session.caller_number)
         except Exception:
             pass

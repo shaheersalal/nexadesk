@@ -13,7 +13,7 @@ from app.shared import llm
 from app.shared.verticals import build_knowledge_system_prompt
 from app.shared.language import anormalize_for_llm, atranslate_from_english
 from app.rag.store import query_with_confidence
-from app.rag.live_fetch import get_live_context
+from app.rag.live_fetch import get_live_context, phone_key
 from app.chat.lead_scoring import score_message, compute_total_delta
 from app.voice.call_session import CallSession
 from app.dependencies import get_supabase_admin
@@ -90,7 +90,13 @@ async def _build_turn_context(user_text: str, session: CallSession) -> tuple[str
     # a no-op for them. See app/rag/live_fetch.py.
     live_fetch_context = None
     if session.caller_number:
-        live_fetch_context = await get_live_context(session.caller_number)
+        # Canonical key: Twilio's E.164 `From` will never string-match what the
+        # visitor typed into the web form (see live_fetch.phone_key). Falls back
+        # to the raw number for anything stored before that fix.
+        live_fetch_context = (
+            await get_live_context(phone_key(session.caller_number))
+            or await get_live_context(session.caller_number)
+        )
 
     system = build_knowledge_system_prompt(
         company, rag_result["context_text"], live_fetch_context,
