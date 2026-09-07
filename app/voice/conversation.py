@@ -2,8 +2,10 @@
 Voice conversation engine — same RAG + confidence gate as chat,
 but optimised for short, spoken responses.
 """
+import asyncio
 import json
 import logging
+import random
 
 from starlette.concurrency import run_in_threadpool
 
@@ -23,6 +25,22 @@ settings = get_settings()
 logger = logging.getLogger("nexadesk.voice")
 
 COMPANY_CACHE_TTL = 300
+
+# How long retrieval may run before we say something to fill the gap.
+# Measured against production, the embedding + Qdrant + rerank chain lands at
+# roughly 1.6-2.5s, so a turn is almost always going to cross this - which is
+# the point. It is set above the fast path rather than at zero so that a
+# genuinely quick turn stays clean and does not gain a pointless preamble.
+FILLER_AFTER_SECONDS = 0.6
+
+# Deliberately short, neutral, and free of any claim about the answer - the
+# model has not seen the retrieved context yet at this point, so anything
+# implying knowledge ("sure, we do that") could be contradicted a second later.
+_RETRIEVAL_FILLERS = (
+    "Let me check that.",
+    "One moment.",
+    "Sure, let me look.",
+)
 
 
 async def _get_company(company_id: str) -> dict:
@@ -131,8 +149,20 @@ async def stream_voice_turn(user_text: str, session: CallSession):
     Non-English calls are translated per fragment rather than in one pass at the
     end — translating the whole reply would reintroduce exactly the serial wait
     this path exists to remove.
+
+    Retrieval still has to finish before the model can write anything, and on a
+    phone line that gap is pure silence. If it runs long we speak a short
+    acknowledgement into it, the way a person says "let me check" instead of
+    going quiet. Anything yielded here is teed into the spoken log by
+    app/voice/router.py::_record_spoken, so the filler is echo-suppressed like
+    any other speech; it is deliberately not added to `collected`, so it never
+    reaches the stored transcript or the lead summary.
     """
-    system, english_query, detected_lang = await _build_turn_context(user_text, session)
+    ctx_task = asyncio.create_task(_build_turn_context(user_text, session))
+    done, _ = await asyncio.wait({ctx_task}, timeout=FILLER_AFTER_SECONDS)
+    if not done:
+        yield random.choice(_RETRIEVAL_FILLERS)
+    system, english_query, detected_lang = await ctx_task
 
     messages = session.conversation_history[-8:] + [
         {"role": "user", "content": english_query}
