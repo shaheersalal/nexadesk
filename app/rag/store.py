@@ -76,19 +76,33 @@ async def store_chunks(
     return len(points)
 
 
-async def _rerank_with_jina(query: str, chunks: list[dict], top_n: int) -> tuple[list[dict], bool]:
+async def _rerank_with_jina(
+    query: str, chunks: list[dict], top_n: int, timeout: float = 5.0,  # noqa: ASYNC109
+) -> tuple[list[dict], bool]:
+    # ASYNC109 wants asyncio.timeout instead of a timeout parameter. Here the
+    # value is handed straight to httpx, which is the right mechanism for an
+    # HTTP call - it distinguishes connect from read and cancels the socket
+    # rather than leaving a request running behind an abandoned task.
     """
     Re-rank chunks using Jina. Falls back to the original order on any error.
 
     Returns (chunks, reranked). The flag matters: the caller must know which
     scale the scores are on before comparing them to a threshold.
+
+    `timeout` exists because this is a third sequential network call on a path
+    that has already paid for an embedding and a search, and the caller on a
+    phone line hears every second of it as silence. Measured against
+    production it usually answers in 0.62-0.94s but has been seen to take
+    5s - the old fixed timeout - which is a dead call, not a slow one. Voice
+    passes a short budget and accepts the cosine-ordered fallback on the rare
+    timeout; chat keeps the long one, where a slow rerank is invisible.
     """
     if not settings.JINA_API_KEY or not chunks:
         return chunks[:top_n], False
     try:
         res = await http_client().post(
             "https://api.jina.ai/v1/rerank",
-            timeout=5,
+            timeout=timeout,
             headers={
                 "Authorization": f"Bearer {settings.JINA_API_KEY}",
                 "Content-Type": "application/json",
@@ -118,10 +132,20 @@ async def query_with_confidence(
     property_id: Optional[str] = None,
     top_k: int = 5,
     client: Optional[AsyncQdrantClient] = None,
+    rerank_timeout: float = 5.0,
 ) -> dict:
     """
     Query Qdrant and return chunks with a confidence assessment.
     Fetches top_k * 3 candidates, Jina re-ranks to top_k, then scores confidence.
+
+    `rerank_timeout` bounds how long the reranker may stall the caller before
+    we fall back to Qdrant's own ordering. Skipping the reranker outright was
+    tried and rejected: on this corpus the cosine thresholds below are tuned
+    for the real-estate knowledge base, and an ai_studio query as ordinary as
+    "what do you build" scored between SCORE_MIN and SCORE_PARTIAL_COSINE,
+    so dropping the reranker turned a good answer into NO_MATCH. Losing the
+    answer is a worse failure than half a second of latency, so the reranker
+    stays and only its tail is capped.
 
     Returns:
       {
@@ -165,7 +189,9 @@ async def query_with_confidence(
     ]
 
     # Jina re-rank — narrows candidates to top_k, best match first
-    chunks, reranked = await _rerank_with_jina(query, candidates, top_n=top_k)
+    chunks, reranked = await _rerank_with_jina(
+        query, candidates, top_n=top_k, timeout=rerank_timeout
+    )
 
     max_score = max(c["score"] for c in chunks) if chunks else 0.0
 

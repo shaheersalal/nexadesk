@@ -1,0 +1,6 @@
+[Unit]
+Description=NexaDesk keep-alive ping (Oracle idle-reclaim mitigation)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/nexadesk/keepalive.sh

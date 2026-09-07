@@ -81,6 +81,12 @@ async def _build_turn_context(user_text: str, session: CallSession) -> tuple[str
         query=english_query,
         company_id=session.company_id,
         top_k=4,
+        # Cap the reranker's tail on a live call. It normally answers in
+        # 0.62-0.94s, which is worth paying for answer quality, but the
+        # default 5s budget has actually been hit - and 5s of silence mid-call
+        # reads as a dropped line. Past this we take Qdrant's ordering and
+        # keep talking.
+        rerank_timeout=1.2,
     )
     company = await _get_company(session.company_id)
 
