@@ -36,9 +36,39 @@ def _notify_to() -> str:
     return get_settings().NOTIFY_EMAIL_TO
 
 
-async def send_lead_email(fields: dict, company_name: str, channel: str) -> None:
+def _transcript_html(transcript: list | None, channel: str) -> str:
+    """Render conversation turns for an email, or nothing when there are none."""
+    turns = [t for t in (transcript or []) if isinstance(t, dict) and t.get("content")]
+    if not turns:
+        return ""
+    rows = "".join(
+        f'<p style="margin:4px 0;font-size:12px">'
+        f'<b>{"Caller" if t.get("role") == "user" else "Assistant"}:</b> {t.get("content")}</p>'
+        for t in turns
+    )
+    return (
+        f'<h3 style="color:#1e3a5f;font-size:14px">Full {channel} transcript</h3>'
+        f'<div style="background:#f5f5f5;padding:10px;border-radius:6px;'
+        f'max-height:420px;overflow:auto">{rows}</div>'
+    )
+
+
+async def send_lead_email(
+    fields: dict,
+    company_name: str,
+    channel: str,
+    transcript: list | None = None,
+    duration: int | None = None,
+) -> None:
     """Best-effort - never raises. Call via asyncio.create_task so a slow or
-    failed send never adds latency to the caller's actual reply."""
+    failed send never adds latency to the caller's actual reply.
+
+    `transcript` is included when the caller has one. On the voice path this
+    email is deliberately sent after the conversation row is written, because
+    a call's transcript does not exist until the call ends - the session-end
+    digest fires when the visitor's tab closes, which on mobile is the moment
+    they tap the call button, i.e. before a word has been spoken.
+    """
     settings = get_settings()
     if not settings.RESEND_API_KEY:
         logger.info("RESEND_API_KEY not set - skipping lead email")
@@ -54,6 +84,7 @@ async def send_lead_email(fields: dict, company_name: str, channel: str) -> None
         ("Timeline", fields.get("timeline")),
         ("Intent", fields.get("intent")),
         ("Channel", channel),
+        ("Call duration", f"{duration}s" if duration else None),
     ]
     rows = "".join(
         f'<tr><td style="padding:6px 10px;color:#666;font-size:13px">{label}</td>'
@@ -70,13 +101,17 @@ async def send_lead_email(fields: dict, company_name: str, channel: str) -> None
                 json={
                     "from": NOTIFY_FROM,
                     "to": [_notify_to()],
-                    "subject": f"New lead - {fields.get('name') or 'unnamed visitor'} ({company_name})",
+                    "subject": (
+                        f"{'Call' if channel == 'voice' else 'Chat'} lead - "
+                        f"{fields.get('name') or 'unnamed visitor'} ({company_name})"
+                    ),
                     "html": (
                         '<div style="font-family:sans-serif;max-width:600px;color:#1a1a1a">'
-                        f'<h2 style="color:#1e3a5f">New lead on {company_name}</h2>'
+                        f'<h2 style="color:#1e3a5f">New {channel} lead on {company_name}</h2>'
                         f'<table style="border-collapse:collapse">{rows}</table>'
+                        f'{_transcript_html(transcript, channel)}'
                         '<p style="color:#999;font-size:12px;margin-top:16px">'
-                        "Full conversation is in the dashboard.</p></div>"
+                        "Also in the dashboard.</p></div>"
                     ),
                 },
             )

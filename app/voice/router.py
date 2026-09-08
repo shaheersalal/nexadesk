@@ -553,16 +553,6 @@ async def _finalize_call(session, duration: int) -> None:
         lead_result = sb.table("leads").insert(lead_payload).execute()
         lead_id = lead_result.data[0]["id"] if lead_result.data else None
 
-        # ai_studio only — email Shaheer the moment a call produces a new
-        # lead, on top of the dashboard. Real-estate tenants rely on their
-        # dashboard alone; this was never asked for there. See
-        # app/agents/orchestrator.py::run for the matching chat-path hook.
-        if lead_id and vertical_key == "ai_studio":
-            from app.shared.notify import send_lead_email
-            asyncio.create_task(
-                send_lead_email(lead_data, company_row.get("name", "shaheer.dev"), channel="voice")
-            )
-
     # Save conversation.
     #
     # Written for every call that reached this point, not only those with a
@@ -592,6 +582,34 @@ async def _finalize_call(session, duration: int) -> None:
             "call_duration": duration,
             "ended_at": datetime.now(timezone.utc).isoformat(),
         }).execute()
+
+        # ai_studio only — email the call, transcript included, now that the
+        # transcript actually exists. Real-estate tenants rely on their
+        # dashboard alone; this stays scoped to Shaheer's own site.
+        #
+        # This sits here, after the insert, rather than up in the new-lead
+        # branch above, because of two bugs that made call transcripts
+        # unreachable by email:
+        #   1. A call's transcript is only written at the end of the call,
+        #      while the session-end digest fires when the visitor's tab
+        #      closes - on mobile that is the instant they tap the call
+        #      button, before a word is spoken. The digest therefore always
+        #      looked for a transcript that did not exist yet, and its
+        #      once-per-session guard meant nothing ever re-sent it.
+        #   2. The email only fired when the call created a NEW lead, so a
+        #      returning caller - exactly the engaged one worth reading -
+        #      produced no email at all.
+        if vertical_key == "ai_studio":
+            from app.shared.notify import send_lead_email
+            asyncio.create_task(
+                send_lead_email(
+                    lead_data,
+                    company_row.get("name", "shaheer.dev"),
+                    channel="voice",
+                    transcript=turns,
+                    duration=duration,
+                )
+            )
 
 
 async def _resolve_company_id(phone_number: str) -> str | None:
