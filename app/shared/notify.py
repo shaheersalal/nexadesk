@@ -138,6 +138,15 @@ async def send_visitor_digest_email(summary: dict) -> None:
     review = summary.get("review") or {}
     prior_dates = summary.get("prior_visit_dates") or []
 
+    # "Conversation" and "Entered URL" always render, even when empty. An
+    # omitted row is ambiguous: a visitor who simply browsed and left looks
+    # identical to the transcript pipeline being broken, which is exactly the
+    # doubt this email existed to remove. Say "none" out loud instead.
+    if conversation.get("transcript"):
+        conversation_value = f"{conversation.get('channel', 'conversation')} - see transcript below"
+    else:
+        conversation_value = "none - visitor did not call or chat"
+
     rows = [
         ("Site", site_label),
         ("IP", summary.get("ip")),
@@ -147,7 +156,8 @@ async def send_visitor_digest_email(summary: dict) -> None:
         ("Max scroll", f"{summary.get('max_scroll_pct', 0)}%" if summary.get("max_scroll_pct") else None),
         ("Referrer", summary.get("referrer")),
         ("User agent", summary.get("user_agent")),
-        ("Entered URL", live_fetch.get("url")),
+        ("Entered URL", live_fetch.get("url") or "none"),
+        ("Conversation", conversation_value),
         ("Review", f"{review.get('stars')}★ - {review.get('review_text')}" if review.get("stars") or review.get("review_text") else None),
         ("Email left", review.get("email")),
     ]

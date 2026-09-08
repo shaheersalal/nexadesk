@@ -31,6 +31,12 @@ TRACK_RATE_MAX = 60      # requests per IP per window — generous, these are ch
 SESSION_END_RATE_WINDOW = 60
 SESSION_END_RATE_MAX = 10
 
+# How long to wait before compiling a finished visit. The page fires its
+# queued /track batch and this session-end beacon at the same moment on
+# pagehide, and nothing orders them - so reading the events immediately can
+# miss the visitor's last clicks and scroll depth.
+DIGEST_SETTLE_SECONDS = 5
+
 _SITES = ("shaheer_dev", "nexadesk_site")
 
 
@@ -303,6 +309,19 @@ async def session_end(body: SessionEndRequest, request: Request):
     except Exception:
         pass
 
+    # Compile and send in the background, after a short settle. On pagehide the
+    # page fires two independent beacons - the queued /track batch and this one
+    # - with no ordering guarantee between them, and the last one loses. A real
+    # visit on 2026-09-08 emailed "Pageviews 1" and no clicks while two click
+    # events landed 4s later, because the digest was compiled first. Waiting
+    # lets the final batch arrive before we read the events back.
+    asyncio.create_task(_compile_and_send_digest(body, ip))
+    return {"logged": True}
+
+
+async def _compile_and_send_digest(body: "SessionEndRequest", ip: str) -> None:
+    """Gather everything known about a finished visit, then email it."""
+    await asyncio.sleep(DIGEST_SETTLE_SECONDS)
     sb = get_supabase_admin()
 
     try:
@@ -423,7 +442,7 @@ async def session_end(body: SessionEndRequest, request: Request):
     except Exception as exc:
         logger.warning("site_visitors upsert failed: %s", exc)
 
-    asyncio.create_task(send_visitor_digest_email({
+    await send_visitor_digest_email({
         "site": body.site,
         "ip": ip,
         "session_id": body.session_id,
@@ -436,6 +455,4 @@ async def session_end(body: SessionEndRequest, request: Request):
         "conversation": conversation,
         "review": review,
         "prior_visit_dates": [d for d in prior_dates if d != today],
-    }))
-
-    return {"logged": True}
+    })

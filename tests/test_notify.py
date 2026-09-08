@@ -175,3 +175,64 @@ def test_transcript_renderer_skips_empty_turns():
     )
     assert "Hello." in html
     assert html.count("<b>") == 1
+
+
+@pytest.mark.asyncio
+async def test_digest_says_no_call_out_loud(monkeypatch):
+    """
+    A visitor who only browsed must produce an explicit "none", not a missing
+    row. Shaheer received a digest with no conversation line and could not tell
+    whether the visitor simply never called or the transcript pipeline had
+    broken - the row exists to remove exactly that doubt.
+    """
+    monkeypatch.setattr(
+        notify, "get_settings",
+        lambda: type("S", (), {
+            "RESEND_API_KEY": "re_test_key",
+            "NOTIFY_EMAIL_TO": "owner@example.com",
+        })(),
+    )
+    monkeypatch.setattr(notify.httpx, "AsyncClient", _FakeAsyncClient)
+    _FakeAsyncClient.last_call = None
+
+    await notify.send_visitor_digest_email({
+        "site": "shaheer_dev", "ip": "135.232.20.45", "session_id": "s-1",
+        "pageviews": 1, "clicks": 2, "max_scroll_pct": 0,
+        "referrer": "", "user_agent": "Chrome",
+        "live_fetch": None, "conversation": None, "review": None,
+        "prior_visit_dates": [],
+    })
+
+    html = _FakeAsyncClient.last_call["json"]["html"]
+    assert "Conversation" in html
+    assert "did not call or chat" in html
+    assert "Entered URL" in html and "none" in html
+
+
+@pytest.mark.asyncio
+async def test_digest_points_at_the_transcript_when_there_was_one(monkeypatch):
+    monkeypatch.setattr(
+        notify, "get_settings",
+        lambda: type("S", (), {
+            "RESEND_API_KEY": "re_test_key",
+            "NOTIFY_EMAIL_TO": "owner@example.com",
+        })(),
+    )
+    monkeypatch.setattr(notify.httpx, "AsyncClient", _FakeAsyncClient)
+    _FakeAsyncClient.last_call = None
+
+    await notify.send_visitor_digest_email({
+        "site": "shaheer_dev", "ip": "1.2.3.4", "session_id": "s-2",
+        "pageviews": 1, "clicks": 0, "max_scroll_pct": 50,
+        "referrer": "", "user_agent": "Chrome",
+        "live_fetch": {"url": "https://acme.example", "scraped_excerpt": "Acme builds robots"},
+        "conversation": {"channel": "chat", "transcript": [
+            {"role": "user", "content": "Do you build RAG systems?"},
+        ]},
+        "review": None, "prior_visit_dates": [],
+    })
+
+    html = _FakeAsyncClient.last_call["json"]["html"]
+    assert "did not call or chat" not in html
+    assert "Do you build RAG systems?" in html
+    assert "https://acme.example" in html
