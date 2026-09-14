@@ -1,0 +1,86 @@
+# Render Blueprint — lets Shaheer deploy this with "New +" -> "Blueprint" in
+# the Render dashboard instead of hand-filling the service creation form.
+# Free tier: sleeps after 15 min with no inbound traffic (HTTP or WebSocket),
+# ~1 min cold start on the next request. That is a real regression for the
+# Twilio voice path specifically — see the migration notes for why.
+services:
+  - type: web
+    name: nexadesk-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      # Values are NOT set here on purpose — paste them in the Render
+      # dashboard's Environment tab. Copy every one of these from Railway's
+      # current values (`railway variables`) except RAILWAY_* (those are
+      # Railway-specific and unused here) and APP_BASE_URL /
+      # TELEPHONY_WEBHOOK_BASE_URL, which must become this service's new
+      # onrender.com URL once Render assigns it.
+      - key: APP_NAME
+        sync: false
+      - key: APP_ENV
+        sync: false
+      - key: APP_SECRET_KEY
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: DASHBOARD_URL
+        sync: false
+      - key: EMBED_API_KEY
+        sync: false
+      - key: EMBED_DIMENSIONS
+        sync: false
+      - key: EMBED_MODEL
+        sync: false
+      - key: JINA_API_KEY
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        sync: false
+      - key: MAX_UPLOAD_SIZE_MB
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: QDRANT_COLLECTION
+        sync: false
+      - key: QDRANT_URL
+        sync: false
+      - key: RECAPTCHA_SECRET
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: STT_API_KEY
+        sync: false
+      - key: STT_MODEL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_JWKS_URL
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPPORTED_LANGUAGES
+        sync: false
+      - key: TELEPHONY_ACCOUNT_SID
+        sync: false
+      - key: TELEPHONY_AUTH_TOKEN
+        sync: false
+      - key: TELEPHONY_PHONE_NUMBER
+        sync: false
+      - key: TELEPHONY_WEBHOOK_BASE_URL
+        sync: false
+      - key: TRUST_PROXY_HEADERS
+        sync: false
+      - key: TTS_MODEL
+        sync: false
+      - key: TTS_PROVIDER
+        sync: false
+      - key: TTS_VOICE_ID
+        sync: false
