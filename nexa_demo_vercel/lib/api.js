@@ -8,15 +8,11 @@
  *
  * Set NEXT_PUBLIC_API_URL in the Vercel project settings.
  *
- * The default is the Railway-issued origin, not api.nexadesk.site. The custom
- * domain resolves to Railway but Railway has never issued a certificate for it,
- * so every request from the browser died in the TLS handshake and the widgets
- * looked dead with nothing in the network tab worth reading. Defaulting to the
- * origin that is always valid means the demo works with no env var set at all;
- * point NEXT_PUBLIC_API_URL at the custom domain once its cert is issued.
+ * The default is the host-issued origin (Render since Railway was retired
+ * 2026-09-15), which is always valid, so the demo works with no env var set.
  */
 export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'https://nexadesk-api-production.up.railway.app'
+  process.env.NEXT_PUBLIC_API_URL || 'https://nexadesk-api-xx1h.onrender.com'
 
 export async function postJSON(path, body) {
   const res = await fetch(`${API_URL}${path}`, {
