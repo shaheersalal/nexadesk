@@ -12,7 +12,7 @@ from starlette.concurrency import run_in_threadpool
 from app.config import get_settings
 from app.dependencies import get_redis
 from app.shared import llm
-from app.shared.verticals import build_knowledge_system_prompt
+from app.shared.verticals import build_knowledge_system_prompt, get_vertical
 from app.shared.language import anormalize_for_llm, atranslate_from_english
 from app.rag.store import query_with_confidence
 from app.rag.live_fetch import get_live_context, phone_key
@@ -79,15 +79,6 @@ async def _get_company(company_id: str) -> dict:
     return company
 
 
-VOICE_SYSTEM_SUFFIX = (
-    "\n\nIMPORTANT VOICE RULES:\n"
-    "- Keep responses SHORT — 1 to 3 sentences max.\n"
-    "- Never use markdown, bullet points, or lists.\n"
-    "- Speak naturally as if on a phone call.\n"
-    "- Always end with a question to keep the conversation going.\n"
-)
-
-
 async def _build_turn_context(user_text: str, session: CallSession) -> tuple[str, str, str]:
     """
     Shared prologue for the streaming voice turn path.
@@ -126,7 +117,7 @@ async def _build_turn_context(user_text: str, session: CallSession) -> tuple[str
 
     system = build_knowledge_system_prompt(
         company, rag_result["context_text"], live_fetch_context,
-    ) + VOICE_SYSTEM_SUFFIX
+    ) + get_vertical(company.get("vertical"))["voice_rules"]
 
     if rag_result["confidence"] in ("PARTIAL", "NO_MATCH"):
         system += (

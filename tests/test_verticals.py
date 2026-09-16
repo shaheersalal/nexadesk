@@ -84,3 +84,17 @@ def test_no_context_note_only_fires_when_both_sources_empty():
 
     only_live = build_knowledge_system_prompt(company, rag_context="", live_fetch_context="some page text")
     assert "[SYSTEM NOTE: No knowledge base context was retrieved" not in only_live
+
+
+def test_real_estate_voice_rules_unchanged():
+    """Real-estate tenants must hear exactly the phone behaviour they had before."""
+    rules = get_vertical("real_estate")["voice_rules"]
+    assert "Always end with a question to keep the conversation going." in rules
+
+
+def test_ai_studio_voice_rules_close_the_call_instead_of_prolonging_it():
+    rules = get_vertical("ai_studio")["voice_rules"]
+    assert "Always end with a question" not in rules
+    assert "hand them to Shaheer" in rules
+    assert "goodbye" in rules
+    assert "Do not ask another question" in rules

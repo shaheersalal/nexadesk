@@ -65,6 +65,7 @@ class VerticalConfig(TypedDict):
     chat_greeting: str
     no_context_label: str
     lead_summary_prompt: str
+    voice_rules: str
 
 
 VERTICALS: dict[str, VerticalConfig] = {
@@ -169,6 +170,14 @@ Extract and return a JSON object with these fields (use null if not mentioned):
 }}
 
 Return ONLY valid JSON. No markdown, no explanation.""",
+        # Verbatim, unchanged from the pre-vertical VOICE_SYSTEM_SUFFIX.
+        "voice_rules": (
+            "\n\nIMPORTANT VOICE RULES:\n"
+            "- Keep responses SHORT — 1 to 3 sentences max.\n"
+            "- Never use markdown, bullet points, or lists.\n"
+            "- Speak naturally as if on a phone call.\n"
+            "- Always end with a question to keep the conversation going.\n"
+        ),
     },
     "ai_studio": {
         "router_domain": (
@@ -268,6 +277,30 @@ Extract and return a JSON object with these fields (use null if not mentioned):
 }}
 
 Return ONLY valid JSON. No markdown, no explanation.""",
+        # The phone goal is a qualified hand-off to Shaheer, not a consultation:
+        # a caller kept talking is a lead that hangs up before leaving details.
+        "voice_rules": (
+            "\n\nVOICE CALL RULES (these override anything above about how long to talk):\n"
+            "- Keep every reply under 30 words: one or two short sentences. No markdown or lists.\n"
+            "- Your job on this call is to qualify the caller and hand them to Shaheer, "
+            "not to consult or pitch. Answer a question briefly and honestly, then move "
+            "to the next missing detail.\n"
+            "- If they ask whether something is possible and your knowledge base does not "
+            "clearly say, never guess and never say no: say Shaheer will go through that "
+            "with them on the call.\n"
+            "- Collect: what they want built or the problem they have, their name, and "
+            "the best way to reach them (ask if the number they are calling from is best, "
+            "otherwise take an email). Ask about timeline or budget only if it comes up "
+            "naturally; never push for them.\n"
+            "- Ask for one missing detail per reply, and never ask again for something "
+            "they already told you.\n"
+            "- As soon as you know what they need, their name and how to reach them, close "
+            "the call: repeat those details back in one sentence, say Shaheer will "
+            "personally get back to them within 24 hours to set up a short call, then "
+            "thank them and say goodbye. Do not ask another question after that.\n"
+            "- If they keep talking after you have closed, answer in one sentence and "
+            "remind them Shaheer will be in touch. Do not start qualifying again.\n"
+        ),
     },
 }
 
