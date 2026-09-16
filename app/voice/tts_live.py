@@ -145,12 +145,20 @@ async def speak_tokens(tokens: AsyncIterator[str]) -> AsyncIterator[bytes]:
                     if not token:
                         continue
                     buffer += token
-                    # flush on whitespace so only complete words are sent
-                    if buffer[-1].isspace():
-                        await speak.feed(buffer)
-                        buffer = ""
+                    # OpenAI tokens carry their space at the front (" builds"),
+                    # so a token almost never ends in whitespace. Cut at the
+                    # last whitespace instead, or nothing is sent until the
+                    # whole reply has been written.
+                    cut = max(buffer.rfind(c) for c in " \n\t")
+                    if cut >= 0:
+                        await speak.feed(buffer[:cut + 1])
+                        buffer = buffer[cut + 1:]
                 if buffer.strip():
                     await speak.feed(buffer)
+            except Exception:
+                # This runs in a task nobody awaits for its result, so an
+                # unlogged failure here is a silent call with no trace.
+                logger.exception("Reply generation failed mid-turn")
             finally:
                 await speak.finish()
 

@@ -36,10 +36,12 @@ FILLER_AFTER_SECONDS = 0.6
 # Deliberately short, neutral, and free of any claim about the answer - the
 # model has not seen the retrieved context yet at this point, so anything
 # implying knowledge ("sure, we do that") could be contradicted a second later.
+# Each ends in a space: speech synthesis is fed whole words only, so without it
+# the filler waits for the reply's first word - after retrieval, defeating it.
 _RETRIEVAL_FILLERS = (
-    "Let me check that.",
-    "One moment.",
-    "Sure, let me look.",
+    "Let me check that. ",
+    "One moment. ",
+    "Sure, let me look. ",
 )
 
 

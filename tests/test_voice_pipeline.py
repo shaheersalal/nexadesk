@@ -207,3 +207,72 @@ async def test_filler_never_enters_the_stored_transcript():
     for filler in convo._RETRIEVAL_FILLERS:
         assert filler not in history
         assert filler not in transcript
+
+
+# ── Live synthesis feeding ───────────────────────────────────────────────────
+#
+# Real OpenAI tokens put the space at the front (" builds"). Feeding only when a
+# token ended in whitespace meant nothing reached synthesis until the whole
+# reply was written, so callers sat through retrieval AND generation in silence.
+
+
+class _FakeSpeak:
+    last = None
+
+    def __init__(self, *a, **kw):
+        self.fed: list[str] = []
+        self._done = asyncio.Queue()
+
+    async def __aenter__(self):
+        _FakeSpeak.last = self
+        return self
+
+    async def __aexit__(self, *exc):
+        return None
+
+    async def feed(self, text):
+        self.fed.append(text)
+
+    async def finish(self):
+        await self._done.put(None)
+
+    async def audio(self):
+        await self._done.get()
+        return
+        yield b""
+
+
+@pytest.mark.asyncio
+async def test_reply_words_reach_synthesis_while_the_model_is_still_writing(monkeypatch):
+    from app.voice import tts_live
+    monkeypatch.setattr(tts_live, "SpeakStream", _FakeSpeak)
+    fed_before_end: list[str] = []
+
+    async def tokens():
+        for tok in ("Sha", "heer", " builds", " voice", " agents", "."):
+            yield tok
+        fed_before_end.extend(_FakeSpeak.last.fed)
+
+    async for _ in tts_live.speak_tokens(tokens()):
+        pass
+    assert "".join(fed_before_end) == "Shaheer builds voice "
+    assert "".join(_FakeSpeak.last.fed) == "Shaheer builds voice agents."
+
+
+@pytest.mark.asyncio
+async def test_retrieval_filler_is_sent_before_the_reply_exists(monkeypatch):
+    from app.voice import tts_live
+    monkeypatch.setattr(tts_live, "SpeakStream", _FakeSpeak)
+    filler = convo._RETRIEVAL_FILLERS[0]
+    fed_during_retrieval: list[str] = []
+
+    async def tokens():
+        yield filler
+        fed_during_retrieval.extend(_FakeSpeak.last.fed)
+        for tok in ("The", " answer", "."):
+            yield tok
+
+    async for _ in tts_live.speak_tokens(tokens()):
+        pass
+    assert "".join(fed_during_retrieval) == filler
+    assert "".join(_FakeSpeak.last.fed) == filler + "The answer."
