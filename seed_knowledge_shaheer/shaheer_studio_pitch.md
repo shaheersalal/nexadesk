@@ -44,9 +44,12 @@ should surface both when relevant rather than assuming only one:
 **AI Receptionists & Lead Systems** - for businesses that lose leads after
 hours or waste time on manual qualification. Multi-channel (WhatsApp, voice,
 web chat), intelligent lead qualification with custom question flows, CRM
-handoff and booking integration, a live dashboard, 24/7 uptime, multilingual
-support (Arabic, Urdu, English). Typical clients: real estate agencies across
-the Gulf and US, and any service business with real inbound lead volume.
+handoff and booking integration, a live dashboard, 24/7 uptime. Voice calls
+run in English today; Arabic and Urdu voice can be added for a client by
+switching to a speech provider that has those voices, which is a
+configuration change rather than a rebuild. Typical clients: real estate
+agencies across the Gulf and US, and any service business with real inbound
+lead volume.
 
 **RAG Document Intelligence** - for teams that spend hours searching
 documents that should take seconds. Document ingestion (PDF, Word, web),
