@@ -3,10 +3,15 @@ Shared tools called by individual agents in the orchestrator.
 Each function is self-contained — no circular imports with engine.py.
 """
 import json
+import logging
 from typing import Optional
+
+from starlette.concurrency import run_in_threadpool
 
 from app.dependencies import get_supabase_admin
 from app.shared.verticals import get_vertical
+
+logger = logging.getLogger("nexadesk.agents")
 
 
 async def capture_lead_fields(
@@ -51,18 +56,25 @@ async def capture_lead_fields(
     if not updates:
         return lead_id
 
+    # The Supabase client is synchronous; calling it inline froze every other
+    # request on this worker for the length of the round trip.
     sb = get_supabase_admin()
     try:
         if lead_id:
-            sb.table("leads").update(updates).eq("id", lead_id).eq("company_id", company_id).execute()
+            await run_in_threadpool(
+                lambda: sb.table("leads").update(updates)
+                .eq("id", lead_id).eq("company_id", company_id).execute()
+            )
         else:
             updates["company_id"] = company_id
             updates["source"] = "chat"
             updates["status"] = "new"
-            result = sb.table("leads").insert(updates).execute()
+            result = await run_in_threadpool(lambda: sb.table("leads").insert(updates).execute())
             lead_id = (result.data or [{}])[0].get("id")
     except Exception:
-        pass
+        # Previously swallowed silently: a failed write lost the visitor's
+        # details with no trace anywhere.
+        logger.exception("Lead write failed for company %s", company_id)
 
     return lead_id
 
@@ -73,9 +85,12 @@ async def flag_escalation(lead_id: Optional[str], company_id: str) -> None:
         return
     try:
         sb = get_supabase_admin()
-        sb.table("leads").update({"needs_human": True, "status": "contacted"}).eq("id", lead_id).eq("company_id", company_id).execute()
+        await run_in_threadpool(
+            lambda: sb.table("leads").update({"needs_human": True, "status": "contacted"})
+            .eq("id", lead_id).eq("company_id", company_id).execute()
+        )
     except Exception:
-        pass
+        logger.exception("Escalation flag failed for lead %s", lead_id)
 
 
 async def extract_fields_from_message(

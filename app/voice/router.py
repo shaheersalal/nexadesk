@@ -117,8 +117,14 @@ async def call_status(request: Request):
         redis = await get_redis(settings)
         session = await load_session(call_sid, redis)
         if session:
-            await _finalize_call(session, int(duration))
-            await delete_session(call_sid, redis)
+            try:
+                await _finalize_call(session, int(duration))
+            except Exception:
+                # Keep the session (it expires on its own TTL) so the transcript
+                # is still recoverable, and name the call in the log.
+                logger.exception("Finalizing call %s failed - lead and transcript not saved", call_sid)
+            else:
+                await delete_session(call_sid, redis)
 
     return Response(content="", status_code=204)
 
@@ -190,7 +196,7 @@ async def media_stream(websocket: WebSocket, call_sid: str):
                     greeting = await _build_greeting(session.company_id)
                     spoken.note_spoken(greeting)
                     async with speaking:
-                        await _speak_greeting(websocket, sid, greeting, redis, spoken)
+                        await _speak_greeting(websocket, sid, greeting, redis, spoken, call_sid)
                 except Exception as exc:
                     logger.error("Greeting failed for %s: %s", call_sid, exc, exc_info=True)
 
@@ -400,7 +406,7 @@ async def _build_greeting(company_id: str) -> str:
 
 
 async def _speak_greeting(websocket, stream_sid, text: str, redis,
-                          spoken: SpokenLog | None = None) -> None:
+                          spoken: SpokenLog | None = None, call_sid: str = "") -> None:
     """
     Say the greeting, fast on every call including the first.
 
@@ -439,7 +445,9 @@ async def _speak_greeting(websocket, stream_sid, text: str, redis,
             await _send_media(websocket, stream_sid, chunk)
     except Exception as exc:
         logger.error("Greeting synthesis failed: %s", exc)
-        await _send_tts(websocket, text, "greeting", stream_sid)
+        # Passed the literal "greeting" as the call SID here before, so the
+        # Twilio <Say> fallback below could never find the call to redirect.
+        await _send_tts(websocket, text, call_sid, stream_sid)
         return
 
     if collected:
@@ -466,7 +474,7 @@ async def _send_tts(
         logger.error(f"TTS synthesis returned no audio for call {call_sid}, falling back to Twilio <Say>")
         try:
             twiml = build_fallback_twiml(text)
-            twilio_client().calls(call_sid).update(twiml=twiml)
+            await run_in_threadpool(lambda: twilio_client().calls(call_sid).update(twiml=twiml))
         except Exception as e:
             logger.error(f"Twilio <Say> fallback failed for call {call_sid}: {e}")
 
@@ -489,8 +497,11 @@ async def _finalize_call(session, duration: int) -> None:
         except Exception:
             pass
 
-    company_res = (
-        sb.table("companies").select("name, vertical").eq("id", session.company_id).maybe_single().execute()
+    # Supabase's client is synchronous: run it off the event loop, which is
+    # also carrying every other live call's audio.
+    company_res = await run_in_threadpool(
+        lambda: sb.table("companies").select("name, vertical")
+        .eq("id", session.company_id).maybe_single().execute()
     )
     company_row = (company_res.data if company_res else None) or {}
     vertical_key = company_row.get("vertical")
@@ -507,8 +518,13 @@ async def _finalize_call(session, duration: int) -> None:
         )
         try:
             import json as json_mod
-            extracted = json_mod.loads(summary_json)
+            # Strip ```json fences, as the chat extractors already do. Without
+            # this a fenced reply failed to parse and the caller's name, email
+            # and notes were silently dropped from the lead.
+            cleaned = (summary_json or "").strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+            extracted = json_mod.loads(cleaned)
         except Exception:
+            logger.warning("Call summary was not valid JSON for %s", session.call_sid)
             extracted = {}
     else:
         extracted = {}
@@ -541,8 +557,8 @@ async def _finalize_call(session, duration: int) -> None:
     if session.lead_id:
         # Defence in depth: the session is already company-scoped, but a forged
         # or stale session id must not be able to write another tenant's lead.
-        (
-            sb.table("leads").update(lead_payload)
+        await run_in_threadpool(
+            lambda: sb.table("leads").update(lead_payload)
             .eq("id", session.lead_id).eq("company_id", session.company_id).execute()
         )
         lead_id = session.lead_id
@@ -550,7 +566,7 @@ async def _finalize_call(session, duration: int) -> None:
         # New lead — set source and initial status
         lead_payload["source"] = "voice"
         lead_payload["status"] = "new"
-        lead_result = sb.table("leads").insert(lead_payload).execute()
+        lead_result = await run_in_threadpool(lambda: sb.table("leads").insert(lead_payload).execute())
         lead_id = lead_result.data[0]["id"] if lead_result.data else None
 
     # Save conversation.
@@ -568,7 +584,7 @@ async def _finalize_call(session, duration: int) -> None:
             elif part.startswith("AI: "):
                 turns.append({"role": "assistant", "content": part[4:], "timestamp": session.started_at})
 
-        sb.table("conversations").insert({
+        conversation_row = {
             "company_id": session.company_id,
             "lead_id": lead_id,
             "channel": "voice",
@@ -581,7 +597,8 @@ async def _finalize_call(session, duration: int) -> None:
             "language": session.language,
             "call_duration": duration,
             "ended_at": datetime.now(timezone.utc).isoformat(),
-        }).execute()
+        }
+        await run_in_threadpool(lambda: sb.table("conversations").insert(conversation_row).execute())
 
         # ai_studio only — email the call, transcript included, now that the
         # transcript actually exists. Real-estate tenants rely on their
@@ -625,7 +642,10 @@ async def _resolve_company_id(phone_number: str) -> str | None:
     if not phone_number:
         return None
     sb = get_supabase_admin()
-    result = sb.table("companies").select("id").eq("phone", phone_number).limit(1).execute()
+    # Runs while other calls are streaming audio on this event loop.
+    result = await run_in_threadpool(
+        lambda: sb.table("companies").select("id").eq("phone", phone_number).limit(1).execute()
+    )
     if result.data:
         return result.data[0]["id"]
     logger.warning(
@@ -633,11 +653,5 @@ async def _resolve_company_id(phone_number: str) -> str | None:
         phone_number,
     )
     return None
-
-
-async def _get_company_name(company_id: str) -> str:
-    sb = get_supabase_admin()
-    result = sb.table("companies").select("name").eq("id", company_id).single().execute()
-    return (result.data or {}).get("name", settings.APP_NAME)
 
 
