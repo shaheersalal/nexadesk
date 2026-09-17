@@ -16,6 +16,7 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from app.admin.router import require_admin
 from app.dependencies import get_supabase_admin
@@ -77,7 +78,9 @@ async def track(body: TrackRequest, request: Request):
 
     try:
         sb = get_supabase_admin()
-        sb.table("site_visits").insert(rows).execute()
+        # Fires on every pageview, click and scroll: keep the synchronous
+        # client off the event loop that live calls are streaming audio on.
+        await run_in_threadpool(lambda: sb.table("site_visits").insert(rows).execute())
     except Exception as exc:
         # Never break the visitor's page over an analytics write failure.
         logger.warning("site_visits insert failed: %s", exc)
@@ -243,14 +246,15 @@ async def submit_review(body: ReviewRequest, request: Request):
     """The optional review/email box on shaheer.dev's audition section."""
     try:
         sb = get_supabase_admin()
-        sb.table("site_reviews").insert({
+        review_row = {
             "site": body.site,
             "session_id": body.session_id,
             "ip_address": get_client_ip(request),
             "stars": body.stars,
             "review_text": body.review_text,
             "email": body.email,
-        }).execute()
+        }
+        await run_in_threadpool(lambda: sb.table("site_reviews").insert(review_row).execute())
     except Exception as exc:
         logger.warning("site_reviews insert failed: %s", exc)
         return {"saved": False}
@@ -324,12 +328,14 @@ async def _compile_and_send_digest(body: "SessionEndRequest", ip: str) -> None:
     await asyncio.sleep(DIGEST_SETTLE_SECONDS)
     sb = get_supabase_admin()
 
+    # Every query below goes through run_in_threadpool: this task shares the
+    # event loop with live calls, and the Supabase client is synchronous.
     try:
-        events = (
-            sb.table("site_visits")
+        events = (await run_in_threadpool(
+            lambda: sb.table("site_visits")
             .select("event_type, path, event_data, referrer, user_agent, created_at")
             .eq("session_id", body.session_id).order("created_at").execute()
-        ).data or []
+        )).data or []
     except Exception:
         events = []
 
@@ -342,16 +348,16 @@ async def _compile_and_send_digest(body: "SessionEndRequest", ip: str) -> None:
 
     live_fetch = None
     try:
-        result = (
-            sb.table("site_live_fetches").select("url, scraped_excerpt, phone, created_at")
+        result = await run_in_threadpool(
+            lambda: sb.table("site_live_fetches").select("url, scraped_excerpt, phone, created_at")
             .eq("site", body.site).eq("session_id", body.session_id)
             .order("created_at", desc=True).limit(1).execute()
         )
         if result.data:
             live_fetch = result.data[0]
         elif body.phone:
-            result = (
-                sb.table("site_live_fetches").select("url, scraped_excerpt, phone, created_at")
+            result = await run_in_threadpool(
+                lambda: sb.table("site_live_fetches").select("url, scraped_excerpt, phone, created_at")
                 .eq("site", body.site).eq("phone", body.phone)
                 .order("created_at", desc=True).limit(1).execute()
             )
@@ -362,8 +368,8 @@ async def _compile_and_send_digest(body: "SessionEndRequest", ip: str) -> None:
 
     conversation = None
     try:
-        convo_res = (
-            sb.table("conversations").select("channel, transcript, started_at, ended_at")
+        convo_res = await run_in_threadpool(
+            lambda: sb.table("conversations").select("channel, transcript, started_at, ended_at")
             .eq("session_id", body.session_id).maybe_single().execute()
         )
         conversation = convo_res.data if convo_res else None
@@ -372,14 +378,14 @@ async def _compile_and_send_digest(body: "SessionEndRequest", ip: str) -> None:
     if not conversation and body.phone:
         try:
             since_iso = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
-            conversation = _find_voice_conversation(sb, body.phone, since_iso)
+            conversation = await run_in_threadpool(_find_voice_conversation, sb, body.phone, since_iso)
         except Exception:
             pass
 
     review = None
     try:
-        result = (
-            sb.table("site_reviews").select("stars, review_text, email, created_at")
+        result = await run_in_threadpool(
+            lambda: sb.table("site_reviews").select("stars, review_text, email, created_at")
             .eq("session_id", body.session_id).order("created_at", desc=True).limit(1).execute()
         )
         if result.data:
@@ -394,11 +400,11 @@ async def _compile_and_send_digest(body: "SessionEndRequest", ip: str) -> None:
     today = now.date().isoformat()
     existing_row = None
     try:
-        existing = (
+        existing = await run_in_threadpool(
             # Whole row, not a subset: keep() below falls back to the stored
             # value for every field it might otherwise null out, so anything
             # left unselected here would silently fail to be preserved.
-            sb.table("site_visitors").select("*")
+            lambda: sb.table("site_visitors").select("*")
             .eq("site", body.site).eq("ip_address", ip).maybe_single().execute()
         )
         existing_row = existing.data if existing else None
@@ -438,7 +444,9 @@ async def _compile_and_send_digest(body: "SessionEndRequest", ip: str) -> None:
         "notified_at": now.isoformat(),
     }
     try:
-        sb.table("site_visitors").upsert(visitor_row, on_conflict="site,ip_address").execute()
+        await run_in_threadpool(
+            lambda: sb.table("site_visitors").upsert(visitor_row, on_conflict="site,ip_address").execute()
+        )
     except Exception as exc:
         logger.warning("site_visitors upsert failed: %s", exc)
 

@@ -1,8 +1,11 @@
 """
 Chat engine — thin coordinator between HTTP layer, multi-agent orchestrator, and persistence.
 """
+import logging
 from typing import Optional
 from datetime import datetime, timezone
+
+from starlette.concurrency import run_in_threadpool
 
 from app.config import get_settings
 from app.chat.lead_scoring import score_message, compute_total_delta
@@ -11,13 +14,16 @@ from app.agents import orchestrator
 from app.rag.live_fetch import get_live_context
 
 settings = get_settings()
+logger = logging.getLogger("nexadesk.chat")
 
 
 async def get_company_context(company_id: str) -> dict:
     """Load company record for system prompt injection. Returns {} if not found."""
     sb = get_supabase_admin()
     try:
-        result = sb.table("companies").select("*").eq("id", company_id).single().execute()
+        result = await run_in_threadpool(
+            lambda: sb.table("companies").select("*").eq("id", company_id).single().execute()
+        )
         return result.data or {}
     except Exception:
         return {}
@@ -60,15 +66,20 @@ async def chat_turn(
 
     effective_lead_id = result.get("lead_id") or lead_id
 
-    await _persist_turn(
-        session_id=session_id,
-        company_id=company_id,
-        user_msg=user_message,
-        assistant_msg=result["reply"],
-        language=result["language"],
-        lead_id=effective_lead_id,
-        score_delta=score_delta,
-    )
+    try:
+        await _persist_turn(
+            session_id=session_id,
+            company_id=company_id,
+            user_msg=user_message,
+            assistant_msg=result["reply"],
+            language=result["language"],
+            lead_id=effective_lead_id,
+            score_delta=score_delta,
+        )
+    except Exception:
+        # The reply already exists. A database hiccup used to turn it into a
+        # 500 for the visitor; log the lost transcript write instead.
+        logger.exception("Persisting chat turn failed for session %s", session_id)
 
     return {
         "reply": result["reply"],
@@ -89,7 +100,6 @@ async def _persist_turn(
     score_delta: int,
 ) -> None:
     """Append turn to conversation and update lead score."""
-    sb = get_supabase_admin()
     now = datetime.now(timezone.utc).isoformat()
 
     turn = [
@@ -97,30 +107,36 @@ async def _persist_turn(
         {"role": "assistant", "content": assistant_msg, "timestamp": now},
     ]
 
-    # session_id arrives from the client on a public endpoint, so it is only
-    # a hint, never a grant: scope the lookup to the company being addressed.
-    existing = (
-        sb.table("conversations").select("id, transcript")
-        .eq("session_id", session_id).eq("company_id", company_id).execute()
-    )
-    if existing.data:
-        conv_id = existing.data[0]["id"]
-        transcript = existing.data[0].get("transcript") or []
-        transcript.extend(turn)
-        (
-            sb.table("conversations")
-            .update({"transcript": transcript, "language": language})
-            .eq("id", conv_id).eq("company_id", company_id).execute()
+    def _write() -> None:
+        sb = get_supabase_admin()
+        # session_id arrives from the client on a public endpoint, so it is only
+        # a hint, never a grant: scope the lookup to the company being addressed.
+        existing = (
+            sb.table("conversations").select("id, transcript")
+            .eq("session_id", session_id).eq("company_id", company_id).execute()
         )
-    else:
-        sb.table("conversations").insert({
-            "company_id": company_id,
-            "lead_id": lead_id,
-            "channel": "chat",
-            "session_id": session_id,
-            "transcript": turn,
-            "language": language,
-        }).execute()
+        if existing.data:
+            conv_id = existing.data[0]["id"]
+            transcript = existing.data[0].get("transcript") or []
+            transcript.extend(turn)
+            (
+                sb.table("conversations")
+                .update({"transcript": transcript, "language": language})
+                .eq("id", conv_id).eq("company_id", company_id).execute()
+            )
+        else:
+            sb.table("conversations").insert({
+                "company_id": company_id,
+                "lead_id": lead_id,
+                "channel": "chat",
+                "session_id": session_id,
+                "transcript": turn,
+                "language": language,
+            }).execute()
 
-    if lead_id and score_delta != 0:
-        sb.rpc("increment_lead_score", {"p_lead_id": lead_id, "p_delta": score_delta}).execute()
+        if lead_id and score_delta != 0:
+            sb.rpc("increment_lead_score", {"p_lead_id": lead_id, "p_delta": score_delta}).execute()
+
+    # The Supabase client is synchronous; off the event loop so a chat write
+    # doesn't stall live phone calls sharing this worker.
+    await run_in_threadpool(_write)

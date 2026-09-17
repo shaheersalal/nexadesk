@@ -1,8 +1,9 @@
 from typing import Optional
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from app.auth.middleware import CurrentUser
 from app.dependencies import RlsDb
@@ -37,8 +38,10 @@ LIVE_CONTEXT_RATE_MAX = 6       # fetches per IP per window
 SESSION_TTL_SECONDS = 1800  # 30 min of inactivity
 
 
-def _session_key(session_id: str) -> str:
-    return f"chat:session:{session_id}"
+def _session_key(company_id: str, session_id: str) -> str:
+    # Company-scoped: the session id is client-supplied, so an unscoped key let
+    # one tenant's chat read another's cached history.
+    return f"chat:session:{company_id}:{session_id}"
 
 
 class ChatMessage(BaseModel):
@@ -61,9 +64,9 @@ async def send_message(body: ChatMessage):
     session_id = body.session_id or str(uuid4())
 
     # Reload history from Supabase if not in cache (e.g. TTL expiry, restart)
-    history = await session_store.get_json(_session_key(session_id))
+    history = await session_store.get_json(_session_key(body.company_id, session_id))
     if history is None:
-        history = await _load_history_from_db(session_id)
+        history = await _load_history_from_db(session_id, body.company_id)
 
     result = await chat_turn(
         user_message=body.message,
@@ -77,7 +80,7 @@ async def send_message(body: ChatMessage):
     history.append({"role": "user", "content": body.message})
     history.append({"role": "assistant", "content": result["reply"]})
     history = history[-20:]  # keep last 20 turns
-    await session_store.set_json(_session_key(session_id), history, SESSION_TTL_SECONDS)
+    await session_store.set_json(_session_key(body.company_id, session_id), history, SESSION_TTL_SECONDS)
 
     # Auto-create lead if not yet linked and engagement crossed threshold
     lead_id = body.lead_id
@@ -119,13 +122,20 @@ async def get_history(session_id: str, db: RlsDb, current_user: CurrentUser):
 @router.get("/greeting")
 async def get_greeting(company_id: str):
     """Return greeting for the embedded chat widget (public endpoint)."""
+    # Both an unknown and a malformed id used to return 500: single() raises
+    # when no row matches, and Postgres rejects a malformed uuid outright, so
+    # the 404 below was unreachable.
+    try:
+        UUID(company_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Company not found")
     sb = get_supabase_admin()
-    result = (
-        sb.table("companies")
+    result = await run_in_threadpool(
+        lambda: sb.table("companies")
         .select("name, ai_persona, receptionist_name, vertical")
-        .eq("id", company_id).single().execute()
+        .eq("id", company_id).maybe_single().execute()
     )
-    if not result.data:
+    if not result or not result.data:
         raise HTTPException(status_code=404, detail="Company not found")
     company = result.data
     company_name = company.get("name", settings.APP_NAME)
@@ -196,14 +206,15 @@ async def set_live_context(body: LiveContextRequest, request: Request):
     # and is still deleted from the model's own working context as before.
     try:
         sb = get_supabase_admin()
-        sb.table("site_live_fetches").insert({
+        fetch_row = {
             "site": body.site,
             "session_id": body.session_id or body.key,
             "phone": body.phone,
-            "ip_address": get_client_ip(request),
+            "ip_address": ip,
             "url": final_url,
             "scraped_excerpt": text[:4000],
-        }).execute()
+        }
+        await run_in_threadpool(lambda: sb.table("site_live_fetches").insert(fetch_row).execute())
     except Exception:
         pass  # never break the visitor's page over a logging failure
 
@@ -222,14 +233,17 @@ async def clear_live_context_route(body: LiveContextClearRequest):
     return {"cleared": True}
 
 
-async def _load_history_from_db(session_id: str) -> list[dict]:
+async def _load_history_from_db(session_id: str, company_id: str) -> list[dict]:
     """Rebuild LLM message history from Supabase on cache miss."""
     try:
         sb = get_supabase_admin()
-        result = (
-            sb.table("conversations")
+        # session_id comes from the public request body. Unscoped, a caller who
+        # supplied another tenant's session id got that conversation loaded
+        # into the model's context, where it could be repeated back to them.
+        result = await run_in_threadpool(
+            lambda: sb.table("conversations")
             .select("transcript")
-            .eq("session_id", session_id)
+            .eq("session_id", session_id).eq("company_id", company_id)
             .single()
             .execute()
         )
@@ -243,20 +257,31 @@ async def _load_history_from_db(session_id: str) -> list[dict]:
 
 async def _get_or_create_session_lead(session_id: str, company_id: str) -> Optional[str]:
     """Create a placeholder lead linked to this chat session."""
-    sb = get_supabase_admin()
-    conv = sb.table("conversations").select("lead_id").eq("session_id", session_id).execute()
-    if conv.data and conv.data[0].get("lead_id"):
-        return conv.data[0]["lead_id"]
+    def _link() -> Optional[str]:
+        sb = get_supabase_admin()
+        # Scoped by company: session_id is client-supplied, and unscoped this
+        # returned another tenant's lead id and re-linked their conversation.
+        conv = (
+            sb.table("conversations").select("lead_id")
+            .eq("session_id", session_id).eq("company_id", company_id).execute()
+        )
+        if conv.data and conv.data[0].get("lead_id"):
+            return conv.data[0]["lead_id"]
 
-    lead_result = sb.table("leads").insert({
-        "company_id": company_id,
-        "source": "chat",
-        "status": "new",
-        "score": 0,
-    }).execute()
-    if not lead_result.data:
-        return None
-    lead_id = lead_result.data[0]["id"]
+        lead_result = sb.table("leads").insert({
+            "company_id": company_id,
+            "source": "chat",
+            "status": "new",
+            "score": 0,
+        }).execute()
+        if not lead_result.data:
+            return None
+        lead_id = lead_result.data[0]["id"]
 
-    sb.table("conversations").update({"lead_id": lead_id}).eq("session_id", session_id).execute()
-    return lead_id
+        (
+            sb.table("conversations").update({"lead_id": lead_id})
+            .eq("session_id", session_id).eq("company_id", company_id).execute()
+        )
+        return lead_id
+
+    return await run_in_threadpool(_link)
