@@ -30,12 +30,15 @@ def get_client_ip(request: Request) -> str:
       address straight into the visitor log and mint a fresh throttle
       bucket per request (AUDIT.md M5, verified live and then closed here).
 
-    If this app is ever genuinely fronted by Cloudflare, re-add
-    CF-Connecting-IP - but only once Cloudflare is the *only* way in, so
-    the origin can't be hit directly with a forged header.
+    Render is different, measured 2026-09-17: it sits behind Cloudflare and
+    does NOT overwrite X-Forwarded-For - seven requests each forging a
+    different XFF all passed the 6/min live-context limit. Every request to
+    an onrender.com service goes through Cloudflare, which sets
+    CF-Connecting-IP itself, so on Render CLIENT_IP_HEADER=CF-Connecting-IP.
     """
-    if get_settings().TRUST_PROXY_HEADERS:
-        xff = request.headers.get("X-Forwarded-For")
-        if xff:
-            return xff.split(",")[0].strip()
+    settings = get_settings()
+    if settings.TRUST_PROXY_HEADERS:
+        value = request.headers.get(settings.CLIENT_IP_HEADER.strip() or "X-Forwarded-For")
+        if value:
+            return value.split(",")[0].strip()
     return (request.client.host if request.client else None) or "unknown"

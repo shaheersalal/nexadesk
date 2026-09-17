@@ -248,7 +248,7 @@ def test_forwarded_ip_headers_ignored_by_default(monkeypatch):
 
     monkeypatch.setattr(
         shared_net, "get_settings",
-        lambda: type("S", (), {"TRUST_PROXY_HEADERS": False})(),
+        lambda: type("S", (), {"CLIENT_IP_HEADER": "", "TRUST_PROXY_HEADERS":False})(),
     )
 
     request = type("Req", (), {
@@ -265,7 +265,7 @@ def test_forwarded_ip_used_when_explicitly_trusted(monkeypatch):
 
     monkeypatch.setattr(
         shared_net, "get_settings",
-        lambda: type("S", (), {"TRUST_PROXY_HEADERS": True})(),
+        lambda: type("S", (), {"CLIENT_IP_HEADER": "", "TRUST_PROXY_HEADERS":True})(),
     )
 
     request = type("Req", (), {
@@ -292,7 +292,7 @@ def test_cf_connecting_ip_never_trusted(monkeypatch):
 
     monkeypatch.setattr(
         shared_net, "get_settings",
-        lambda: type("S", (), {"TRUST_PROXY_HEADERS": True})(),
+        lambda: type("S", (), {"CLIENT_IP_HEADER": "", "TRUST_PROXY_HEADERS":True})(),
     )
 
     request = type("Req", (), {
@@ -309,6 +309,33 @@ def test_cf_connecting_ip_never_trusted(monkeypatch):
     })()
 
     assert public_router._get_client_ip(request2) == "5.6.7.8"
+
+
+def test_configured_client_ip_header_beats_a_forged_forwarded_chain(monkeypatch):
+    """
+    Render sits behind Cloudflare and passes a client-supplied X-Forwarded-For
+    straight through: forged values bypassed the live-context limit, verified
+    live 2026-09-17. There the trusted header is CF-Connecting-IP, and a
+    request missing it must fall back to the socket, never to the forgeable XFF.
+    """
+    from app.shared import net as shared_net
+
+    monkeypatch.setattr(
+        shared_net, "get_settings",
+        lambda: type("S", (), {"TRUST_PROXY_HEADERS": True, "CLIENT_IP_HEADER": "CF-Connecting-IP"})(),
+    )
+
+    forged = type("Req", (), {
+        "headers": {"CF-Connecting-IP": "39.35.194.33", "X-Forwarded-For": "203.0.113.9, 39.35.194.33"},
+        "client": type("C", (), {"host": "10.0.0.1"})(),
+    })()
+    assert shared_net.get_client_ip(forged) == "39.35.194.33"
+
+    missing = type("Req", (), {
+        "headers": {"X-Forwarded-For": "203.0.113.9"},
+        "client": type("C", (), {"host": "10.0.0.1"})(),
+    })()
+    assert shared_net.get_client_ip(missing) == "10.0.0.1"
 
 
 # ── M6: reCAPTCHA must fail closed once configured ───────────────────────────

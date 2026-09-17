@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     # behind a proxy that overwrites them. Otherwise they are client-controlled
     # and every per-IP rate limit becomes a no-op.
     TRUST_PROXY_HEADERS: bool = False
+    # Which header carries the real client IP when TRUST_PROXY_HEADERS is on.
+    # Empty means X-Forwarded-For, which Railway overwrites. Render passes a
+    # client-forged X-Forwarded-For straight through, so set CF-Connecting-IP there.
+    CLIENT_IP_HEADER: str = ""
 
     # LLM
     LLM_API_KEY: str = ""
