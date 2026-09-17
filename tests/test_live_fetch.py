@@ -195,3 +195,131 @@ def test_session_ids_are_not_mistaken_for_phone_numbers():
     assert not _looks_like_phone("f0c6455e-3420-49e9-8c60-b932465231f8")
     assert not _looks_like_phone("form-cto-test-1")
     assert not _looks_like_phone("audition-test-1788458945")
+
+
+# ── Unreadable pages and the reader fallback ─────────────────────────────────
+#
+# A plain GET reads nothing from sites built in JavaScript and gets a bot wall
+# from protected ones. zameen.com's fetch returned only its <title> and was
+# reported to the visitor as "Loaded", handing the assistant nothing.
+
+LONG_PAGE = "We build custom dental clinic websites and booking systems. " * 10
+
+
+def test_title_only_and_bot_walls_are_unreadable():
+    from app.rag.live_fetch import _looks_unreadable
+
+    assert _looks_unreadable("Buy, Sell and Rent Property in Pakistan | Zameen.com")
+    assert _looks_unreadable(
+        "Title: Security check | Bayut\n\nURL Source: https://www.bayut.com/\n\n"
+        "Markdown Content: please wait while we check your connection."
+    )
+    assert not _looks_unreadable(LONG_PAGE)
+
+
+def test_a_long_real_page_mentioning_captcha_is_not_a_bot_wall():
+    from app.rag.live_fetch import _looks_unreadable
+
+    assert not _looks_unreadable(LONG_PAGE * 5 + " Contact form protected by reCAPTCHA.")
+
+
+def _patch_fetchers(monkeypatch, direct, reader):
+    import app.rag.live_fetch as live_fetch
+
+    monkeypatch.setattr(live_fetch, "_resolve_and_check", lambda host: None)
+    monkeypatch.setattr(live_fetch, "_fetch_direct", direct)
+    monkeypatch.setattr(live_fetch, "_fetch_via_reader", reader)
+    return live_fetch
+
+
+@pytest.mark.asyncio
+async def test_readable_direct_page_never_calls_the_reader(monkeypatch):
+    async def direct(url):
+        return "https://clinic.example/", LONG_PAGE
+
+    async def reader(url):
+        raise AssertionError("reader must not be called for a readable page")
+
+    live_fetch = _patch_fetchers(monkeypatch, direct, reader)
+    final_url, text = await live_fetch.fetch_page_text("clinic.example")
+    assert final_url == "https://clinic.example/"
+    assert text == LONG_PAGE
+
+
+@pytest.mark.asyncio
+async def test_empty_javascript_shell_falls_back_to_the_reader(monkeypatch):
+    async def direct(url):
+        return "https://clinic.example/", "Clinic"
+
+    async def reader(url):
+        return LONG_PAGE
+
+    live_fetch = _patch_fetchers(monkeypatch, direct, reader)
+    _, text = await live_fetch.fetch_page_text("clinic.example")
+    assert text == LONG_PAGE
+
+
+@pytest.mark.asyncio
+async def test_blocked_everywhere_raises_an_honest_error(monkeypatch):
+    import httpx
+
+    async def direct(url):
+        raise httpx.ConnectError("503 bot protection")
+
+    async def reader(url):
+        return "Title: Security check | Example"
+
+    live_fetch = _patch_fetchers(monkeypatch, direct, reader)
+    with pytest.raises(LiveFetchError, match="block automated readers"):
+        await live_fetch.fetch_page_text("protected.example")
+
+
+@pytest.mark.asyncio
+async def test_internal_redirect_is_refused_not_retried_through_the_reader(monkeypatch):
+    async def direct(url):
+        raise LiveFetchError("That URL points somewhere internal - not supported.")
+
+    async def reader(url):
+        raise AssertionError("an SSRF refusal must never be retried")
+
+    live_fetch = _patch_fetchers(monkeypatch, direct, reader)
+    with pytest.raises(LiveFetchError, match="internal"):
+        await live_fetch.fetch_page_text("rebinding.example")
+
+
+@pytest.mark.asyncio
+async def test_adding_a_phone_reuses_the_page_already_loaded(monkeypatch):
+    """The phone step must not fetch the site again: slow, and a second chance to fail."""
+    import app.chat.router as chat_router
+    from starlette.requests import Request
+    from app.rag.live_fetch import phone_key
+
+    stored = {}
+
+    async def fake_entry(key):
+        if key == "sess-1":
+            return {"url": "https://clinic.example/", "text": LONG_PAGE, "source": "clinic.example"}
+        return None
+
+    async def no_fetch(url):
+        raise AssertionError("the page was already loaded for this session")
+
+    async def fake_store(key, url, text, source=None):
+        stored[key] = (url, text, source)
+
+    def no_db():
+        raise RuntimeError("no database in tests")
+
+    monkeypatch.setattr(chat_router, "get_live_context_entry", fake_entry)
+    monkeypatch.setattr(chat_router, "fetch_page_text", no_fetch)
+    monkeypatch.setattr(chat_router, "store_live_context", fake_store)
+    monkeypatch.setattr(chat_router, "get_supabase_admin", no_db)
+
+    body = chat_router.LiveContextRequest(
+        key="+971501234567", url="clinic.example", session_id="sess-1", phone="+971501234567",
+    )
+    request = Request({"type": "http", "headers": [], "client": ("1.2.3.4", 0)})
+    result = await chat_router.set_live_context(body, request)
+
+    assert result["url"] == "https://clinic.example/"
+    assert stored[phone_key("+971501234567")][1] == LONG_PAGE

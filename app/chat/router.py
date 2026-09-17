@@ -12,7 +12,8 @@ from app.shared.verticals import get_vertical
 from app.shared import session_store
 from app.shared.net import get_client_ip
 from app.rag.live_fetch import (
-    fetch_page_text, store_live_context, clear_live_context, phone_key, LiveFetchError,
+    fetch_page_text, store_live_context, get_live_context_entry, clear_live_context,
+    phone_key, LiveFetchError,
 )
 from app.config import get_settings
 
@@ -157,16 +158,29 @@ async def set_live_context(body: LiveContextRequest, request: Request):
     Public and rate-limited: it makes an outbound fetch on the caller's say-so.
     """
     ip = get_client_ip(request)
-    count = await session_store.incr(f"live_ctx_rate:{ip}", LIVE_CONTEXT_RATE_WINDOW)
-    if count > LIVE_CONTEXT_RATE_MAX:
-        raise HTTPException(status_code=429, detail="Too many page fetches - please wait a minute.")
 
-    try:
-        final_url, text = await fetch_page_text(body.url)
-    except LiveFetchError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    # Adding a phone number re-sends the URL this session already loaded. Reuse
+    # that copy: the reader fallback can take 15s, and a second fetch is a
+    # second chance to fail after the visitor was already told it loaded.
+    reused = None
+    if body.session_id and body.session_id != body.key:
+        entry = await get_live_context_entry(body.session_id)
+        if entry and entry.get("text") and entry.get("source") == body.url.strip():
+            reused = entry
 
-    await store_live_context(body.key, final_url, text)
+    if reused:
+        final_url, text = reused["url"], reused["text"]
+    else:
+        count = await session_store.incr(f"live_ctx_rate:{ip}", LIVE_CONTEXT_RATE_WINDOW)
+        if count > LIVE_CONTEXT_RATE_MAX:
+            raise HTTPException(status_code=429, detail="Too many page fetches - please wait a minute.")
+        try:
+            final_url, text = await fetch_page_text(body.url)
+        except LiveFetchError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    source = body.url.strip()
+    await store_live_context(body.key, final_url, text, source=source)
 
     # Also store under the canonical phone key so an inbound call can find it.
     # Twilio's `From` is E.164 while the visitor types whatever they like, so

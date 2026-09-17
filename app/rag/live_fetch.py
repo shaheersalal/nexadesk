@@ -44,6 +44,29 @@ _MAX_RESPONSE_BYTES = 300_000
 _MAX_CONTEXT_CHARS = 20_000  # keeps the prompt bounded regardless of source page size
 _FETCH_TIMEOUT = 8.0
 
+# Jina Reader renders the page in a real browser on Jina's side. Measured at
+# 5-15s, so it is only the fallback for pages the plain fetch can't read.
+_READER_URL = "https://r.jina.ai/"
+_READER_TIMEOUT = 30.0
+
+# Below this a "page" is a title tag or an empty JavaScript shell, not content:
+# zameen.com's plain fetch returned only its 52-character <title>.
+_MIN_TEXT_CHARS = 100
+
+# Bot walls are short pages; only look for these in short text so a real page
+# that mentions "captcha" in its contact form isn't rejected.
+_BOT_WALL_MAX_CHARS = 1500
+_BOT_WALL_MARKERS = (
+    "security check", "just a moment", "access denied", "attention required",
+    "verify you are human", "checking your browser", "enable javascript",
+    "are you a robot", "captcha", "request blocked", "unusual traffic",
+)
+
+_UNREADABLE_MESSAGE = (
+    "Couldn't read that site - it may block automated readers. "
+    "Try a specific page, like your About or Services page."
+)
+
 _BLOCKED_HOSTNAMES = {"localhost", "metadata.google.internal"}
 
 
@@ -114,23 +137,23 @@ def _strip_html(html: str) -> str:
     return "\n".join(line.strip() for line in text.splitlines() if line.strip())
 
 
-async def fetch_page_text(url: str) -> tuple[str, str]:
-    """
-    Fetch a public URL and return (final_url, readable_text). Raises
-    LiveFetchError on anything unsafe, unreachable, or not actually a page —
-    never returns partial or garbled content silently.
-    """
-    safe_url = _normalize_url(url)
-    _resolve_and_check(urlparse(safe_url).hostname)
+def _looks_unreadable(text: str) -> bool:
+    """An empty shell or a bot wall rather than the visitor's actual content."""
+    if len(text) < _MIN_TEXT_CHARS:
+        return True
+    if len(text) >= _BOT_WALL_MAX_CHARS:
+        return False
+    lowered = text.lower()
+    return any(marker in lowered for marker in _BOT_WALL_MARKERS)
 
-    try:
-        async with httpx.AsyncClient(
-            follow_redirects=True, timeout=_FETCH_TIMEOUT, max_redirects=3,
-        ) as client:
-            resp = await client.get(safe_url, headers={"User-Agent": "NexaDeskAuditionBot/1.0"})
-            resp.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise LiveFetchError("Couldn't fetch that page.") from exc
+
+async def _fetch_direct(safe_url: str) -> tuple[str, str]:
+    """Plain GET. Raises httpx.HTTPError on transport/status failures."""
+    async with httpx.AsyncClient(
+        follow_redirects=True, timeout=_FETCH_TIMEOUT, max_redirects=3,
+    ) as client:
+        resp = await client.get(safe_url, headers={"User-Agent": "NexaDeskAuditionBot/1.0"})
+        resp.raise_for_status()
 
     # A redirect can land somewhere other than the host that was already
     # checked — re-validate the host actually served before trusting it.
@@ -141,10 +164,53 @@ async def fetch_page_text(url: str) -> tuple[str, str]:
         raise LiveFetchError("That doesn't look like a web page.")
 
     raw = resp.content[:_MAX_RESPONSE_BYTES]
-    text = _strip_html(raw.decode(resp.encoding or "utf-8", errors="replace"))
-    if len(text) < 50:
-        raise LiveFetchError("Couldn't find any readable content on that page.")
-    return str(resp.url), text[:_MAX_CONTEXT_CHARS]
+    return str(resp.url), _strip_html(raw.decode(resp.encoding or "utf-8", errors="replace"))
+
+
+async def _fetch_via_reader(safe_url: str) -> str:
+    """
+    Read the page through Jina Reader, which runs its JavaScript first. Sites
+    built client-side (Wix, most site builders, SPAs like nexadesk.site) are
+    an empty shell to a plain GET. Raises httpx.HTTPError on failure.
+    """
+    settings = get_settings()
+    headers = {"X-Return-Format": "text"}
+    if settings.JINA_API_KEY:
+        headers["Authorization"] = f"Bearer {settings.JINA_API_KEY}"
+    async with httpx.AsyncClient(timeout=_READER_TIMEOUT) as client:
+        resp = await client.get(f"{_READER_URL}{safe_url}", headers=headers)
+        resp.raise_for_status()
+    return resp.text.strip()
+
+
+async def fetch_page_text(url: str) -> tuple[str, str]:
+    """
+    Fetch a public URL and return (final_url, readable_text). Raises
+    LiveFetchError on anything unsafe, unreachable, or not actually a page —
+    never returns partial or garbled content silently.
+
+    The SSRF checks raise LiveFetchError straight through and are never
+    retried through the reader: a refused URL stays refused.
+    """
+    safe_url = _normalize_url(url)
+    _resolve_and_check(urlparse(safe_url).hostname)
+
+    final_url, text = safe_url, ""
+    try:
+        final_url, text = await _fetch_direct(safe_url)
+    except httpx.HTTPError as exc:
+        logger.info("Direct fetch failed for %s (%s) - trying reader", safe_url, exc)
+
+    if _looks_unreadable(text):
+        try:
+            text = await _fetch_via_reader(safe_url)
+        except httpx.HTTPError as exc:
+            logger.warning("Reader fetch failed for %s: %s", safe_url, exc)
+            text = ""
+
+    if _looks_unreadable(text):
+        raise LiveFetchError(_UNREADABLE_MESSAGE)
+    return final_url, text[:_MAX_CONTEXT_CHARS]
 
 
 def phone_key(raw: str) -> str:
@@ -167,25 +233,33 @@ def phone_key(raw: str) -> str:
     return f"phone:{digits[-10:]}" if digits else "phone:unknown"
 
 
-async def store_live_context(key: str, url: str, text: str) -> None:
+async def store_live_context(key: str, url: str, text: str, source: str | None = None) -> None:
+    """`source` is the URL exactly as the visitor typed it, so a repeat request can reuse this."""
     settings = get_settings()
     redis = await get_redis(settings)
     await redis.setex(
-        f"{_REDIS_PREFIX}{key}", _TTL_SECONDS, json.dumps({"url": url, "text": text}),
+        f"{_REDIS_PREFIX}{key}", _TTL_SECONDS,
+        json.dumps({"url": url, "text": text, "source": source}),
     )
 
 
-async def get_live_context(key: str) -> Optional[str]:
+async def get_live_context_entry(key: str) -> Optional[dict]:
     settings = get_settings()
     redis = await get_redis(settings)
     raw = await redis.get(f"{_REDIS_PREFIX}{key}")
     if not raw:
         return None
     try:
-        return json.loads(raw).get("text")
+        entry = json.loads(raw)
     except Exception:
         logger.warning("Corrupt live_fetch payload for key %s — dropping it", key)
         return None
+    return entry if isinstance(entry, dict) else None
+
+
+async def get_live_context(key: str) -> Optional[str]:
+    entry = await get_live_context_entry(key)
+    return entry.get("text") if entry else None
 
 
 async def clear_live_context(key: str) -> None:
