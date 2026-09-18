@@ -122,10 +122,21 @@ async def _build_turn_context(user_text: str, session: CallSession) -> tuple[str
     if rag_result["confidence"] in ("PARTIAL", "NO_MATCH"):
         system += (
             "\n[Retrieval confidence LOW. Do not state any specific price, size, "
-            "address or availability - nothing matched well enough. You may still "
+            "address or availability - nothing in the knowledge base matched well enough. You may still "
             "answer general market questions and questions about this service from "
             "what you know. Do not stall: answer what you can, then offer to take a "
             "name and number for the specifics.]"
+        )
+
+    # Last, so it is the nearest instruction to the reply. With the page only
+    # in the middle of a ~20k-char prompt and the low-confidence note after
+    # it, the model told a caller who had loaded their site that it could not
+    # see it (the knowledge base never matches a visitor's own site).
+    if live_fetch_context:
+        system += (
+            "\n[The caller loaded their own website before calling: it is the "
+            "FETCHED PAGE CONTEXT above. When they ask about their business or "
+            "site, answer from it and relate it to what Shaheer could build for them.]"
         )
 
     return system, english_query, detected_lang

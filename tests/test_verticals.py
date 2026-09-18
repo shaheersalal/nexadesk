@@ -86,6 +86,14 @@ def test_no_context_note_only_fires_when_both_sources_empty():
     assert "[SYSTEM NOTE: No knowledge base context was retrieved" not in only_live
 
 
+def test_ai_studio_never_treats_the_visitors_own_business_as_off_topic():
+    """A caller asking about their own site got "That's outside what I can help with"."""
+    company = {"vertical": "ai_studio", "name": "Studio"}
+    system = build_knowledge_system_prompt(company, rag_context="kb text")
+    assert "never off-topic" in system
+    assert "load it on shaheer.dev" in system
+
+
 def test_real_estate_voice_rules_unchanged():
     """Real-estate tenants must hear exactly the phone behaviour they had before."""
     rules = get_vertical("real_estate")["voice_rules"]
