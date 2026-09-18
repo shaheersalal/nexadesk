@@ -60,11 +60,15 @@ _BOT_WALL_MARKERS = (
     "security check", "just a moment", "access denied", "attention required",
     "verify you are human", "checking your browser", "enable javascript",
     "are you a robot", "captcha", "request blocked", "unusual traffic",
+    # Login walls: without these, GitHub's "Sign in to GitHub" page was
+    # accepted as the visitor's content.
+    "sign in to", "log in to", "login to", "please sign in", "please log in",
+    "you must be logged in",
 )
 
 _UNREADABLE_MESSAGE = (
-    "Couldn't read that site - it may block automated readers. "
-    "Try a specific page, like your About or Services page."
+    "Couldn't read that page - it may need a login or block automated readers. "
+    "Try a public page, like your About or Services page."
 )
 
 _BLOCKED_HOSTNAMES = {"localhost", "metadata.google.internal"}
@@ -147,6 +151,10 @@ def _looks_unreadable(text: str) -> bool:
     return any(marker in lowered for marker in _BOT_WALL_MARKERS)
 
 
+class _NotAWebPage(Exception):
+    """The URL served something other than HTML/text, e.g. a PDF."""
+
+
 async def _fetch_direct(safe_url: str) -> tuple[str, str]:
     """Plain GET. Raises httpx.HTTPError on transport/status failures."""
     async with httpx.AsyncClient(
@@ -161,7 +169,8 @@ async def _fetch_direct(safe_url: str) -> tuple[str, str]:
 
     content_type = resp.headers.get("content-type", "")
     if "html" not in content_type and "text" not in content_type:
-        raise LiveFetchError("That doesn't look like a web page.")
+        # Not a dead end: the reader extracts text from PDFs.
+        raise _NotAWebPage(content_type)
 
     raw = resp.content[:_MAX_RESPONSE_BYTES]
     return str(resp.url), _strip_html(raw.decode(resp.encoding or "utf-8", errors="replace"))
@@ -198,8 +207,8 @@ async def fetch_page_text(url: str) -> tuple[str, str]:
     final_url, text = safe_url, ""
     try:
         final_url, text = await _fetch_direct(safe_url)
-    except httpx.HTTPError as exc:
-        logger.info("Direct fetch failed for %s (%s) - trying reader", safe_url, exc)
+    except (httpx.HTTPError, _NotAWebPage) as exc:
+        logger.info("Direct fetch unusable for %s (%r) - trying reader", safe_url, exc)
 
     if _looks_unreadable(text):
         try:

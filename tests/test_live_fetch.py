@@ -217,6 +217,31 @@ def test_title_only_and_bot_walls_are_unreadable():
     assert not _looks_unreadable(LONG_PAGE)
 
 
+def test_login_wall_is_unreadable():
+    """GitHub's sign-in page used to be accepted as the visitor's content."""
+    from app.rag.live_fetch import _looks_unreadable
+
+    assert _looks_unreadable(
+        "Sign in to GitHub · GitHub\nSkip to content\nYou signed in with another tab "
+        "or window. Reload to refresh your session. Username or email address Password"
+    )
+
+
+@pytest.mark.asyncio
+async def test_pdf_link_is_read_through_the_reader(monkeypatch):
+    import app.rag.live_fetch as live_fetch
+
+    async def direct(url):
+        raise live_fetch._NotAWebPage("application/pdf")
+
+    async def reader(url):
+        return LONG_PAGE
+
+    live_fetch = _patch_fetchers(monkeypatch, direct, reader)
+    _, text = await live_fetch.fetch_page_text("clinic.example/brochure.pdf")
+    assert text == LONG_PAGE
+
+
 def test_a_long_real_page_mentioning_captcha_is_not_a_bot_wall():
     from app.rag.live_fetch import _looks_unreadable
 
