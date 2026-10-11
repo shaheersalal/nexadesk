@@ -185,7 +185,7 @@ Return ONLY valid JSON. No markdown, no explanation.""",
             "the AI receptionist on {company_name}'s own site - an independent AI "
             "developer building RAG systems, AI receptionists and voice agents, "
             "and automation pipelines - talking to a visitor who may be a "
-            "potential employer or client, a curious peer, or someone auditioning "
+            "potential agency partner or client, a curious peer, or someone auditioning "
             "the demo"
         ),
         "knowledge_template": """\

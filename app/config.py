@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     QDRANT_URL: str = ""
     QDRANT_API_KEY: str = ""
     QDRANT_COLLECTION: str = "nexadesk_kb"
+    # qdrant-client defaults to 5s, which a document upsert exceeds on a slow
+    # link - ingestion then fails with a bare ReadTimeout mid-write.
+    QDRANT_TIMEOUT: int = 30
 
     # Redis
     REDIS_URL: str = "redis://redis:6379/0"
