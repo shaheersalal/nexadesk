@@ -8,8 +8,11 @@ capability that is not listed here.
 ## "What model are you using?"
 
 The language model is GPT-4o-mini. Speech recognition is Deepgram nova-2 running
-as a streaming websocket, and speech synthesis is Deepgram Aura-2. Embeddings
-are OpenAI text-embedding-3-small at 1536 dimensions.
+as a streaming websocket. Speech synthesis is Deepgram Aura: Aura-1
+(aura-asteria-en) over a synthesis websocket on phone calls, where it returns
+first audio roughly three times sooner and the 8 kHz mulaw channel masks the
+quality difference, and Aura-2 on the full-bandwidth web demo. Embeddings are
+OpenAI text-embedding-3-small at 1536 dimensions.
 
 ## "Why that model and not a larger one?"
 
@@ -25,7 +28,8 @@ Documents and listings are chunked, embedded, and stored in Qdrant with a
 payload filter on the company. A query embeds, pulls a wider candidate set than
 it needs, re-ranks with Jina, and scores its own confidence. High confidence
 permits specifics. Low confidence explicitly does not — the receptionist says
-what it does know, states plainly what it does not, and offers a callback.
+what it does know, states plainly what it does not, and hands the caller on -
+to a callback for an agency's own line, or to Shaheer's email on his.
 
 ## "How do you stop it hallucinating a price?"
 
@@ -33,7 +37,7 @@ Two mechanisms. The prompt forbids stating any figure that is not present in the
 retrieved context — prices, sizes, availability and addresses are grounded or
 they are not said. And the confidence score gates it: when retrieval is weak the
 system injects an instruction that blocks specifics entirely for that turn. The
-designed failure is a callback offer, not a guess.
+designed failure is a hand-off, not a guess.
 
 ## "What is your latency?"
 
@@ -44,6 +48,15 @@ generate, and synthesis starts on the first complete clause rather than waiting
 for the full reply. An earlier request-and-response version of the same pipeline
 carried several seconds of dead air per turn, which callers experience as a
 dropped call.
+
+Measured on the live line: the greeting begins about 1.7 seconds after the call
+connects, and the first audio of a reply about 2.3 seconds after the caller
+stops speaking. A short "let me check that" is spoken into the retrieval gap so
+that pause is not silence. One honest war story: text is fed to synthesis a
+word at a time, and the first version only sent a word when a model token ended
+in whitespace - but tokens carry their space at the FRONT, so nothing was sent
+until the whole reply had been generated, costing about eight seconds a turn
+until it was found and fixed.
 
 ## "How is multi-tenancy enforced?"
 
@@ -69,9 +82,10 @@ voice routes are not mounted at all, so there is no unauthenticated surface.
 
 Continuous integration runs linting with a pinned linter, a full compile, an
 import check that exercises startup validation, and the test suite on every
-push. Deployment is to Railway from the repository. There is a findings ledger
-in the repository recording what was fixed and, where something was left open,
-why.
+push. Deployment is from the repository to a managed host - Render today, moved
+off Railway in September 2026 - and every push to the deployment branch ships.
+There is a findings ledger in the repository recording what was fixed and,
+where something was left open, why.
 
 ## "What happens when a service goes down?"
 

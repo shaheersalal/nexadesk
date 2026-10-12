@@ -2,6 +2,7 @@
 Ingest the general-knowledge documents in seed_knowledge/ into a company's RAG.
 
     python scripts/seed_knowledge.py <company_id> [--dry-run]
+    python scripts/seed_knowledge.py <company_id> --only=technical_qa.md,about_the_service.md
 
 These documents are not listings. They are market orientation material and an
 honest description of the service, and they exist because the receptionist used
@@ -59,6 +60,20 @@ async def main() -> int:
     await ensure_collection(client, settings)
 
     docs = sorted(SEED_DIR.glob("*.md"))
+
+    # --only refreshes named documents and leaves the rest of the company's
+    # knowledge alone. Shaheer's own line carries the service description and
+    # the technical Q&A from here, but deliberately NOT the property market
+    # overviews, so a blanket re-run would put them back.
+    only = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--only=")), "")
+    if only:
+        wanted = {name.strip() for name in only.split(",") if name.strip()}
+        missing = wanted - {p.name for p in docs}
+        if missing:
+            print(f"no such document(s) in {SEED_DIR}: {', '.join(sorted(missing))}")
+            return 1
+        docs = [p for p in docs if p.name in wanted]
+
     if not docs:
         print(f"no documents in {SEED_DIR}")
         return 1
