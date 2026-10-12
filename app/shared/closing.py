@@ -11,6 +11,8 @@ Real-estate tenants are unaffected: only the ai_studio vertical and the voice
 turn builder consult this.
 """
 
+import re
+
 CONTACT_EMAIL = "contact@shaheer.dev"
 # Said out loud, "contact@shaheer.dev" comes out as noise on an 8 kHz line.
 SPOKEN_EMAIL = "contact at shaheer dot dev"
@@ -35,6 +37,25 @@ CLOSING_LINE = (
     f"That's all I can cover on this call. Email {SPOKEN_EMAIL} with the details "
     "and Shaheer will reply himself. Thanks for calling, goodbye."
 )
+
+
+_WRITTEN_EMAIL = re.compile(r"\b([A-Za-z0-9._%+-]+)@([A-Za-z0-9.-]+\.[A-Za-z]{2,})\b")
+
+
+def speakable(text: str) -> str:
+    """
+    Rewrite a written email address the way a person would say it.
+
+    The rules ask the model to say "contact at shaheer dot dev", but it copies
+    the written form out of the knowledge base, and how synthesis pronounces
+    "@" on an 8 kHz line is a gamble. Done here instead of asked for.
+    """
+    def _say(match: "re.Match[str]") -> str:
+        local = match.group(1).replace(".", " dot ")
+        domain = match.group(2).replace(".", " dot ")
+        return f"{local} at {domain}"
+
+    return _WRITTEN_EMAIL.sub(_say, text)
 
 
 def call_stage_note(elapsed_seconds: float) -> str:

@@ -25,6 +25,7 @@ from typing import AsyncIterator
 import websockets
 
 from app.config import get_settings
+from app.shared.closing import speakable
 
 settings = get_settings()
 logger = logging.getLogger("nexadesk.voice.tts")
@@ -151,10 +152,12 @@ async def speak_tokens(tokens: AsyncIterator[str]) -> AsyncIterator[bytes]:
                     # whole reply has been written.
                     cut = max(buffer.rfind(c) for c in " \n\t")
                     if cut >= 0:
-                        await speak.feed(buffer[:cut + 1])
+                        # Whole words only, so a written email is never split
+                        # mid-address before speakable() rewrites it.
+                        await speak.feed(speakable(buffer[:cut + 1]))
                         buffer = buffer[cut + 1:]
                 if buffer.strip():
-                    await speak.feed(buffer)
+                    await speak.feed(speakable(buffer))
             except Exception:
                 # This runs in a task nobody awaits for its result, so an
                 # unlogged failure here is a silent call with no trace.

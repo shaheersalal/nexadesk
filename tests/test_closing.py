@@ -6,6 +6,7 @@ minutes, so these cover the computed stage notes and, just as importantly,
 that only Shaheer's own line is time-boxed - a real-estate tenant's calls and
 chats must behave exactly as they did before.
 """
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -51,6 +52,64 @@ def test_chat_counts_exchanges_instead_of_seconds():
 def test_the_email_is_spoken_in_a_form_a_phone_line_survives():
     assert SPOKEN_EMAIL == "contact at shaheer dot dev"
     assert "@" not in SPOKEN_EMAIL
+
+
+def test_a_written_email_is_rewritten_for_synthesis():
+    """
+    The model copies "contact@shaheer.dev" out of the knowledge base however
+    the rules are worded, and "@" at 8 kHz is a gamble - so it is rewritten.
+    """
+    from app.shared.closing import speakable
+
+    assert speakable("Email contact@shaheer.dev with the details.") == (
+        "Email contact at shaheer dot dev with the details."
+    )
+    assert speakable("hello@sub.example.co.uk") == "hello at sub dot example dot co dot uk"
+    # Ordinary text, and a bare domain, are left alone.
+    assert speakable("Visit shaheer.dev for the demo.") == "Visit shaheer.dev for the demo."
+
+
+@pytest.mark.asyncio
+async def test_synthesis_is_fed_the_spoken_form_not_the_written_one(monkeypatch):
+    from app.voice import tts_live
+
+    fed: list = []
+
+    class _FakeSpeak:
+        def __init__(self, *a, **kw):
+            # audio() must not end before the text has been fed, or
+            # speak_tokens cancels the pump and nothing is ever sent.
+            self._finished = asyncio.Event()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return None
+
+        async def feed(self, text):
+            fed.append(text)
+
+        async def finish(self):
+            self._finished.set()
+
+        async def audio(self):
+            await self._finished.wait()
+            return
+            yield b""
+
+    monkeypatch.setattr(tts_live, "SpeakStream", _FakeSpeak)
+
+    async def tokens():
+        for tok in ("Email", " contact@shaheer.dev", " now", "."):
+            yield tok
+
+    async for _ in tts_live.speak_tokens(tokens()):
+        pass
+
+    spoken = "".join(fed)
+    assert "contact at shaheer dot dev" in spoken
+    assert "@" not in spoken
 
 
 # ── Where the notes are injected ─────────────────────────────────────────────
