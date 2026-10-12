@@ -6,8 +6,11 @@ import asyncio
 import json
 import logging
 import random
+from datetime import datetime, timezone
 
 from starlette.concurrency import run_in_threadpool
+
+from app.shared.closing import CLOSING_LINE, HARD_CLOSE_SECONDS, call_stage_note
 
 from app.config import get_settings
 from app.dependencies import get_redis
@@ -79,6 +82,31 @@ async def _get_company(company_id: str) -> dict:
     return company
 
 
+def _elapsed_seconds(session: CallSession) -> float:
+    """Seconds since Twilio answered. 0 when the session carries no start time."""
+    if not session.started_at:
+        return 0.0
+    try:
+        started = datetime.fromisoformat(session.started_at)
+    except ValueError:
+        logger.warning("Unparseable started_at on %s", session.call_sid)
+        return 0.0
+    return (datetime.now(timezone.utc) - started).total_seconds()
+
+
+async def _past_hard_close(session: CallSession) -> bool:
+    """
+    Has this call (Shaheer's line only) run past the hard-close mark?
+
+    Clock first: this runs on every turn, and the company lookup is a network
+    round trip that only matters once the limit has actually passed.
+    """
+    if _elapsed_seconds(session) < HARD_CLOSE_SECONDS:
+        return False
+    company = await _get_company(session.company_id)
+    return company.get("vertical") == "ai_studio"
+
+
 async def _build_turn_context(user_text: str, session: CallSession) -> tuple[str, str, str]:
     """
     Shared prologue for the streaming voice turn path.
@@ -88,10 +116,15 @@ async def _build_turn_context(user_text: str, session: CallSession) -> tuple[str
     session.language = detected_lang
     session.language_confirmed = True
 
+    company = await _get_company(session.company_id)
+    # Shaheer's line has to answer how it is built, which is spread across the
+    # technical Q&A, so it needs a wider candidate set than a tenant looking
+    # up one listing.
+    studio = company.get("vertical") == "ai_studio"
     rag_result = await query_with_confidence(
         query=english_query,
         company_id=session.company_id,
-        top_k=4,
+        top_k=6 if studio else 4,
         # Cap the reranker's tail on a live call. It normally answers in
         # 0.62-0.94s, which is worth paying for answer quality, but the
         # default 5s budget has actually been hit - and 5s of silence mid-call
@@ -99,7 +132,6 @@ async def _build_turn_context(user_text: str, session: CallSession) -> tuple[str
         # keep talking.
         rerank_timeout=1.2,
     )
-    company = await _get_company(session.company_id)
 
     # ai_studio audition flow: a visitor pastes a URL on the web step before
     # dialling in, keyed by the number they said they'd call from. Real
@@ -120,13 +152,24 @@ async def _build_turn_context(user_text: str, session: CallSession) -> tuple[str
     ) + get_vertical(company.get("vertical"))["voice_rules"]
 
     if rag_result["confidence"] in ("PARTIAL", "NO_MATCH"):
-        system += (
-            "\n[Retrieval confidence LOW. Do not state any specific price, size, "
-            "address or availability - nothing in the knowledge base matched well enough. You may still "
-            "answer general market questions and questions about this service from "
-            "what you know. Do not stall: answer what you can, then offer to take a "
-            "name and number for the specifics.]"
-        )
+        if studio:
+            # The real-estate note below reads as "say nothing specific", and on
+            # Shaheer's line that turned "what's the architecture?" - one of its
+            # three topics - into "I can't provide the technical details".
+            system += (
+                "\n[Weak knowledge-base match for this question. Answer from what "
+                "did match, including how this system is built, and never invent "
+                "specifics about Shaheer's work. Say plainly what you don't have, "
+                "then close on the email address.]"
+            )
+        else:
+            system += (
+                "\n[Retrieval confidence LOW. Do not state any specific price, size, "
+                "address or availability - nothing in the knowledge base matched well enough. You may still "
+                "answer general market questions and questions about this service from "
+                "what you know. Do not stall: answer what you can, then offer to take a "
+                "name and number for the specifics.]"
+            )
 
     # Last, so it is the nearest instruction to the reply. With the page only
     # in the middle of a ~20k-char prompt and the low-confidence note after
@@ -138,6 +181,12 @@ async def _build_turn_context(user_text: str, session: CallSession) -> tuple[str
             "FETCHED PAGE CONTEXT above. When they ask about their business or "
             "site, answer from it and relate it to what Shaheer could build for them.]"
         )
+
+    # The clock goes last of all, for the same reason: see app/shared/closing.py
+    # for why holding a call to two minutes cannot be left to the prompt alone.
+    # Only Shaheer's own line is time-boxed; a tenant's receptionist is not.
+    if company.get("vertical") == "ai_studio":
+        system += call_stage_note(_elapsed_seconds(session))
 
     return system, english_query, detected_lang
 
@@ -162,6 +211,17 @@ async def stream_voice_turn(user_text: str, session: CallSession):
     any other speech; it is deliberately not added to `collected`, so it never
     reaches the stored transcript or the lead summary.
     """
+    # Past the hard-close mark the close is deterministic: no retrieval, no
+    # model call, no further questions. Asked to close, the model kept
+    # qualifying instead (see app/shared/closing.py).
+    if await _past_hard_close(session):
+        yield CLOSING_LINE
+        session.add_turn("user", user_text)
+        session.add_turn("assistant", CLOSING_LINE)
+        session.transcript_parts.append(f"Caller: {user_text}")
+        session.transcript_parts.append(f"AI: {CLOSING_LINE}")
+        return
+
     ctx_task = asyncio.create_task(_build_turn_context(user_text, session))
     done, _ = await asyncio.wait({ctx_task}, timeout=FILLER_AFTER_SECONDS)
     if not done:

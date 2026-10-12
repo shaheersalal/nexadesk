@@ -25,9 +25,10 @@ from app.voice.stt_stream import DeepgramStream
 from app.voice.turn_taking import SpokenLog, collect_turn
 from app.voice.tts import synthesize_to_mulaw
 from app.voice.tts_live import speak_tokens
-from app.voice.conversation import stream_voice_turn
+from app.voice.conversation import stream_voice_turn, _get_company
 from app.shared.llm import complete as llm_complete
 from app.shared.verticals import get_vertical
+from app.shared.closing import GOODBYE_LINE, MAX_CALL_SECONDS
 
 router = APIRouter()
 settings = get_settings()
@@ -200,8 +201,39 @@ async def media_stream(websocket: WebSocket, call_sid: str):
                 except Exception as exc:
                     logger.error("Greeting failed for %s: %s", call_sid, exc, exc_info=True)
 
+            async def _hard_close() -> None:
+                """
+                End the call once it passes the two-minute limit.
+
+                The prompt-level close works on a caller who is listening. This
+                is for the one who is not: say the email once more, let Twilio
+                play it out, then hang up.
+                """
+                try:
+                    company = await _get_company(session.company_id)
+                    if company.get("vertical") != "ai_studio":
+                        return  # a tenant's calls are not time-boxed
+                    await asyncio.sleep(MAX_CALL_SECONDS)
+                    logger.info("Two-minute limit reached on %s - closing the call", call_sid)
+                    audio = await synthesize_to_mulaw(GOODBYE_LINE)
+                    if audio and stream_sid:
+                        async with speaking:
+                            spoken.note_spoken(GOODBYE_LINE)
+                            spoken.note_audio_sent(len(audio))
+                            await _send_media(websocket, stream_sid, audio)
+                        # mulaw is 8000 bytes per second; let it finish playing.
+                        await asyncio.sleep(len(audio) / 8000 + 0.5)
+                    await run_in_threadpool(
+                        lambda: twilio_client().calls(call_sid).update(status="completed")
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.exception("Hard close failed for %s", call_sid)
+
             greet_task: asyncio.Task | None = None
             turn_task = asyncio.create_task(_pump_turns())
+            close_task = asyncio.create_task(_hard_close())
 
             try:
                 while True:
@@ -233,6 +265,7 @@ async def media_stream(websocket: WebSocket, call_sid: str):
             finally:
                 if greet_task:
                     greet_task.cancel()
+                close_task.cancel()
                 await stt.close()
                 # Let any in-flight turn finish writing to the session.
                 try:

@@ -86,11 +86,17 @@ def test_no_context_note_only_fires_when_both_sources_empty():
     assert "[SYSTEM NOTE: No knowledge base context was retrieved" not in only_live
 
 
-def test_ai_studio_never_treats_the_visitors_own_business_as_off_topic():
-    """A caller asking about their own site got "That's outside what I can help with"."""
+def test_ai_studio_covers_exactly_three_topics_and_closes_on_the_email():
+    """
+    The line answers about the visitor's loaded page, Shaheer's work, and how
+    this receptionist is built - nothing else - and every exit is the email.
+    """
     company = {"vertical": "ai_studio", "name": "Studio"}
     system = build_knowledge_system_prompt(company, rag_context="kb text")
-    assert "never off-topic" in system
+    assert "THE ONLY THREE TOPICS YOU COVER" in system
+    assert "contact@shaheer.dev" in system
+    # A caller asking about their own company is still never refused outright.
+    assert "whether it is their business" in system
     assert "load it on shaheer.dev" in system
 
 
@@ -103,6 +109,8 @@ def test_real_estate_voice_rules_unchanged():
 def test_ai_studio_voice_rules_close_the_call_instead_of_prolonging_it():
     rules = get_vertical("ai_studio")["voice_rules"]
     assert "Always end with a question" not in rules
-    assert "hand them to Shaheer" in rules
+    assert "TWO-MINUTE call" in rules
+    # Spoken, not written: "contact@shaheer.dev" read aloud at 8 kHz is noise.
+    assert "contact at shaheer dot dev" in rules
     assert "goodbye" in rules
-    assert "Do not ask another question" in rules
+    assert "Ask nothing after that" in rules

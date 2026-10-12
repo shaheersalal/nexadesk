@@ -26,6 +26,7 @@ from app.config import get_settings
 from app.shared import llm
 from app.shared.language import anormalize_for_llm, atranslate_from_english
 from app.shared.verticals import get_vertical, build_knowledge_system_prompt
+from app.shared.closing import chat_stage_note
 from app.rag.store import query_with_confidence
 from app.agents.tools import capture_lead_fields, flag_escalation, extract_fields_from_message
 
@@ -118,14 +119,16 @@ def _knowledge_system(
     rag_context: str,
     voice: bool = False,
     live_fetch_context: Optional[str] = None,
+    stage_note: str = "",
 ) -> str:
     system = build_knowledge_system_prompt(company, rag_context, live_fetch_context)
     if voice:
         system += "\n\nIMPORTANT: Voice call — reply in 1–2 short sentences only. No lists."
-    return system
+    # Last, so the closing instruction is the nearest one to the reply.
+    return system + stage_note
 
 
-def _qualifier_system(company: dict, voice: bool = False) -> str:
+def _qualifier_system(company: dict, voice: bool = False, stage_note: str = "") -> str:
     vertical = get_vertical(company.get("vertical"))
     system = (
         f"You are {company.get('ai_persona', 'a receptionist')} "
@@ -137,7 +140,7 @@ def _qualifier_system(company: dict, voice: bool = False) -> str:
     )
     if voice:
         system += "\n\nIMPORTANT: Voice call — reply in 1–2 short sentences only."
-    return system
+    return system + stage_note
 
 
 def _escalation_system(company: dict, voice: bool = False) -> str:
@@ -162,8 +165,9 @@ async def _knowledge_agent(
     rag_context: str,
     voice: bool = False,
     live_fetch_context: Optional[str] = None,
+    stage_note: str = "",
 ) -> str:
-    system = _knowledge_system(company, rag_context, voice, live_fetch_context)
+    system = _knowledge_system(company, rag_context, voice, live_fetch_context, stage_note)
     messages = history[-10:] + [{"role": "user", "content": user_message}]
     max_tokens = 150 if voice else 300
     return await llm.complete(system=system, messages=messages, max_tokens=max_tokens, temperature=0.3)
@@ -174,8 +178,9 @@ async def _qualifier_agent(
     history: list[dict],
     company: dict,
     voice: bool = False,
+    stage_note: str = "",
 ) -> str:
-    system = _qualifier_system(company, voice)
+    system = _qualifier_system(company, voice, stage_note)
     messages = history[-8:] + [{"role": "user", "content": user_message}]
     max_tokens = 100 if voice else 180
     return await llm.complete(system=system, messages=messages, max_tokens=max_tokens, temperature=0.5)
@@ -237,14 +242,24 @@ async def run(
     confidence = rag_result["confidence"]
     rag_context = rag_result["context_text"]
 
+    # Only Shaheer's own site is held to the closing discipline; a tenant's
+    # chat widget is not (see app/shared/closing.py).
+    stage_note = (
+        chat_stage_note(len(history) // 2)
+        if company.get("vertical") == "ai_studio" else ""
+    )
+
     if intent == "escalate":
         reply_task = asyncio.create_task(_escalation_agent(english_query, company))
     elif intent == "knowledge":
         reply_task = asyncio.create_task(
-            _knowledge_agent(english_query, history, company, rag_context, live_fetch_context=live_fetch_context)
+            _knowledge_agent(english_query, history, company, rag_context,
+                             live_fetch_context=live_fetch_context, stage_note=stage_note)
         )
     else:
-        reply_task = asyncio.create_task(_qualifier_agent(english_query, history, company))
+        reply_task = asyncio.create_task(
+            _qualifier_agent(english_query, history, company, stage_note=stage_note)
+        )
 
     extract_task = asyncio.create_task(
         extract_fields_from_message(english_query, llm.complete, company.get("vertical"))
