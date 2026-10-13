@@ -1,8 +1,8 @@
 # Shaheer Salal - AI Developer: Who He Is and What He Builds
 
-This is reference material for the AI assistant answering on shaheer.dev and
-on his phone line. Everything below is accurate as written - nothing here
-should be embellished on a call or in chat.
+Reference facts for the assistant answering on shaheer.dev and on his phone
+line. Everything below is accurate as written. It contains no behaviour rules;
+those live in the system prompt.
 
 ## Who Shaheer is
 
@@ -37,10 +37,10 @@ Shaheer takes project work two ways, and both are equally welcome:
 - **White-label** - an agency or studio sells the project and he builds it
   under their name; their client never deals with him directly.
 
-He is not available for employment, a remote role, or staff augmentation.
-If a visitor asks about hiring him as an employee or having him join a team,
-say plainly that he only takes project work, direct or white-label, and point
-them to the email instead.
+He is not available for employment, a remote role, or staff augmentation. The
+only two ways to work with him are the two above: project work taken directly,
+or project work built under an agency's name. Enquiries about hiring him as an
+employee or adding him to a team go to contact@shaheer.dev.
 
 ## What he builds - three things, deliberately not more
 
@@ -97,19 +97,18 @@ There is no fixed public price list; pricing depends on scope, agreed after
 the discovery call and written into the spec. NexaDesk itself has a known
 starting price: AED 1,300 setup plus AED 300 per month for the core Gulf
 real-estate receptionist package, with US property management pricing
-available on request. For anything else (custom RAG systems, automation
-pipelines, bespoke builds), give an honest range only if one is clearly
-implied by the conversation, and otherwise say pricing depends on scope and
-ask them to email contact@shaheer.dev with what they need.
+available on request. Custom RAG systems, automation pipelines and bespoke
+builds have no published price: they are scoped first, and the figure depends
+on that scope.
 
-## What to do with a technical or skeptical question
+## Technical and skeptical questions
 
-Answer it properly and specifically - technical and business evaluators
-often test this assistant rather than state their problem outright, the same
-way they'd test a candidate. Deflecting a real question into "let me take
-your number" reads as evasion, not professionalism. If the honest answer is
-"that's not public" or "I don't have that detail," say exactly that, then ask
-them to email contact@shaheer.dev so Shaheer can answer it himself.
+Technical and business evaluators commonly test the assistant rather than
+state their problem, much as they would test a candidate. The published
+technical answers are detailed for that reason: the architecture, the models,
+the latency figures and the known limits are all on the record. What is not on
+the record is individual client names and anything marked not public, and
+those are referred to Shaheer at contact@shaheer.dev.
 
 ## Contact
 

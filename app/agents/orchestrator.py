@@ -25,9 +25,13 @@ from typing import AsyncGenerator, Optional
 from app.config import get_settings
 from app.shared import llm
 from app.shared.language import anormalize_for_llm, atranslate_from_english
-from app.shared.verticals import get_vertical, build_knowledge_system_prompt
+from app.shared.verticals import (
+    STUDIO_WEAK_MATCH_NOTE,
+    build_knowledge_system_prompt,
+    get_vertical,
+)
 from app.shared.closing import chat_stage_note
-from app.rag.store import query_with_confidence
+from app.rag.store import query_with_confidence, technical_context
 from app.agents.tools import capture_lead_fields, flag_escalation, extract_fields_from_message
 
 settings = get_settings()
@@ -242,12 +246,27 @@ async def run(
     confidence = rag_result["confidence"]
     rag_context = rag_result["context_text"]
 
+    # A question about the receptionist itself gets a second, filtered search,
+    # placed above the ordinary results. Without it the sales copy outranks the
+    # technical documents and the reply hedges. No-op on a vertical with no
+    # technical documents, i.e. every tenant.
+    tech_context = await technical_context(
+        rag_query, company_id, get_vertical(company.get("vertical"))["technical_docs"]
+    )
+    if tech_context:
+        rag_context = f"{tech_context}\n\n{rag_context}" if rag_context else tech_context
+
     # Only Shaheer's own site is held to the closing discipline; a tenant's
     # chat widget is not (see app/shared/closing.py).
-    stage_note = (
-        chat_stage_note(len(history) // 2)
-        if company.get("vertical") == "ai_studio" else ""
-    )
+    studio = company.get("vertical") == "ai_studio"
+    stage_note = chat_stage_note(len(history) // 2) if studio else ""
+
+    # The phone path has carried this note since the two-minute work; chat never
+    # did, so the website refused broad "how is it built" questions that the
+    # phone answered fine. A weak score on this line means the question was
+    # broad, not that the answer is missing.
+    if studio and confidence in ("PARTIAL", "NO_MATCH"):
+        stage_note = STUDIO_WEAK_MATCH_NOTE + stage_note
 
     if intent == "escalate":
         reply_task = asyncio.create_task(_escalation_agent(english_query, company))

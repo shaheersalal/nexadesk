@@ -58,6 +58,22 @@ in whitespace - but tokens carry their space at the FRONT, so nothing was sent
 until the whole reply had been generated, costing about eight seconds a turn
 until it was found and fixed.
 
+## "How many calls can it handle at once?"
+
+More than one: nothing in the design is single-call. Each call is an async task
+holding a few websockets and roughly eight kilobytes of audio per second, the
+process runs two workers, and all shared state lives in Redis and Postgres
+rather than in process memory, so workers and instances are interchangeable and
+scaling out is adding them. Synchronous database calls are deliberately pushed
+to a thread pool, because one blocking call inside the event loop stalls the
+audio of every call that worker is holding.
+
+What bounds it in practice is the hardware, not the code. The free tier runs a
+fraction of one CPU with 512 MB, which is sized for a demonstration line rather
+than for a call centre, and no load test has been run, so there is no honest
+number to quote. The speech and language services are external and per-request,
+so they scale with the plan rather than with this process.
+
 ## "How is multi-tenancy enforced?"
 
 An inbound number resolves to the agency that owns it. Every database query and

@@ -1,3 +1,4 @@
+import re
 from typing import Optional
 from uuid import uuid4
 
@@ -40,6 +41,12 @@ SCORE_CONFIDENT_COSINE = 0.62
 SCORE_PARTIAL_COSINE = 0.38
 
 SCORE_MIN = 0.30  # below this, don't even return
+
+# How many of a company's chunks the filtered technical search scans before
+# keeping only the technical documents. The studio's whole knowledge base is
+# ~45 chunks, so this reaches all of them; on a large tenant corpus it bounds
+# the work, and that vertical has no technical documents anyway.
+_TECHNICAL_SCAN_LIMIT = 60
 
 
 async def store_chunks(
@@ -213,6 +220,92 @@ async def query_with_confidence(
         "max_score": round(max_score, 3),
         "context_text": context_text,
     }
+
+
+# Questions about the receptionist itself rather than about the business. The
+# list is deliberately broad: a false positive costs one extra filtered search
+# against five chunks, a false negative costs the answer.
+_TECHNICAL_QUESTION = re.compile(
+    r"\b("
+    r"architect\w*|built|build|building|stack|under the hood|how (do|does|did)"
+    r"|latency|fast|slow|model|llm|gpt|rag|retriev\w*|embed\w*|vector|qdrant"
+    r"|rerank\w*|hallucinat\w*|prompt|inject\w*|tenant|tenancy|isolat\w*"
+    r"|deploy\w*|host\w*|render|scale|scaling|concurren\w*|fail\w*|fallback"
+    r"|test\w*|secur\w*|websocket|stream\w*|transcri\w*|speech|voice pipeline"
+    r"|tts|stt|deepgram|twilio|limitation\w*|improve|tech|technical|database"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+async def technical_context(
+    query: str,
+    company_id: str,
+    filenames: Optional[list[str]],
+    client: Optional[AsyncQdrantClient] = None,
+    top_k: int = 5,
+    rerank_timeout: float = 5.0,
+) -> str:
+    """
+    A second retrieval restricted to the documents that answer "how is this
+    built", returned as context to put ABOVE the ordinary results.
+
+    An open search does find those documents, but not at the top: "how is the
+    receptionist built, and what is the architecture?" ranked three chunks of
+    service description above the first technical one, and the model then
+    answered "I can't provide specific details about the architecture" - the
+    worst possible reply on a line whose third topic is how it works. Ranking
+    is the whole problem, so the fix is a filtered search rather than a wider
+    one or a longer prompt.
+
+    Returns "" when the vertical has no technical documents, when the question
+    is not about the system, or when nothing matches - callers then behave
+    exactly as they did before.
+    """
+    if not filenames or not _TECHNICAL_QUESTION.search(query):
+        return ""
+
+    if client is None:
+        from app.dependencies import _qdrant_client
+        client = _qdrant_client
+
+    query_vector = await embed_single(query)
+    # Filtered in Python rather than in Qdrant: the collection has no keyword
+    # index on `filename`, and a filter on an unindexed payload key is a 400,
+    # not a slow query. Creating one would be a live schema change for a corpus
+    # of a few dozen chunks, so instead the scan is wide enough to reach every
+    # technical chunk and the unwanted documents are dropped on the way out.
+    results = await client.search(
+        collection_name=settings.QDRANT_COLLECTION,
+        query_vector=query_vector,
+        query_filter=Filter(must=[
+            FieldCondition(key="company_id", match=MatchValue(value=company_id))
+        ]),
+        limit=_TECHNICAL_SCAN_LIMIT,
+        score_threshold=SCORE_MIN,
+        with_payload=True,
+    )
+
+    wanted = set(filenames)
+    kept = [
+        {
+            "text": r.payload.get("text", ""),
+            "score": round(r.score, 3),
+            "metadata": {k: v for k, v in r.payload.items() if k != "text"},
+        }
+        for r in results
+        if r.payload.get("filename") in wanted
+    ]
+    if not kept:
+        return ""
+
+    # Re-ranked for ordering only. No confidence gate: these documents were
+    # chosen because they are the right ones for this kind of question, so a
+    # low score means the question was broad, not that the answer is absent.
+    chunks, _ = await _rerank_with_jina(
+        query, kept, top_n=top_k, timeout=rerank_timeout
+    )
+    return _format_context(chunks)
 
 
 async def delete_doc_chunks(doc_id: str, client: AsyncQdrantClient) -> None:

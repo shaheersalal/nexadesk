@@ -1,9 +1,9 @@
 # Shaheer Salal - Products and Shipped Work
 
-Reference material for the AI assistant on shaheer.dev and Shaheer's own
-phone line. Status claims below (live / offline / built) are the actual,
-current state - never upgrade "offline" to "live" or vice versa on a call,
-and never invent a status that isn't stated here.
+Reference facts for the assistant on shaheer.dev and Shaheer's own phone line.
+The status given for each product (live, offline, built) is its actual current
+state as recorded here. This document contains no behaviour rules; those live
+in the system prompt.
 
 ## NexaDesk - live, this assistant's own product
 
@@ -45,10 +45,9 @@ enforced in Postgres with row-level security, not just application-side
 filters; each business domain is a config entry (a "vertical") consumed by
 one shared orchestrator rather than a forked codebase per domain.
 
-This assistant IS a version of NexaDesk, configured for Shaheer's own site
-instead of a real estate agency - if asked "is this NexaDesk?", the honest
-answer is yes, this is what NexaDesk sounds like when a business puts it on
-their own line.
+The assistant on shaheer.dev IS a version of NexaDesk, configured for
+Shaheer's own site instead of a real estate agency. It is the same product a
+business would put on its own line.
 
 ## AskTax.pk - built and previously live with paying clients; currently offline
 
@@ -59,23 +58,19 @@ hours of manual research. Multi-tenant firm accounts (a real per-firm plan
 model: trial/basic/pro tiers, seat limits, per-seat monthly query quotas),
 freemium billing, and an admin panel.
 
-Do NOT name individual clients or firms, here or anywhere else in
-conversation - client names are deliberately not published. Describe the
-type of client ("Pakistani CA firms") instead. If pressed for a reference,
-say Shaheer can arrange one directly rather than naming anyone unprompted.
+The clients are Pakistani CA firms. Individual client and firm names are
+deliberately unpublished, so the public record describes the type of client
+rather than naming any one of them. A reference can be arranged directly by
+Shaheer.
 
-**Current status: the site is offline for maintenance right now.** If asked
-about it, say so plainly rather than implying it's live today - this is
-exactly the kind of specific-fact question this assistant must never
-soften or guess on.
+**Current status: the site is offline for maintenance.** The reason is not
+public. What is known: it is offline for maintenance, the experience behind it
+is real, and Shaheer can explain the current state directly. There is no
+published return date, and no record here of it failing, losing customers, or
+being actively rebuilt.
 
-Why it is offline is NOT public, so do not speculate about it in either
-direction. Do not say it failed, that it lost its customers, that Shaheer is
-"actively working on it", or that it returns on any particular date - none
-of that is known here. The complete honest answer is that it's offline for
-maintenance, the experience behind it is real, and Shaheer can explain the
-current state directly if they want the detail. It remains real, demonstrable experience: production
-multi-tenant RAG at real scale, serving paying accounting firm clients.
+The experience it represents is real and demonstrable: production multi-tenant
+RAG at scale, serving paying accounting-firm clients.
 
 ## Content Factory - built, self-hosted, not a public product
 
@@ -119,9 +114,8 @@ repo instead of claiming it works right now.
   "Very fast delivery, clean and well-organised output. Shaheer knew exactly
   what to do and didn't need hand-holding."
 
-## If asked to compare against a specific competitor or tool
+## Comparisons with other tools
 
-Answer honestly about what Shaheer builds and why (see
-shaheer_studio_pitch.md's process and values). Don't disparage named
-competitors. If the honest answer is "I don't know that tool well enough to
-compare fairly," say so.
+There is no published comparison against any named competitor, and no
+assessment of any competing tool on the record here. What is on the record is
+what Shaheer builds and why, in this document and in the studio pitch.

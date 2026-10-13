@@ -15,9 +15,13 @@ from app.shared.closing import CLOSING_LINE, HARD_CLOSE_SECONDS, call_stage_note
 from app.config import get_settings
 from app.dependencies import get_redis
 from app.shared import llm
-from app.shared.verticals import build_knowledge_system_prompt, get_vertical
+from app.shared.verticals import (
+    STUDIO_WEAK_MATCH_NOTE,
+    build_knowledge_system_prompt,
+    get_vertical,
+)
 from app.shared.language import anormalize_for_llm, atranslate_from_english
-from app.rag.store import query_with_confidence
+from app.rag.store import query_with_confidence, technical_context
 from app.rag.live_fetch import get_live_context, phone_key
 from app.chat.lead_scoring import score_message, compute_total_delta
 from app.voice.call_session import CallSession
@@ -121,16 +125,29 @@ async def _build_turn_context(user_text: str, session: CallSession) -> tuple[str
     # technical Q&A, so it needs a wider candidate set than a tenant looking
     # up one listing.
     studio = company.get("vertical") == "ai_studio"
-    rag_result = await query_with_confidence(
-        query=english_query,
-        company_id=session.company_id,
-        top_k=6 if studio else 4,
-        # Cap the reranker's tail on a live call. It normally answers in
-        # 0.62-0.94s, which is worth paying for answer quality, but the
-        # default 5s budget has actually been hit - and 5s of silence mid-call
-        # reads as a dropped line. Past this we take Qdrant's ordering and
-        # keep talking.
-        rerank_timeout=1.2,
+    # The second search is filtered to the technical documents and only fires on
+    # a question about the system itself. It runs CONCURRENTLY with the open
+    # search: sequentially it would add its own embed-plus-search to every such
+    # turn, and this is a two-minute call. See store.technical_context.
+    rag_result, tech_context = await asyncio.gather(
+        query_with_confidence(
+            query=english_query,
+            company_id=session.company_id,
+            top_k=6 if studio else 4,
+            # Cap the reranker's tail on a live call. It normally answers in
+            # 0.62-0.94s, which is worth paying for answer quality, but the
+            # default 5s budget has actually been hit - and 5s of silence mid-call
+            # reads as a dropped line. Past this we take Qdrant's ordering and
+            # keep talking.
+            rerank_timeout=1.2,
+        ),
+        technical_context(
+            english_query,
+            session.company_id,
+            get_vertical(company.get("vertical"))["technical_docs"],
+            top_k=4,
+            rerank_timeout=1.2,
+        ),
     )
 
     # ai_studio audition flow: a visitor pastes a URL on the web step before
@@ -147,8 +164,14 @@ async def _build_turn_context(user_text: str, session: CallSession) -> tuple[str
             or await get_live_context(session.caller_number)
         )
 
+    kb_context = rag_result["context_text"]
+    if tech_context:
+        # Above the open results, so the engineering is the first thing the
+        # model reads rather than the fourth.
+        kb_context = f"{tech_context}\n\n{kb_context}" if kb_context else tech_context
+
     system = build_knowledge_system_prompt(
-        company, rag_result["context_text"], live_fetch_context,
+        company, kb_context, live_fetch_context,
     ) + get_vertical(company.get("vertical"))["voice_rules"]
 
     if rag_result["confidence"] in ("PARTIAL", "NO_MATCH"):
@@ -156,12 +179,8 @@ async def _build_turn_context(user_text: str, session: CallSession) -> tuple[str
             # The real-estate note below reads as "say nothing specific", and on
             # Shaheer's line that turned "what's the architecture?" - one of its
             # three topics - into "I can't provide the technical details".
-            system += (
-                "\n[Weak knowledge-base match for this question. Answer from what "
-                "did match, including how this system is built, and never invent "
-                "specifics about Shaheer's work. Say plainly what you don't have, "
-                "then close on the email address.]"
-            )
+            # Shared with the website chat: see STUDIO_WEAK_MATCH_NOTE.
+            system += STUDIO_WEAK_MATCH_NOTE
         else:
             system += (
                 "\n[Retrieval confidence LOW. Do not state any specific price, size, "
