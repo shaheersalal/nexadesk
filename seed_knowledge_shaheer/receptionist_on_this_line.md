@@ -11,6 +11,16 @@ for a real-estate agency. Same codebase, same pipeline, a different knowledge
 base and a different conversation goal. It is the product demonstrating itself:
 what a visitor hears is what a business's own line would sound like.
 
+## The stack, by name
+
+Python and FastAPI. GPT-4o-mini for the language model. Deepgram nova-2 for
+speech recognition and Deepgram Aura for speech synthesis, Aura-1 on the phone
+and Aura-2 on the web demo. OpenAI text-embedding-3-small at 1536 dimensions
+for embeddings, Qdrant for the vector store, and a Jina reranker over the
+candidates it returns. Redis for session and page state, Postgres for records.
+Twilio for telephony, using Media Streams rather than recorded prompts. Render
+for hosting, Docker for the image, GitHub Actions for the checks on every push.
+
 ## Call length and who ends the call
 
 A call is budgeted at roughly two minutes, and the limit is enforced in code
