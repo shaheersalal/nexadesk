@@ -232,7 +232,7 @@ _TECHNICAL_QUESTION = re.compile(
     r"|rerank\w*|hallucinat\w*|prompt|inject\w*|tenant|tenancy|isolat\w*"
     r"|deploy\w*|host\w*|render|scale|scaling|concurren\w*|fail\w*|fallback"
     r"|test\w*|secur\w*|websocket|stream\w*|transcri\w*|speech|voice pipeline"
-    r"|tts|stt|deepgram|twilio|limitation\w*|improve|tech|technical|database"
+    r"|tts|stt|deepgram|twilio|limitation\w*|improve\w*|tech|technical|database"
     r")\b",
     re.IGNORECASE,
 )
@@ -282,7 +282,13 @@ async def technical_context(
             FieldCondition(key="company_id", match=MatchValue(value=company_id))
         ]),
         limit=_TECHNICAL_SCAN_LIMIT,
-        score_threshold=SCORE_MIN,
+        # No score_threshold, unlike the open search. SCORE_MIN exists to stop
+        # an unrelated question dragging in a random listing, but here the
+        # documents have already been chosen as the right ones, so a low cosine
+        # score only means the question was broad. Measured: with the threshold
+        # on, "how is this built, what is the architecture?" left TWO of the 22
+        # technical chunks standing and the one naming the stack was not among
+        # them; with it off, the stack and model chunks rank 3rd and 4th.
         with_payload=True,
     )
 
@@ -299,13 +305,13 @@ async def technical_context(
     if not kept:
         return ""
 
-    # Re-ranked for ordering only. No confidence gate: these documents were
-    # chosen because they are the right ones for this kind of question, so a
-    # low score means the question was broad, not that the answer is absent.
-    chunks, _ = await _rerank_with_jina(
-        query, kept, top_n=top_k, timeout=rerank_timeout
-    )
-    return _format_context(chunks)
+    # Cosine order, not reranked. On a question this broad the reranker's
+    # scores collapse to noise - 0.061 and 0.036 across the whole technical
+    # corpus - and it put "if asked something not covered here" first, which is
+    # the one chunk that makes the reply hedge. Cosine ordering put the model
+    # and stack chunks in the top four instead. It also saves a network hop on
+    # a live call, which is the budget this runs in.
+    return _format_context(kept[:top_k])
 
 
 async def delete_doc_chunks(doc_id: str, client: AsyncQdrantClient) -> None:

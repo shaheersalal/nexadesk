@@ -2,8 +2,8 @@
 
 Evaluators — CTOs, engineers, technical founders — test the receptionist instead
 of asking about property. These are the questions they actually ask and the true
-answers. Answer conversationally on a call, not as a recitation. Never claim a
-capability that is not listed here.
+answers. This document is reference material; the behaviour rules live in the
+system prompt.
 
 ## "What model are you using?"
 
@@ -130,8 +130,10 @@ broader language coverage are the obvious feature gaps. Confidence thresholds
 are calibrated against a specific corpus and would need re-measuring for a very
 different one.
 
-## If asked something not covered here
+## What is deliberately not on the record
 
-Say what is known, say plainly what is not, and offer to have someone follow up.
-Never invent an architecture detail, a benchmark number, a customer name, or a
-compliance certification.
+Customer names, compliance certifications and benchmark numbers beyond the
+latency figures above are not published here, and nothing in this document
+implies any of them exist. The scope of this document is the architecture, the
+models, the measured latencies, the isolation model, the deployment process and
+the known gaps.

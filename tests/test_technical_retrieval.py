@@ -168,3 +168,20 @@ def test_the_studio_vertical_points_at_documents_that_exist():
         in_studio = (SEED_DIR / name).is_file()
         in_general = (SEED_DIR.parent / "seed_knowledge" / name).is_file()
         assert in_studio or in_general, f"{name} is configured but not seeded anywhere"
+
+
+@pytest.mark.parametrize("question", [
+    "what improvements are planned?",
+    "what would you improve next?",
+    "what are its limitations?",
+    "how is it hosted?",
+    "what's the deployment story?",
+])
+def test_the_trigger_survives_the_query_rewriter(question):
+    """
+    The chat path retrieves against a rewritten query, not the visitor's words:
+    "what would you improve about it?" came back as "what improvements would
+    you suggest", and `improve` with a word boundary did not match
+    "improvements", so the question skipped the technical search entirely.
+    """
+    assert store._TECHNICAL_QUESTION.search(question), question
